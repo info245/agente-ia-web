@@ -1,3 +1,4 @@
+// backend/src/server.js
 import "dotenv/config";
 
 import express from "express";
@@ -256,6 +257,7 @@ app.post("/messages", async (req, res) => {
 
       // Decidir si enviar email NEW o UPDATE
       const last = getLastSent(currentConversationId);
+
       const decision = decideEmailSend({
         leadBefore,
         leadAfter: merged,
