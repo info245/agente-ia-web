@@ -1,24 +1,16 @@
 (() => {
-  // ====== LEE CONFIG DESDE EL <script ... data-*> ======
-  const currentScript = document.currentScript;
-
-  const backendFromAttr = currentScript?.getAttribute("data-backend");
-  const brandFromAttr = currentScript?.getAttribute("data-brand");
-  const posFromAttr = currentScript?.getAttribute("data-position");
-  const colorFromAttr = currentScript?.getAttribute("data-color");
-
+  // ====== CONFIG (edita aquí si quieres) ======
   const CONFIG = {
-    backendBaseUrl: backendFromAttr || "http://localhost:3000",
+    backendBaseUrl: "http://localhost:3000",
     channel: "web",
-    brandName: brandFromAttr || "Agente IA",
-    position: posFromAttr === "left" ? "left" : "right",
-    primaryColor: colorFromAttr || "#111827",
+    brandName: "Agente IA",
+    position: "right", // right | left
+    primaryColor: "#111827",
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
-    requestTimeoutMs: 25000, // 25s (Render free a veces tarda)
   };
 
-  // ====== HELPERS ======
+  // ====== Helpers ======
   const uid = () => Math.random().toString(36).slice(2, 10);
 
   function getOrCreateExternalUserId() {
@@ -43,7 +35,6 @@
     localStorage.removeItem(CONFIG.conversationIdStorageKey);
   }
 
-  // ====== FETCH ROBUSTO (con timeout y errores detallados) ======
   async function postMessage({ text, conversationId, externalUserId }) {
     const payload = {
       text,
@@ -52,48 +43,21 @@
     };
     if (conversationId) payload.conversation_id = conversationId;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs);
+    const res = await fetch(`${CONFIG.backendBaseUrl}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
 
-    try {
-      const res = await fetch(`${CONFIG.backendBaseUrl}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
+    const data = await res.json().catch(() => null);
 
-      // Leemos como texto para poder mostrar errores aunque no sea JSON
-      const rawText = await res.text();
-      let data = null;
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        // no json
-      }
-
-      if (!res.ok) {
-        const msg = data?.error || `HTTP ${res.status}`;
-        const details = data?.details ? ` | ${data.details}` : "";
-        const extra = rawText && !data ? ` | ${rawText.slice(0, 200)}` : "";
-        throw new Error(`${msg}${details}${extra}`);
-      }
-
-      if (!data) {
-        throw new Error("Respuesta no JSON del backend.");
-      }
-
-      return data;
-    } catch (err) {
-      if (err.name === "AbortError") {
-        throw new Error(
-          "Timeout: el servidor tardó demasiado. Si usas Render Free, puede estar 'dormido'. Prueba de nuevo."
-        );
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeout);
+    if (!res.ok) {
+      const msg = data?.error || `HTTP ${res.status}`;
+      const details = data?.details ? ` | ${data.details}` : "";
+      throw new Error(`${msg}${details}`);
     }
+
+    return data;
   }
 
   // ====== UI (Shadow DOM) ======
@@ -102,54 +66,185 @@
   document.body.appendChild(host);
 
   const shadow = host.attachShadow({ mode: "open" });
+
   const side = CONFIG.position === "left" ? "left" : "right";
 
   const style = document.createElement("style");
   style.textContent = `
-    .btn{
-      font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      cursor:pointer;border:1px solid transparent;border-radius:999px;
-      padding:12px 14px;background:${CONFIG.primaryColor};color:#fff;
-      box-shadow:0 10px 30px rgba(0,0,0,.18);
-      display:inline-flex;gap:10px;align-items:center;
+    :host { all: initial; }
+
+    .btn {
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      padding: 12px 14px;
+      background: ${CONFIG.primaryColor};
+      color: white;
+      box-shadow: 0 10px 30px rgba(0,0,0,.18);
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
     }
-    .bubble{position:fixed;bottom:18px;${side}:18px;z-index:999999;}
-    .panel{
-      position:fixed;bottom:78px;${side}:18px;width:360px;
-      max-width:calc(100vw - 36px);height:520px;
-      max-height:calc(100vh - 120px);background:#fff;
-      border:1px solid #e5e7eb;border-radius:16px;
-      box-shadow:0 18px 50px rgba(0,0,0,.22);
-      overflow:hidden;z-index:999999;display:none;
-      font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      color:#111827;
+
+    .bubble {
+      position: fixed;
+      bottom: 18px;
+      ${side}: 18px;
+      z-index: 999999;
     }
-    .panel.open{display:flex;flex-direction:column;}
-    .header{padding:12px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:10px;}
-    .title{display:flex;flex-direction:column;gap:2px;}
-    .title strong{font-size:14px;}
-    .title span{font-size:12px;color:#6b7280;}
-    .header-actions{display:flex;gap:8px;}
-    .icon-btn{border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;}
-    .icon-btn:hover{background:#f9fafb;}
-    .messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(to bottom, rgba(255,255,255,.9), rgba(255,255,255,.9));}
-    .row{display:flex;width:100%;}
-    .row.user{justify-content:flex-end;}
-    .row.assistant{justify-content:flex-start;}
-    .row.system{justify-content:center;}
-    .bubble-msg{max-width:86%;padding:10px 12px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word;border:1px solid transparent;}
-    .assistant .bubble-msg{background:#eef2ff;border-color:#dfe5ff;color:#111827;}
-    .user .bubble-msg{background:#111827;border-color:#0f172a;color:#fff;}
-    .system .bubble-msg{background:#fff7ed;border-color:#fed7aa;color:#9a3412;text-align:center;max-width:92%;}
-    .footer{border-top:1px solid #e5e7eb;padding:10px;background:#fff;display:grid;gap:8px;}
-    .input{width:100%;resize:none;min-height:44px;max-height:110px;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;font:inherit;outline:none;}
-    .input:focus{border-color:#c7d2fe;box-shadow:0 0 0 4px rgba(99,102,241,.10);}
-    .actions{display:flex;justify-content:space-between;align-items:center;gap:10px;}
-    .status{font-size:12px;color:#6b7280;}
-    .send{border:1px solid transparent;border-radius:12px;padding:10px 12px;cursor:pointer;background:${CONFIG.primaryColor};color:#fff;font:inherit;}
-    .send:disabled{opacity:.6;cursor:not-allowed;}
-    .mini{font-size:12px;color:#6b7280;}
-    @media (max-width:420px){.panel{width:calc(100vw - 36px);height:72vh;}}
+
+    .panel {
+      position: fixed;
+      bottom: 78px;
+      ${side}: 18px;
+      width: 360px;
+      max-width: calc(100vw - 36px);
+      height: 520px;
+      max-height: calc(100vh - 120px);
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.22);
+      overflow: hidden;
+      z-index: 999999;
+      display: none;
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: #111827;
+    }
+
+    .panel.open { display: flex; flex-direction: column; }
+
+    .header {
+      padding: 12px 12px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      background: #ffffff;
+    }
+
+    .title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .title strong { font-size: 14px; }
+    .title span { font-size: 12px; color: #6b7280; }
+
+    .header-actions { display: flex; gap: 8px; }
+
+    .icon-btn {
+      border: 1px solid #e5e7eb;
+      background: #fff;
+      border-radius: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .icon-btn:hover { background: #f9fafb; }
+
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      background: linear-gradient(to bottom, rgba(255,255,255,.9), rgba(255,255,255,.9));
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .row { display: flex; width: 100%; }
+    .row.user { justify-content: flex-end; }
+    .row.assistant { justify-content: flex-start; }
+    .row.system { justify-content: center; }
+
+    .bubble-msg {
+      max-width: 86%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      border: 1px solid transparent;
+    }
+
+    .assistant .bubble-msg {
+      background: #eef2ff;
+      border-color: #dfe5ff;
+      color: #111827;
+    }
+
+    .user .bubble-msg {
+      background: #111827;
+      border-color: #0f172a;
+      color: #ffffff;
+    }
+
+    .system .bubble-msg {
+      background: #fff7ed;
+      border-color: #fed7aa;
+      color: #9a3412;
+      text-align: center;
+      max-width: 92%;
+    }
+
+    .footer {
+      border-top: 1px solid #e5e7eb;
+      padding: 10px;
+      background: #fff;
+      display: grid;
+      gap: 8px;
+    }
+
+    .input {
+      width: 100%;
+      resize: none;
+      min-height: 44px;
+      max-height: 110px;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+      outline: none;
+    }
+
+    .input:focus {
+      border-color: #c7d2fe;
+      box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.10);
+    }
+
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status { font-size: 12px; color: #6b7280; }
+
+    .send {
+      border: 1px solid transparent;
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
+      background: ${CONFIG.primaryColor};
+      color: white;
+      font: inherit;
+    }
+
+    .send:disabled { opacity: .6; cursor: not-allowed; }
+
+    .mini {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    @media (max-width: 420px) {
+      .panel { width: calc(100vw - 36px); height: 72vh; }
+    }
   `;
   shadow.appendChild(style);
 
@@ -256,7 +351,11 @@
     updateMini();
 
     try {
-      const data = await postMessage({ text, conversationId, externalUserId });
+      const data = await postMessage({
+        text,
+        conversationId,
+        externalUserId,
+      });
 
       if (data?.conversation_id) setConversationId(data.conversation_id);
 
@@ -271,7 +370,7 @@
     }
   }
 
-  // EVENTS
+  // Events
   el.openBtn.addEventListener("click", () => {
     if (el.panel.classList.contains("open")) closePanel();
     else openPanel();
@@ -299,5 +398,6 @@
     el.input.style.height = `${Math.min(el.input.scrollHeight, 110)}px`;
   });
 
+  // init
   updateMini();
 })();

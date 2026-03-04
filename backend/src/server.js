@@ -16,15 +16,40 @@ import {
 import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 
+import { sendLeadEmail } from "./lib/emailService.js";
+
 const app = express();
 
 // CORS abierto (para producción podemos limitar a t-mediaglobal.com)
 app.use(cors());
 app.options("*", cors());
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
+
+// --------------------
+// DEDUP SIMPLE PARA EMAILS
+// --------------------
+const emailDedup = new Map();
+/**
+ * Evita enviar emails repetidos para el mismo lead/conversación durante X minutos.
+ * Controlado por env: LEADS_EMAIL_DEDUP_MINUTES (default 30)
+ */
+function shouldNotifyLead({ conversation_id, email, phone }) {
+  const minutes = Number(process.env.LEADS_EMAIL_DEDUP_MINUTES || 30);
+  const key = `${conversation_id || ""}::${(email || "").toLowerCase()}::${phone || ""}`;
+  const now = Date.now();
+
+  // Purga entradas antiguas
+  for (const [k, t] of emailDedup.entries()) {
+    if (now - t > minutes * 60_000) emailDedup.delete(k);
+  }
+
+  if (emailDedup.has(key)) return false;
+  emailDedup.set(key, now);
+  return true;
+}
 
 // HEALTH
 app.get("/health", (req, res) => {
@@ -38,6 +63,42 @@ app.get("/health", (req, res) => {
 // ROOT
 app.get("/", (req, res) => {
   res.send("Backend del agente IA web activo ✅");
+});
+
+// --------------------
+// TEST EMAIL (NUEVO)
+// --------------------
+app.get("/test-email", async (req, res) => {
+  try {
+    const fakeLead = {
+      name: "Test Lead",
+      email: "test@example.com",
+      phone: "600000000",
+      interest_service: "Google Ads",
+      urgency: "Alta",
+      budget_range: "1000-2000",
+      summary: "Email de prueba para verificar SMTP desde Render.",
+      lead_score: 80,
+      consent: true,
+      consent_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    };
+
+    const out = await sendLeadEmail({ lead: fakeLead, conversation_id: "TEST-CONV" });
+
+    return res.status(200).json({
+      ok: true,
+      message: "Email de prueba enviado (si SMTP está bien configurado).",
+      out,
+    });
+  } catch (error) {
+    console.error("GET /test-email error:", error);
+    return res.status(500).json({
+      ok: false,
+      error: "Error enviando email de prueba",
+      details: error?.message || String(error),
+    });
+  }
 });
 
 // DEBUG: mensajes de conversación
@@ -171,7 +232,9 @@ app.post("/messages", async (req, res) => {
       content: reply,
     });
 
-    // 5) Lead (extract + merge + upsert)
+    // 5) Lead (extract + merge + upsert) + email notify
+    let email_notified = false;
+
     try {
       const extractedLead = extractLeadDataFromText(text);
 
@@ -193,7 +256,24 @@ app.post("/messages", async (req, res) => {
       const leadBefore = await getLeadByConversationId(currentConversationId);
       const merged = mergeLeadData(leadBefore, incomingLeadPayload);
 
+      // Guardar en Supabase
       await upsertLeadFromConversation(merged);
+
+      // Enviar email SOLO si hay datos mínimamente útiles
+      const hasContact = !!(merged?.email || merged?.phone || merged?.name);
+
+      if (hasContact && shouldNotifyLead({
+        conversation_id: currentConversationId,
+        email: merged?.email,
+        phone: merged?.phone
+      })) {
+        try {
+          await sendLeadEmail({ lead: merged, conversation_id: currentConversationId });
+          email_notified = true;
+        } catch (mailErr) {
+          console.error("Lead email error:", mailErr?.message || mailErr);
+        }
+      }
     } catch (leadErr) {
       console.warn("Lead upsert warning:", leadErr?.message || leadErr);
     }
@@ -206,6 +286,7 @@ app.post("/messages", async (req, res) => {
       channel: channel || "web",
       received_text: text,
       reply,
+      email_notified,
     });
   } catch (error) {
     console.error("POST /messages error:", error);

@@ -1,29 +1,24 @@
-import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
+import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Carga explícita del .env de /backend/.env
-dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-console.log("SUPABASE_URL en supabase.js:", supabaseUrl ? "OK" : "FALTA");
-console.log("SUPABASE_SERVICE_ROLE_KEY en supabase.js:", supabaseServiceRoleKey ? "OK" : "FALTA");
-
 if (!supabaseUrl) {
-  console.warn("⚠️ Falta SUPABASE_URL en variables de entorno");
+  throw new Error("Falta SUPABASE_URL en .env");
 }
 
 if (!supabaseServiceRoleKey) {
-  console.warn("⚠️ Falta SUPABASE_SERVICE_ROLE_KEY en variables de entorno");
+  throw new Error("Falta SUPABASE_SERVICE_ROLE_KEY en .env");
 }
 
-export const supabase = createClient(
-  supabaseUrl || "http://localhost:54321",
-  supabaseServiceRoleKey || "missing-key"
-);
+// Logs útiles (sin imprimir claves)
+console.log("SUPABASE_URL en supabase.js: OK");
+console.log("SUPABASE_SERVICE_ROLE_KEY en supabase.js: OK");
+
+export const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+});

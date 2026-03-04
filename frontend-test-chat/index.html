@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo Widget Agente IA</title>
+  <link rel="icon" href="data:," />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 40px; }
+    h1 { margin: 0 0 10px; }
+    p { color: #4b5563; margin: 0 0 20px; max-width: 700px; }
+    .box { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; max-width: 800px; background: #fff; }
+  </style>
+</head>
+<body>
+  <h1>Demo: Widget flotante</h1>
+  <p>Abre el chat con el botón flotante abajo a la derecha. Debe conectarse a tu backend en http://localhost:3000.</p>
+
+  <div class="box">
+    Backend encendido: prueba <code>http://localhost:3000/health</code> antes.
+  </div>
+
+  <script src="./widget.js"></script>
+</body>
+</html>
