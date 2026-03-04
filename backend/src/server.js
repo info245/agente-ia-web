@@ -17,6 +17,7 @@ import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 
 import { sendLeadEmail } from "./lib/emailService.js";
+import { buildLeadSignature, decideEmailSend } from "./lib/leadEmailPolicy.js";
 
 const app = express();
 
@@ -28,27 +29,16 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
 
-// --------------------
-// DEDUP SIMPLE PARA EMAILS
-// --------------------
-const emailDedup = new Map();
-/**
- * Evita enviar emails repetidos para el mismo lead/conversación durante X minutos.
- * Controlado por env: LEADS_EMAIL_DEDUP_MINUTES (default 30)
- */
-function shouldNotifyLead({ conversation_id, email, phone }) {
-  const minutes = Number(process.env.LEADS_EMAIL_DEDUP_MINUTES || 30);
-  const key = `${conversation_id || ""}::${(email || "").toLowerCase()}::${phone || ""}`;
-  const now = Date.now();
+// Memoria simple para evitar reenvíos idénticos
+// conversation_id -> { signature, sentAtMs }
+const lastLeadEmailSent = new Map();
 
-  // Purga entradas antiguas
-  for (const [k, t] of emailDedup.entries()) {
-    if (now - t > minutes * 60_000) emailDedup.delete(k);
-  }
+function getLastSent(conversation_id) {
+  return lastLeadEmailSent.get(conversation_id) || { signature: null, sentAtMs: 0 };
+}
 
-  if (emailDedup.has(key)) return false;
-  emailDedup.set(key, now);
-  return true;
+function setLastSent(conversation_id, signature) {
+  lastLeadEmailSent.set(conversation_id, { signature, sentAtMs: Date.now() });
 }
 
 // HEALTH
@@ -65,9 +55,7 @@ app.get("/", (req, res) => {
   res.send("Backend del agente IA web activo ✅");
 });
 
-// --------------------
-// TEST EMAIL (NUEVO)
-// --------------------
+// TEST EMAIL
 app.get("/test-email", async (req, res) => {
   try {
     const fakeLead = {
@@ -84,7 +72,12 @@ app.get("/test-email", async (req, res) => {
       created_at: new Date().toISOString(),
     };
 
-    const out = await sendLeadEmail({ lead: fakeLead, conversation_id: "TEST-CONV" });
+    const out = await sendLeadEmail({
+      lead: fakeLead,
+      conversation_id: "TEST-CONV",
+      type: "new",
+      changedFields: [],
+    });
 
     return res.status(200).json({
       ok: true,
@@ -232,8 +225,10 @@ app.post("/messages", async (req, res) => {
       content: reply,
     });
 
-    // 5) Lead (extract + merge + upsert) + email notify
+    // 5) Lead (extract + merge + upsert) + EMAIL NEW/UPDATE
     let email_notified = false;
+    let email_type = null;
+    let email_changed_fields = [];
 
     try {
       const extractedLead = extractLeadDataFromText(text);
@@ -259,17 +254,32 @@ app.post("/messages", async (req, res) => {
       // Guardar en Supabase
       await upsertLeadFromConversation(merged);
 
-      // Enviar email SOLO si hay datos mínimamente útiles
-      const hasContact = !!(merged?.email || merged?.phone || merged?.name);
+      // Decidir si enviar email NEW o UPDATE
+      const last = getLastSent(currentConversationId);
+      const decision = decideEmailSend({
+        leadBefore,
+        leadAfter: merged,
+        lastSignatureSent: last.signature,
+        lastSentAtMs: last.sentAtMs,
+        minMinutesBetween: Number(process.env.LEADS_EMAIL_UPDATE_MIN_MINUTES || 10),
+      });
 
-      if (hasContact && shouldNotifyLead({
-        conversation_id: currentConversationId,
-        email: merged?.email,
-        phone: merged?.phone
-      })) {
+      if (decision.sendType !== "none") {
         try {
-          await sendLeadEmail({ lead: merged, conversation_id: currentConversationId });
+          await sendLeadEmail({
+            lead: merged,
+            conversation_id: currentConversationId,
+            type: decision.sendType,
+            changedFields: decision.changedFields,
+          });
+
+          // Guardamos signature enviada para no repetir lo mismo
+          const signature = buildLeadSignature(merged);
+          setLastSent(currentConversationId, signature);
+
           email_notified = true;
+          email_type = decision.sendType;
+          email_changed_fields = decision.changedFields;
         } catch (mailErr) {
           console.error("Lead email error:", mailErr?.message || mailErr);
         }
@@ -287,6 +297,8 @@ app.post("/messages", async (req, res) => {
       received_text: text,
       reply,
       email_notified,
+      email_type,
+      email_changed_fields,
     });
   } catch (error) {
     console.error("POST /messages error:", error);

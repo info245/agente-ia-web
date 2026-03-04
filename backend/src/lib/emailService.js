@@ -38,22 +38,22 @@ function getTransporter() {
   transporter = nodemailer.createTransport({
     host,
     port,
-    secure, // true para 465 (SSL), false para 587 (STARTTLS)
+    secure,
     auth: { user, pass },
-
-    // Si te sale error de certificado TLS desde Render/Plesk, descomenta:
+    // Si alguna vez te diera error de certificado, descomenta:
     // tls: { rejectUnauthorized: false },
   });
 
   return transporter;
 }
 
-export async function sendLeadEmail({ lead, conversation_id }) {
+export async function sendLeadEmail({ lead, conversation_id, type = "new", changedFields = [] }) {
   if (!enabled) return { skipped: true };
   if (!to.length) throw new Error("LEADS_EMAIL_TO está vacío");
   if (!from) throw new Error("LEADS_EMAIL_FROM o SMTP_USER está vacío");
 
-  const subject = `Nuevo lead (${lead?.lead_score ?? "N/A"}) - ${lead?.name || "Sin nombre"} - ${lead?.interest_service || "Sin interés"}`;
+  const typeLabel = type === "update" ? "Actualización" : "Nuevo";
+  const subject = `${typeLabel} lead - ${lead?.interest_service || "Sin servicio"} - ${lead?.name || "Sin nombre"} (${lead?.lead_score ?? "N/A"})`;
 
   const rows = [
     ["Nombre", lead?.name],
@@ -69,9 +69,15 @@ export async function sendLeadEmail({ lead, conversation_id }) {
     ["Creado", lead?.created_at],
   ];
 
+  const changedHtml =
+    type === "update" && changedFields.length
+      ? `<p><b>Campos actualizados:</b> ${escapeHtml(changedFields.join(", "))}</p>`
+      : "";
+
   const html = `
   <div style="font-family: Arial, sans-serif; line-height: 1.4">
-    <h2>Nuevo lead capturado</h2>
+    <h2>${typeLabel} lead capturado</h2>
+    ${changedHtml}
     <table cellpadding="6" cellspacing="0" border="1" style="border-collapse: collapse; font-size: 14px">
       <tbody>
         ${rows
@@ -84,7 +90,11 @@ export async function sendLeadEmail({ lead, conversation_id }) {
     </table>
   </div>`;
 
-  const text = rows.map(([k, v]) => `${k}: ${v ?? ""}`).join("\n");
+  const textBase = rows.map(([k, v]) => `${k}: ${v ?? ""}`).join("\n");
+  const text =
+    type === "update" && changedFields.length
+      ? `Campos actualizados: ${changedFields.join(", ")}\n\n${textBase}`
+      : textBase;
 
   const t = getTransporter();
 
