@@ -5,7 +5,7 @@ const SERVICE_ALIASES = [
   { key: "SEO", patterns: [/\bseo\b/i, /posicionamiento/i, /org[aá]nico/i] },
   { key: "Meta Ads", patterns: [/meta\s*ads/i, /facebook\s*ads/i, /instagram\s*ads/i] },
 
-  // IMPORTANTE: Diseño Web SOLO si lo piden explícitamente
+  // Diseño Web SOLO si lo piden explícitamente
   { key: "Diseño Web", patterns: [/diseñ(o|ar)\s+web/i, /hacer\s+(una\s+)?web/i, /crear\s+(una\s+)?web/i, /web\s+corporativa/i, /tienda\s+online/i, /e-?commerce/i, /\bwordpress\b/i] },
 
   { key: "Automatización", patterns: [/automatiz/i, /\bcrm\b/i, /\bzapier\b/i, /\bmake\b/i, /\bn8n\b/i] },
@@ -30,7 +30,7 @@ function extractPhone(text) {
   return digits.length >= 9 ? digits : null;
 }
 
-function extractName(text) {
+function extractNameFromPhrases(text) {
   const t = String(text || "").trim();
   const patterns = [
     /me llamo\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,2})/i,
@@ -44,6 +44,42 @@ function extractName(text) {
   return null;
 }
 
+/**
+ * Fallback: si el usuario responde SOLO con un nombre (ej: "Antonio", "Antonio García")
+ * - 1 a 3 palabras
+ * - solo letras (y espacios)
+ * - sin @ (email) y sin dígitos (teléfono)
+ */
+function extractNameStandalone(text) {
+  const t = String(text || "").trim();
+
+  if (!t) return null;
+  if (t.includes("@")) return null;
+  if (/\d/.test(t)) return null;
+
+  // quitar puntuación final
+  const cleaned = t.replace(/[.,;:!?]+$/g, "").trim();
+
+  // máximo 3 palabras
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length < 1 || parts.length > 3) return null;
+
+  // solo letras (incluye acentos/ñ)
+  const onlyLetters = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,2}$/.test(cleaned);
+  if (!onlyLetters) return null;
+
+  // evitar respuestas típicas que NO son nombre
+  const blacklist = new Set(["si", "sí", "ok", "vale", "perfecto", "gracias", "hola", "buenas"]);
+  if (blacklist.has(cleaned.toLowerCase())) return null;
+
+  // Capitalización simple
+  const formatted = parts
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+
+  return formatted;
+}
+
 function extractUrgency(text) {
   const t = String(text || "").toLowerCase();
   if (/(urgente|inmediato|hoy|ya|esta\s+semana|cuanto\s+antes)/i.test(t)) return "alta";
@@ -53,22 +89,18 @@ function extractUrgency(text) {
 }
 
 function normalizeMoneyNumber(str) {
-  // 1.500 / 1,500 -> 1500
   return String(str).replace(/[.,](?=\d{3}\b)/g, "");
 }
 
 function extractBudget(text) {
   const t = String(text || "");
 
-  // Rangos: 1000-2000
   const range = t.match(/(\d{3,6})\s*(€|eur)?\s*[-–]\s*(\d{3,6})\s*(€|eur)?/i);
   if (range) return `${range[1]}-${range[3]} €`;
 
-  // Entre X y Y
   const between = t.match(/entre\s+(\d{3,6})\s*(€|eur)?\s+y\s+(\d{3,6})\s*(€|eur)?/i);
   if (between) return `${between[1]}-${between[3]} €`;
 
-  // Presupuesto/inversión + cifra (con o sin €/mes)
   const kw = t.match(
     /(presupuesto|inversi[oó]n|gasto|budget)\D{0,25}(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(k)?\s*(€|eur)?\s*(\/\s*mes|al\s+mes|mensual(es)?|mes)?/i
   );
@@ -81,7 +113,6 @@ function extractBudget(text) {
     }
   }
 
-  // Cifra simple con €
   const simple = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(k)?\s*(€|eur)\b/i);
   if (simple) {
     let num = Number(normalizeMoneyNumber(simple[1]));
@@ -95,7 +126,6 @@ function extractBudget(text) {
 function pickService(text) {
   if (!text) return null;
 
-  // Prioriza específicos (y deja genéricos al final)
   const ordered = [...SERVICE_ALIASES].sort((a, b) => {
     const aGen = isGenericService(a.key) ? 1 : 0;
     const bGen = isGenericService(b.key) ? 1 : 0;
@@ -118,7 +148,10 @@ function extractConsent(text) {
 export function extractLeadDataFromText(text) {
   const email = extractEmail(text);
   const phone = extractPhone(text);
-  const name = extractName(text);
+
+  // nombre: primero patrones, luego fallback standalone
+  const name = extractNameFromPhrases(text) || extractNameStandalone(text);
+
   const interest_service = pickService(text);
   const urgency = extractUrgency(text);
   const budget_range = extractBudget(text);
