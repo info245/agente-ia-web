@@ -25,9 +25,7 @@ app.options("*", cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-
-// Cambia este string cada vez que quieras confirmar despliegue
-const BUILD_TAG = "name-fix-debug-v1";
+const BUILD_TAG = "field-capture-v1";
 
 const lastLeadEmailSent = new Map();
 function getLastSent(conversation_id) {
@@ -46,8 +44,60 @@ function hasName(lead) {
 function hasService(lead) {
   return norm(lead?.interest_service).length >= 2;
 }
+function hasBudget(lead) {
+  return norm(lead?.budget_range).length >= 2;
+}
+function hasEmailOrPhone(lead) {
+  return norm(lead?.email).length >= 3 || norm(lead?.phone).length >= 6;
+}
 
-// HEALTH
+function cleanNameInput(text) {
+  const t = norm(text).replace(/[.,;:!?]+$/g, "");
+  // Si la persona responde "Claro, Antonio" -> quedarnos con la última palabra si parece nombre
+  const parts = t.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2 && /^claro,?$/i.test(parts[0])) return parts.slice(1).join(" ");
+  return t;
+}
+
+function looksLikeBudget(text) {
+  const t = String(text || "");
+  return /(\d{2,6}\s*(€|eur)\b)|(\b\d{2,6}\b)/i.test(t);
+}
+
+function normalizeBudget(text) {
+  const t = String(text || "").trim();
+
+  // 300€ / 300 eur
+  const m1 = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(€|eur)\b/i);
+  if (m1) return `${Number(String(m1[1]).replace(/[.,](?=\d{3}\b)/g, ""))} €`;
+
+  // "300" suelto -> interpretarlo como €
+  const m2 = t.match(/\b(\d{2,6})\b/);
+  if (m2) return `${Number(m2[1])} €`;
+
+  return null;
+}
+
+// Detecta qué estaba preguntando el bot en el último mensaje
+function detectExpectedField(historyMessages = []) {
+  const lastAssistant = [...historyMessages].reverse().find((m) => m?.role === "assistant");
+  const q = String(lastAssistant?.content || "").toLowerCase();
+
+  if (q.includes("¿cómo te llamas") || q.includes("como te llamas") || q.includes("tu nombre")) {
+    return "name";
+  }
+  if (q.includes("presupuesto") || q.includes("€/mes") || q.includes("mensual")) {
+    return "budget";
+  }
+  if (q.includes("email") || q.includes("correo") || q.includes("teléfono") || q.includes("telefono")) {
+    return "contact";
+  }
+  if (q.includes("¿qué servicio") || q.includes("que servicio") || q.includes("servicio te interesa")) {
+    return "service";
+  }
+  return null;
+}
+
 app.get("/health", (req, res) => {
   res.status(200).json({
     ok: true,
@@ -57,146 +107,10 @@ app.get("/health", (req, res) => {
   });
 });
 
-// ROOT
 app.get("/", (req, res) => {
   res.send("Backend del agente IA web activo ✅");
 });
 
-// DEBUG: extractor
-// Ejemplo: /debug/extract?text=Antonio
-app.get("/debug/extract", (req, res) => {
-  const text = String(req.query.text || "");
-  const extracted = extractLeadDataFromText(text);
-  return res.status(200).json({
-    ok: true,
-    build: BUILD_TAG,
-    input: text,
-    extracted,
-  });
-});
-
-// DEBUG: lead actual
-app.get("/debug/lead/:conversationId", async (req, res) => {
-  try {
-    const conversationId = req.params.conversationId;
-    const lead = await getLeadByConversationId(conversationId);
-    return res.status(200).json({
-      ok: true,
-      build: BUILD_TAG,
-      conversation_id: conversationId,
-      lead,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      ok: false,
-      error: "Error leyendo lead",
-      details: error?.message || String(error),
-    });
-  }
-});
-
-// TEST EMAIL
-app.get("/test-email", async (req, res) => {
-  try {
-    const fakeLead = {
-      name: "Test Lead",
-      email: "test@example.com",
-      phone: "600000000",
-      interest_service: "Google Ads",
-      urgency: "alta",
-      budget_range: "1000-2000 €",
-      summary: "Email de prueba para verificar SMTP desde Render.",
-      lead_score: 80,
-      consent: true,
-      consent_at: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-    };
-
-    const out = await sendLeadEmail({
-      lead: fakeLead,
-      conversation_id: "TEST-CONV",
-      type: "new",
-      changedFields: [],
-    });
-
-    return res.status(200).json({
-      ok: true,
-      build: BUILD_TAG,
-      message: "Email de prueba enviado (si SMTP está bien configurado).",
-      out,
-    });
-  } catch (error) {
-    console.error("GET /test-email error:", error);
-    return res.status(500).json({
-      ok: false,
-      error: "Error enviando email de prueba",
-      details: error?.message || String(error),
-    });
-  }
-});
-
-// DEBUG: mensajes
-app.get("/conversations/:id/messages", async (req, res) => {
-  try {
-    const conversationId = req.params.id;
-    const limitRaw = req.query.limit;
-
-    const limit = Number.isFinite(Number(limitRaw))
-      ? Math.max(1, Math.min(Number(limitRaw), 100))
-      : 50;
-
-    const messages = await getConversationMessages(conversationId, limit);
-    return res.status(200).json({
-      ok: true,
-      build: BUILD_TAG,
-      conversation_id: conversationId,
-      total: messages.length,
-      messages,
-    });
-  } catch (error) {
-    console.error("GET /conversations/:id/messages error:", error);
-    return res.status(500).json({
-      ok: false,
-      error: "Error obteniendo mensajes",
-      details: error?.message || String(error),
-    });
-  }
-});
-
-// DEBUG: lead
-app.get("/leads/:conversationId", async (req, res) => {
-  try {
-    const conversationId = req.params.conversationId;
-    const lead = await getLeadByConversationId(conversationId);
-    return res.status(200).json({
-      ok: true,
-      build: BUILD_TAG,
-      conversation_id: conversationId,
-      found: !!lead,
-      lead,
-    });
-  } catch (error) {
-    console.error("GET /leads/:conversationId error:", error);
-    return res.status(500).json({
-      ok: false,
-      error: "Error obteniendo lead",
-      details: error?.message || String(error),
-    });
-  }
-});
-
-function buildOpenAIInputFromHistory({ systemPrompt, historyMessages = [] }) {
-  const input = [{ role: "system", content: systemPrompt }];
-  for (const msg of historyMessages) {
-    if (!msg?.content) continue;
-    if (msg.role === "user" || msg.role === "assistant") {
-      input.push({ role: msg.role, content: msg.content });
-    }
-  }
-  return input;
-}
-
-// POST /messages
 app.post("/messages", async (req, res) => {
   try {
     const { text, conversation_id, external_user_id, channel } = req.body || {};
@@ -207,7 +121,7 @@ app.post("/messages", async (req, res) => {
       });
     }
 
-    // conversación
+    // 1) conversación
     let currentConversationId = conversation_id || null;
     if (!currentConversationId) {
       const conversation = await createConversation({
@@ -218,61 +132,71 @@ app.post("/messages", async (req, res) => {
       if (!currentConversationId) throw new Error("No se pudo crear la conversación");
     }
 
-    // guardar mensaje user
+    // 2) guardar user msg
     await saveMessage({ conversation_id: currentConversationId, role: "user", content: text });
 
-    // lead upsert ANTES de responder
-    let leadBefore = null;
-    let leadAfter = null;
+    // 3) obtener historial y lead actual
+    const historyMessages = await getConversationMessages(currentConversationId, 12);
+    const expected = detectExpectedField(historyMessages);
 
-    try {
-      leadBefore = await getLeadByConversationId(currentConversationId);
-      const extracted = extractLeadDataFromText(text);
+    let leadBefore = await getLeadByConversationId(currentConversationId);
 
-      // Log útil en Render
-      console.log("[LEAD_EXTRACT]", { conv: currentConversationId, text, extracted });
+    // 4) extraer + aplicar “campo esperado”
+    const extracted = extractLeadDataFromText(text);
 
-      const incoming = {
-        conversation_id: currentConversationId,
-        name: extracted?.name ?? null,
-        email: extracted?.email ?? null,
-        phone: extracted?.phone ?? null,
-        interest_service: extracted?.interest_service ?? null,
-        urgency: extracted?.urgency ?? null,
-        budget_range: extracted?.budget_range ?? null,
-        summary: extracted?.summary ?? text,
-        lead_score: extracted?.lead_score ?? null,
-        consent: extracted?.consent ?? null,
-        consent_at: extracted?.consent_at ?? null,
-      };
+    const incoming = {
+      conversation_id: currentConversationId,
+      name: extracted?.name ?? null,
+      email: extracted?.email ?? null,
+      phone: extracted?.phone ?? null,
+      interest_service: extracted?.interest_service ?? null,
+      urgency: extracted?.urgency ?? null,
+      budget_range: extracted?.budget_range ?? null,
+      summary: extracted?.summary ?? text,
+      lead_score: extracted?.lead_score ?? null,
+      consent: extracted?.consent ?? null,
+      consent_at: extracted?.consent_at ?? null,
+    };
 
-      const merged = mergeLeadData(leadBefore, incoming);
-      await upsertLeadFromConversation(merged);
-      // leer el lead REAL guardado
-      leadAfter = await getLeadByConversationId(currentConversationId);
-    } catch (e) {
-      console.warn("Lead upsert warning:", e?.message || e);
-      leadAfter = leadBefore;
+    // ✅ CAPTURA DETERMINISTA según lo que preguntó el bot
+    if (expected === "name" && !hasName(leadBefore)) {
+      const candidate = cleanNameInput(text);
+      // Evitar que "Quiero Google Ads" entre como nombre
+      if (!/google\s*ads|seo|meta\s*ads|quiero|necesito|busco/i.test(candidate)) {
+        incoming.name = candidate;
+      }
     }
 
-    // GATING FUERTE
+    if (expected === "budget" && !hasBudget(leadBefore)) {
+      const b = normalizeBudget(text);
+      if (b) incoming.budget_range = b;
+    }
+
+    // 5) merge + upsert + LEER LEAD REAL guardado
+    const merged = mergeLeadData(leadBefore, incoming);
+    await upsertLeadFromConversation(merged);
+    const leadAfter = await getLeadByConversationId(currentConversationId);
+
+    // 6) GATING (flujo fijo)
     let reply = null;
 
     if (!hasName(leadAfter)) {
       reply = "Perfecto. Antes de seguir, ¿cómo te llamas?";
     } else if (!hasService(leadAfter)) {
-      reply =
-        "Gracias. ¿Qué servicio te interesa: SEO, Google Ads, Meta Ads, Diseño Web, Automatización o IA?";
+      reply = "Gracias. ¿Qué servicio te interesa: SEO, Google Ads, Meta Ads, Diseño Web, Automatización o IA?";
+    } else if (!hasBudget(leadAfter)) {
+      reply = `Gracias, ${leadAfter.name}. ¿Qué presupuesto aproximado mensual tienes para ${leadAfter.interest_service}?`;
+    } else if (!hasEmailOrPhone(leadAfter)) {
+      reply = `Genial, ${leadAfter.name}. Para enviarte una propuesta rápida, ¿me dejas tu email o tu teléfono?`;
     }
 
-    // OpenAI solo si pasa gating
+    // 7) si ya tenemos lo mínimo -> OpenAI para asesorar
     if (!reply) {
       const fallback =
-        "Gracias. ¿Qué objetivo tienes ahora mismo (leads/ventas/tráfico) y qué presupuesto aproximado manejas?";
+        "Perfecto. Cuéntame tu objetivo principal (leads/ventas/tráfico), tu sector y si ya has hecho campañas antes.";
       try {
         const systemPrompt = getAgentSystemPrompt();
-        const historyMessages = await getConversationMessages(currentConversationId, 12);
-        const input = buildOpenAIInputFromHistory({ systemPrompt, historyMessages });
+        const input = [{ role: "system", content: systemPrompt }, ...historyMessages.map(m => ({ role: m.role, content: m.content }))];
 
         const aiResponse = await openai.responses.create({
           model: "gpt-4.1-mini",
@@ -286,10 +210,10 @@ app.post("/messages", async (req, res) => {
       }
     }
 
-    // guardar assistant
+    // 8) guardar assistant
     await saveMessage({ conversation_id: currentConversationId, role: "assistant", content: reply });
 
-    // email new/update
+    // 9) email new/update
     let email_notified = false;
     let email_type = null;
     let email_changed_fields = [];
@@ -303,7 +227,7 @@ app.post("/messages", async (req, res) => {
         leadAfter: latestLead || null,
         lastSignatureSent: last.signature,
         lastSentAtMs: last.sentAtMs,
-        minMinutesBetween: Number(process.env.LEADS_EMAIL_UPDATE_MIN_MINUTES || 10),
+        minMinutesBetween: Number(process.env.LEADS_EMAIL_UPDATE_MIN_MINUTES || 2),
       });
 
       if (decision.sendType !== "none") {
@@ -327,9 +251,8 @@ app.post("/messages", async (req, res) => {
       ok: true,
       build: BUILD_TAG,
       conversation_id: currentConversationId,
-      external_user_id: external_user_id || null,
-      channel: channel || "web",
       received_text: text,
+      expected_field: expected,
       reply,
       email_notified,
       email_type,
