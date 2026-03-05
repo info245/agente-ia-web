@@ -9,11 +9,11 @@
     "dev": "node --watch src/server.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.97.0",
+    "@supabase/supabase-js": "^2.98.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "nodemailer": "^8.0.1",
-    "openai": "^6.24.0"
+    "openai": "^6.26.0"
   }
 }
