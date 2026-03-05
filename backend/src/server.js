@@ -26,6 +26,9 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
 
+// Cambia este string cada vez que quieras confirmar despliegue
+const BUILD_TAG = "name-fix-debug-v1";
+
 const lastLeadEmailSent = new Map();
 function getLastSent(conversation_id) {
   return lastLeadEmailSent.get(conversation_id) || { signature: null, sentAtMs: 0 };
@@ -44,18 +47,55 @@ function hasService(lead) {
   return norm(lead?.interest_service).length >= 2;
 }
 
+// HEALTH
 app.get("/health", (req, res) => {
   res.status(200).json({
     ok: true,
     service: "agente-ia-web-backend",
+    build: BUILD_TAG,
     timestamp: new Date().toISOString(),
   });
 });
 
+// ROOT
 app.get("/", (req, res) => {
   res.send("Backend del agente IA web activo ✅");
 });
 
+// DEBUG: extractor
+// Ejemplo: /debug/extract?text=Antonio
+app.get("/debug/extract", (req, res) => {
+  const text = String(req.query.text || "");
+  const extracted = extractLeadDataFromText(text);
+  return res.status(200).json({
+    ok: true,
+    build: BUILD_TAG,
+    input: text,
+    extracted,
+  });
+});
+
+// DEBUG: lead actual
+app.get("/debug/lead/:conversationId", async (req, res) => {
+  try {
+    const conversationId = req.params.conversationId;
+    const lead = await getLeadByConversationId(conversationId);
+    return res.status(200).json({
+      ok: true,
+      build: BUILD_TAG,
+      conversation_id: conversationId,
+      lead,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: "Error leyendo lead",
+      details: error?.message || String(error),
+    });
+  }
+});
+
+// TEST EMAIL
 app.get("/test-email", async (req, res) => {
   try {
     const fakeLead = {
@@ -81,6 +121,7 @@ app.get("/test-email", async (req, res) => {
 
     return res.status(200).json({
       ok: true,
+      build: BUILD_TAG,
       message: "Email de prueba enviado (si SMTP está bien configurado).",
       out,
     });
@@ -94,6 +135,7 @@ app.get("/test-email", async (req, res) => {
   }
 });
 
+// DEBUG: mensajes
 app.get("/conversations/:id/messages", async (req, res) => {
   try {
     const conversationId = req.params.id;
@@ -104,21 +146,42 @@ app.get("/conversations/:id/messages", async (req, res) => {
       : 50;
 
     const messages = await getConversationMessages(conversationId, limit);
-    return res.status(200).json({ ok: true, conversation_id: conversationId, total: messages.length, messages });
+    return res.status(200).json({
+      ok: true,
+      build: BUILD_TAG,
+      conversation_id: conversationId,
+      total: messages.length,
+      messages,
+    });
   } catch (error) {
     console.error("GET /conversations/:id/messages error:", error);
-    return res.status(500).json({ ok: false, error: "Error obteniendo mensajes", details: error?.message || String(error) });
+    return res.status(500).json({
+      ok: false,
+      error: "Error obteniendo mensajes",
+      details: error?.message || String(error),
+    });
   }
 });
 
+// DEBUG: lead
 app.get("/leads/:conversationId", async (req, res) => {
   try {
     const conversationId = req.params.conversationId;
     const lead = await getLeadByConversationId(conversationId);
-    return res.status(200).json({ ok: true, conversation_id: conversationId, found: !!lead, lead });
+    return res.status(200).json({
+      ok: true,
+      build: BUILD_TAG,
+      conversation_id: conversationId,
+      found: !!lead,
+      lead,
+    });
   } catch (error) {
     console.error("GET /leads/:conversationId error:", error);
-    return res.status(500).json({ ok: false, error: "Error obteniendo lead", details: error?.message || String(error) });
+    return res.status(500).json({
+      ok: false,
+      error: "Error obteniendo lead",
+      details: error?.message || String(error),
+    });
   }
 });
 
@@ -126,19 +189,25 @@ function buildOpenAIInputFromHistory({ systemPrompt, historyMessages = [] }) {
   const input = [{ role: "system", content: systemPrompt }];
   for (const msg of historyMessages) {
     if (!msg?.content) continue;
-    if (msg.role === "user" || msg.role === "assistant") input.push({ role: msg.role, content: msg.content });
+    if (msg.role === "user" || msg.role === "assistant") {
+      input.push({ role: msg.role, content: msg.content });
+    }
   }
   return input;
 }
 
+// POST /messages
 app.post("/messages", async (req, res) => {
   try {
     const { text, conversation_id, external_user_id, channel } = req.body || {};
     if (!text || typeof text !== "string") {
-      return res.status(400).json({ ok: false, error: "El campo 'text' es obligatorio y debe ser texto." });
+      return res.status(400).json({
+        ok: false,
+        error: "El campo 'text' es obligatorio y debe ser texto.",
+      });
     }
 
-    // 1) conversación
+    // conversación
     let currentConversationId = conversation_id || null;
     if (!currentConversationId) {
       const conversation = await createConversation({
@@ -149,16 +218,19 @@ app.post("/messages", async (req, res) => {
       if (!currentConversationId) throw new Error("No se pudo crear la conversación");
     }
 
-    // 2) guardar user msg
+    // guardar mensaje user
     await saveMessage({ conversation_id: currentConversationId, role: "user", content: text });
 
-    // 3) upsert lead ANTES de responder
+    // lead upsert ANTES de responder
     let leadBefore = null;
     let leadAfter = null;
 
     try {
       leadBefore = await getLeadByConversationId(currentConversationId);
       const extracted = extractLeadDataFromText(text);
+
+      // Log útil en Render
+      console.log("[LEAD_EXTRACT]", { conv: currentConversationId, text, extracted });
 
       const incoming = {
         conversation_id: currentConversationId,
@@ -182,24 +254,30 @@ app.post("/messages", async (req, res) => {
       leadAfter = leadBefore;
     }
 
-    // 4) GATING FUERTE
+    // GATING FUERTE
     let reply = null;
 
     if (!hasName(leadAfter)) {
       reply = "Perfecto. Antes de seguir, ¿cómo te llamas?";
     } else if (!hasService(leadAfter)) {
-      reply = "Gracias. ¿Qué servicio te interesa: SEO, Google Ads, Meta Ads, Diseño Web, Automatización o IA?";
+      reply =
+        "Gracias. ¿Qué servicio te interesa: SEO, Google Ads, Meta Ads, Diseño Web, Automatización o IA?";
     }
 
-    // 5) Si pasa gating -> OpenAI
+    // OpenAI solo si pasa gating
     if (!reply) {
-      let fallback = "Gracias. ¿Qué objetivo tienes ahora mismo (leads, ventas, branding o tráfico) y qué presupuesto aproximado manejas?";
+      const fallback =
+        "Gracias. ¿Qué objetivo tienes ahora mismo (leads/ventas/tráfico) y qué presupuesto aproximado manejas?";
       try {
         const systemPrompt = getAgentSystemPrompt();
         const historyMessages = await getConversationMessages(currentConversationId, 12);
         const input = buildOpenAIInputFromHistory({ systemPrompt, historyMessages });
 
-        const aiResponse = await openai.responses.create({ model: "gpt-4.1-mini", input });
+        const aiResponse = await openai.responses.create({
+          model: "gpt-4.1-mini",
+          input,
+        });
+
         reply = aiResponse?.output_text?.trim() || fallback;
       } catch (err) {
         console.warn("OpenAI error:", err?.message || err);
@@ -207,10 +285,10 @@ app.post("/messages", async (req, res) => {
       }
     }
 
-    // 6) guardar assistant
+    // guardar assistant
     await saveMessage({ conversation_id: currentConversationId, role: "assistant", content: reply });
 
-    // 7) email new/update
+    // email new/update
     let email_notified = false;
     let email_type = null;
     let email_changed_fields = [];
@@ -246,6 +324,7 @@ app.post("/messages", async (req, res) => {
 
     return res.status(200).json({
       ok: true,
+      build: BUILD_TAG,
       conversation_id: currentConversationId,
       external_user_id: external_user_id || null,
       channel: channel || "web",
@@ -257,7 +336,11 @@ app.post("/messages", async (req, res) => {
     });
   } catch (error) {
     console.error("POST /messages error:", error);
-    return res.status(500).json({ ok: false, error: "Error interno al procesar el mensaje.", details: error?.message || String(error) });
+    return res.status(500).json({
+      ok: false,
+      error: "Error interno al procesar el mensaje.",
+      details: error?.message || String(error),
+    });
   }
 });
 
