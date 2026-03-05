@@ -248,7 +248,8 @@ app.post("/messages", async (req, res) => {
 
       const merged = mergeLeadData(leadBefore, incoming);
       await upsertLeadFromConversation(merged);
-      leadAfter = merged;
+      // leer el lead REAL guardado
+      leadAfter = await getLeadByConversationId(currentConversationId);
     } catch (e) {
       console.warn("Lead upsert warning:", e?.message || e);
       leadAfter = leadBefore;
