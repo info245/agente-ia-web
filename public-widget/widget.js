@@ -15,7 +15,8 @@
     primaryColor: colorFromAttr || "#111827",
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
-    requestTimeoutMs: 25000, // 25s (Render free a veces tarda)
+    chatStartedStorageKey: "agente_ia_chat_started",
+    requestTimeoutMs: 25000, // 25s
   };
 
   // ====== HELPERS ======
@@ -43,13 +44,46 @@
     localStorage.removeItem(CONFIG.conversationIdStorageKey);
   }
 
-  // ====== FETCH ROBUSTO (con timeout y errores detallados) ======
+  function hasChatStarted() {
+    return localStorage.getItem(CONFIG.chatStartedStorageKey) === "true";
+  }
+
+  function setChatStarted(value) {
+    if (value) localStorage.setItem(CONFIG.chatStartedStorageKey, "true");
+    else localStorage.removeItem(CONFIG.chatStartedStorageKey);
+  }
+
+  function pushDataLayer(eventName, payload = {}) {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: eventName,
+      chat_brand: CONFIG.brandName,
+      chat_channel: CONFIG.channel,
+      conversation_id: getConversationId() || null,
+      external_user_id: getOrCreateExternalUserId(),
+      ...payload,
+    });
+  }
+
+  function detectContactType(text) {
+    const str = String(text || "");
+    const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(str);
+    const hasPhone = /(\+?\d{1,3}\s*)?(\d[\d\s().-]{7,}\d)/.test(str);
+
+    if (hasEmail && hasPhone) return "email_phone";
+    if (hasEmail) return "email";
+    if (hasPhone) return "phone";
+    return null;
+  }
+
+  // ====== FETCH ROBUSTO ======
   async function postMessage({ text, conversationId, externalUserId }) {
     const payload = {
       text,
       external_user_id: externalUserId,
       channel: CONFIG.channel,
     };
+
     if (conversationId) payload.conversation_id = conversationId;
 
     const controller = new AbortController();
@@ -63,13 +97,13 @@
         signal: controller.signal,
       });
 
-      // Leemos como texto para poder mostrar errores aunque no sea JSON
       const rawText = await res.text();
       let data = null;
+
       try {
         data = JSON.parse(rawText);
       } catch {
-        // no json
+        data = null;
       }
 
       if (!res.ok) {
@@ -87,7 +121,7 @@
     } catch (err) {
       if (err.name === "AbortError") {
         throw new Error(
-          "Timeout: el servidor tardó demasiado. Si usas Render Free, puede estar 'dormido'. Prueba de nuevo."
+          "Timeout: el servidor tardó demasiado. Si usas Render Free, puede estar dormido. Prueba de nuevo."
         );
       }
       throw err;
@@ -231,11 +265,19 @@
   }
 
   function openPanel() {
+    const wasOpen = el.panel.classList.contains("open");
+
     el.panel.classList.add("open");
     updateMini();
+
+    if (!wasOpen) {
+      pushDataLayer("chat_open");
+    }
+
     if (el.messages.childElementCount === 0) {
       append("assistant", "Hola, soy tu agente IA. ¿En qué puedo ayudarte?");
     }
+
     setTimeout(() => el.input.focus(), 50);
   }
 
@@ -249,29 +291,75 @@
 
     const externalUserId = getOrCreateExternalUserId();
     const conversationId = getConversationId();
+    const contactType = detectContactType(text);
 
     append("user", text);
     el.input.value = "";
     setLoading(true);
     updateMini();
 
+    // Evento: primer mensaje de la conversación
+    if (!hasChatStarted()) {
+      setChatStarted(true);
+      pushDataLayer("chat_start", {
+        message_text: text,
+      });
+    }
+
+    // Evento: cada mensaje enviado
+    pushDataLayer("chat_message_sent", {
+      message_text: text,
+      contact_type: contactType,
+    });
+
+    // Evento: comparte contacto en el mensaje
+    if (contactType) {
+      pushDataLayer("contact_shared", {
+        contact_type: contactType,
+        message_text: text,
+      });
+    }
+
     try {
       const data = await postMessage({ text, conversationId, externalUserId });
 
-      if (data?.conversation_id) setConversationId(data.conversation_id);
+      if (data?.conversation_id) {
+        setConversationId(data.conversation_id);
+      }
 
       append("assistant", data?.reply || "Sin respuesta del backend.");
       updateMini();
       setStatus("OK");
+
+      // Evento: lead generado (preferente por flag backend)
+      if (data?.lead_generated === true) {
+        pushDataLayer("lead_generated", {
+          lead_score: data?.lead_score ?? null,
+          interest_service: data?.interest_service ?? null,
+          budget_range: data?.budget_range ?? null,
+        });
+      } else if (contactType) {
+        // fallback si aún no devuelves lead_generated desde backend
+        pushDataLayer("lead_generated", {
+          lead_score: data?.lead_score ?? null,
+          interest_service: data?.interest_service ?? null,
+          budget_range: data?.budget_range ?? null,
+          inferred: true,
+        });
+      }
     } catch (err) {
       append("system", `Error: ${err.message}`);
       setStatus("Error", true);
+
+      pushDataLayer("chat_error", {
+        error_message: err.message,
+      });
     } finally {
       setLoading(false);
     }
   }
 
-  // EVENTS
+  // ====== EVENTS ======
   el.openBtn.addEventListener("click", () => {
     if (el.panel.classList.contains("open")) closePanel();
     else openPanel();
@@ -281,8 +369,12 @@
 
   el.newBtn.addEventListener("click", () => {
     clearConversationId();
+    setChatStarted(false);
+
     append("system", "Nueva conversación iniciada.");
     updateMini();
+
+    pushDataLayer("chat_new_conversation");
   });
 
   el.sendBtn.addEventListener("click", send);
