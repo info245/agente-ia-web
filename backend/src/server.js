@@ -29,7 +29,7 @@ app.options("*", cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "memory-v1-rag-v1";
+const BUILD_TAG = "memory-v1-service-protected-v1";
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -112,6 +112,26 @@ app.get("/health", (req, res) => {
   });
 });
 
+app.get("/debug/extract", async (req, res) => {
+  try {
+    const text = String(req.query.text || "");
+    const existingLead = null;
+    const extracted = extractLeadDataFromText(text, existingLead);
+
+    res.json({
+      ok: true,
+      build: BUILD_TAG,
+      input: text,
+      extracted,
+    });
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      error: error?.message || String(error),
+    });
+  }
+});
+
 app.get("/debug/lead/:conversationId", async (req, res) => {
   try {
     const lead = await getLeadByConversationId(req.params.conversationId);
@@ -158,7 +178,8 @@ app.post("/messages", async (req, res) => {
     const history = await getConversationMessages(currentConversationId, 15);
     const leadBefore = await getLeadByConversationId(currentConversationId);
 
-    const extracted = extractLeadDataFromText(text);
+    // IMPORTANTE: pasamos el lead actual al extractor
+    const extracted = extractLeadDataFromText(text, leadBefore);
 
     const incoming = {
       conversation_id: currentConversationId,
@@ -205,7 +226,7 @@ app.post("/messages", async (req, res) => {
       reply =
         "¿Qué servicio te interesa? SEO, Google Ads, Publicidad en Redes Sociales, Diseño Web o Consultoría Digital.";
     } else if (!hasBudget(leadAfter)) {
-      reply = `Gracias, ${leadAfter.name}. ¿Qué presupuesto aproximado mensual tienes para ${leadAfter.interest_service}?`;
+      reply = `Gracias, ${leadAfter.name}. ¿Qué presupuesto aproximado tienes para ${leadAfter.interest_service}?`;
     } else {
       if (!hasContact(leadAfter)) {
         contactCTA = `
@@ -307,7 +328,6 @@ ${ragContext}
       content: reply,
     });
 
-    // Email interno lead
     try {
       const latestLead = await getLeadByConversationId(currentConversationId);
       const signature = buildLeadSignature(latestLead);
@@ -327,7 +347,6 @@ ${ragContext}
       console.log("lead email error", e.message);
     }
 
-    // Email cliente
     try {
       const latestLead = await getLeadByConversationId(currentConversationId);
 

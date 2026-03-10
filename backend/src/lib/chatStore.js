@@ -2,10 +2,16 @@
 import { supabase } from "./supabase.js";
 import { isGenericService } from "./leadExtractor.js";
 
+function normalizeStr(v) {
+  return typeof v === "string" ? v.trim() : v;
+}
+
 function isEmptyLike(v) {
   if (v === undefined || v === null) return true;
   if (typeof v !== "string") return false;
+
   const s = v.trim().toLowerCase();
+
   return (
     s === "" ||
     s === "pendiente" ||
@@ -22,6 +28,7 @@ export async function createConversation({ channel = "web", external_user_id = n
     .insert({ channel, external_user_id })
     .select()
     .single();
+
   if (error) throw error;
   return data;
 }
@@ -32,6 +39,7 @@ export async function saveMessage({ conversation_id, role, content }) {
     .insert({ conversation_id, role, content })
     .select()
     .single();
+
   if (error) throw error;
   return data;
 }
@@ -43,7 +51,9 @@ export async function getConversationMessages(conversation_id, limit = 50) {
     .eq("conversation_id", conversation_id)
     .order("created_at", { ascending: false })
     .limit(limit);
+
   if (error) throw error;
+
   return (data || []).slice().reverse();
 }
 
@@ -53,18 +63,22 @@ export async function getLeadByConversationId(conversation_id) {
     .select("*")
     .eq("conversation_id", conversation_id)
     .maybeSingle();
+
   if (error) throw error;
   return data || null;
 }
 
 export async function upsertLeadFromConversation(leadPayload) {
-  if (!leadPayload?.conversation_id) throw new Error("upsertLeadFromConversation requiere conversation_id");
+  if (!leadPayload?.conversation_id) {
+    throw new Error("upsertLeadFromConversation requiere conversation_id");
+  }
 
   const { data, error } = await supabase
     .from("leads")
     .upsert(leadPayload, { onConflict: "conversation_id" })
     .select()
     .single();
+
   if (error) throw error;
   return data;
 }
@@ -72,56 +86,54 @@ export async function upsertLeadFromConversation(leadPayload) {
 export function mergeLeadData(existing = null, incoming = {}) {
   const out = { ...(existing || {}) };
 
-  const applyIf = (key) => {
+  const setIfValue = (key) => {
     const v = incoming?.[key];
     if (isEmptyLike(v)) return;
-    out[key] = v;
+    out[key] = normalizeStr(v);
   };
 
-  applyIf("conversation_id");
-  applyIf("name");
-  applyIf("email");
-  applyIf("phone");
-  applyIf("urgency");
-  applyIf("budget_range");
-  applyIf("summary");
-  applyIf("consent");
-  applyIf("consent_at");
+  // Campos básicos
+  setIfValue("conversation_id");
+  setIfValue("name");
+  setIfValue("email");
+  setIfValue("phone");
+  setIfValue("urgency");
+  setIfValue("budget_range");
+  setIfValue("summary");
+  setIfValue("consent");
+  setIfValue("consent_at");
+  setIfValue("business_type");
+  setIfValue("main_goal");
+  setIfValue("current_situation");
+  setIfValue("pain_points");
+  setIfValue("preferred_contact_channel");
+  setIfValue("notes_ai");
+  setIfValue("last_intent");
+  setIfValue("last_seen_at");
 
-  // SERVICIO: regla fuerte
-  const prevService = existing?.interest_service || null;
-  const nextService = incoming?.interest_service || null;
+  // PROTECCIÓN FUERTE DEL SERVICIO
+  const prevService = normalizeStr(existing?.interest_service || null);
+  const nextService = normalizeStr(incoming?.interest_service || null);
 
-  if (!isEmptyLike(nextService)) {
-    if (prevService && !isEmptyLike(prevService)) {
-      // Si ya hay servicio específico, NO lo machacamos
-      const prevIsGeneric = isGenericService(prevService);
-      const nextIsGeneric = isGenericService(nextService);
-
-      // 1) específico + genérico -> mantener específico
-      if (!prevIsGeneric && nextIsGeneric) {
-        out.interest_service = prevService;
-      }
-      // 2) específico + específico -> permitir cambio
-      else if (!prevIsGeneric && !nextIsGeneric) {
-        out.interest_service = nextService;
-      }
-      // 3) genérico + específico -> mejorar a específico
-      else if (prevIsGeneric && !nextIsGeneric) {
-        out.interest_service = nextService;
-      }
-      // 4) genérico + genérico -> usar el nuevo
-      else {
-        out.interest_service = nextService;
-      }
-    } else {
-      out.interest_service = nextService;
-    }
-  } else if (prevService) {
+  if (!isEmptyLike(prevService) && isEmptyLike(nextService)) {
     out.interest_service = prevService;
+  } else if (!isEmptyLike(prevService) && !isEmptyLike(nextService)) {
+    const prevIsGeneric = isGenericService(prevService);
+    const nextIsGeneric = isGenericService(nextService);
+
+    // Si ya hay uno específico, no lo cambies por otro genérico
+    if (!prevIsGeneric && nextIsGeneric) {
+      out.interest_service = prevService;
+    }
+    // Si ya hay servicio previo, lo mantenemos salvo que realmente quieras sustituirlo de forma controlada
+    else {
+      out.interest_service = prevService;
+    }
+  } else if (isEmptyLike(prevService) && !isEmptyLike(nextService)) {
+    out.interest_service = nextService;
   }
 
-  // Score: conservar el máximo
+  // Score: conservar máximo
   const prevScore = typeof existing?.lead_score === "number" ? existing.lead_score : null;
   const nextScore = typeof incoming?.lead_score === "number" ? incoming.lead_score : null;
 
