@@ -1,3 +1,4 @@
+// backend/src/server.js
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -17,11 +18,9 @@ import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
 import { getServiceFacts } from "./lib/websiteFacts.js";
+import { sendLeadEmail, sendClientConfirmationEmail } from "./lib/emailService.js";
 
-import {
-  sendLeadEmail,
-  sendClientConfirmationEmail,
-} from "./lib/emailService.js";
+import { buildMemoryPatch, buildLeadMemoryContext } from "./lib/memoryUtils.js";
 
 const app = express();
 
@@ -30,11 +29,9 @@ app.options("*", cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "rag-sales-assistant-v2";
+const BUILD_TAG = "memory-v1-rag-v1";
 
-// Evitar duplicar emails de lead internos
 const lastLeadEmailSent = new Map();
-// Evitar duplicar email de confirmación al cliente
 const clientConfirmationSent = new Map();
 
 function norm(v) {
@@ -90,75 +87,6 @@ function buildOpenAIInput(systemPrompt, history) {
   return input;
 }
 
-function detectExpectedField(historyMessages = []) {
-  const lastAssistant = [...historyMessages].reverse().find((m) => m?.role === "assistant");
-  const q = String(lastAssistant?.content || "").toLowerCase();
-
-  if (q.includes("¿cómo te llamas") || q.includes("como te llamas") || q.includes("tu nombre")) {
-    return "name";
-  }
-
-  if (q.includes("¿qué presupuesto") || q.includes("que presupuesto") || q.includes("presupuesto")) {
-    return "budget";
-  }
-
-  if (
-    q.includes("email") ||
-    q.includes("correo") ||
-    q.includes("teléfono") ||
-    q.includes("telefono")
-  ) {
-    return "contact";
-  }
-
-  if (
-    q.includes("¿qué servicio") ||
-    q.includes("que servicio") ||
-    q.includes("servicio te interesa")
-  ) {
-    return "service";
-  }
-
-  return null;
-}
-
-function cleanNameInput(text) {
-  let t = norm(text).replace(/[.,;:!?]+$/g, "");
-
-  if (/^claro,\s*/i.test(t)) {
-    t = t.replace(/^claro,\s*/i, "").trim();
-  }
-
-  return t;
-}
-
-function looksLikeServiceIntent(text) {
-  return /(google\s*ads|seo|meta\s*ads|redes\s+sociales|diseñ(o|ar)\s+web|consultor(í|i)a|quiero|necesito|busco)/i.test(
-    String(text || "")
-  );
-}
-
-function getLastLeadEmailSignature(conversationId) {
-  return lastLeadEmailSent.get(conversationId) || null;
-}
-
-function setLastLeadEmailSignature(conversationId, signature) {
-  lastLeadEmailSent.set(conversationId, signature);
-}
-
-function shouldSendLeadEmail(latestLead) {
-  return !!(
-    latestLead &&
-    (
-      latestLead.name ||
-      latestLead.email ||
-      latestLead.phone ||
-      latestLead.interest_service ||
-      latestLead.budget_range
-    )
-  );
-}
-
 function buildLeadSignature(lead) {
   return JSON.stringify({
     name: lead?.name || null,
@@ -167,7 +95,12 @@ function buildLeadSignature(lead) {
     interest_service: lead?.interest_service || null,
     urgency: lead?.urgency || null,
     budget_range: lead?.budget_range || null,
-    lead_score: lead?.lead_score || null,
+    business_type: lead?.business_type || null,
+    main_goal: lead?.main_goal || null,
+    current_situation: lead?.current_situation || null,
+    pain_points: lead?.pain_points || null,
+    preferred_contact_channel: lead?.preferred_contact_channel || null,
+    last_intent: lead?.last_intent || null,
   });
 }
 
@@ -176,18 +109,6 @@ app.get("/health", (req, res) => {
     ok: true,
     build: BUILD_TAG,
     time: new Date().toISOString(),
-  });
-});
-
-app.get("/debug/extract", (req, res) => {
-  const text = String(req.query.text || "");
-  const extracted = extractLeadDataFromText(text);
-
-  res.json({
-    ok: true,
-    build: BUILD_TAG,
-    input: text,
-    extracted,
   });
 });
 
@@ -209,7 +130,7 @@ app.get("/debug/lead/:conversationId", async (req, res) => {
 
 app.post("/messages", async (req, res) => {
   try {
-    const { text, conversation_id } = req.body || {};
+    const { text, conversation_id, external_user_id, channel } = req.body || {};
 
     if (!text || typeof text !== "string") {
       return res.status(400).json({
@@ -221,7 +142,10 @@ app.post("/messages", async (req, res) => {
     let currentConversationId = conversation_id;
 
     if (!currentConversationId) {
-      const conversation = await createConversation({});
+      const conversation = await createConversation({
+        channel: channel || "web",
+        external_user_id: external_user_id || null,
+      });
       currentConversationId = conversation.id;
     }
 
@@ -232,7 +156,6 @@ app.post("/messages", async (req, res) => {
     });
 
     const history = await getConversationMessages(currentConversationId, 15);
-    const expectedField = detectExpectedField(history);
     const leadBefore = await getLeadByConversationId(currentConversationId);
 
     const extracted = extractLeadDataFromText(text);
@@ -251,56 +174,31 @@ app.post("/messages", async (req, res) => {
       consent_at: extracted?.consent_at ?? null,
     };
 
-    // Captura determinista del nombre
-    if (expectedField === "name" && !hasName(leadBefore)) {
-      const candidate = cleanNameInput(text);
-
-      if (
-        candidate &&
-        candidate.split(/\s+/).length <= 3 &&
-        !looksLikeServiceIntent(candidate) &&
-        !candidate.includes("@") &&
-        !/\d/.test(candidate)
-      ) {
-        incoming.name = candidate;
-      }
-    }
-
-    // Captura determinista del presupuesto
-    if (expectedField === "budget" && !hasBudget(leadBefore)) {
+    if (!incoming.budget_range) {
       const detectedBudget = normalizeBudget(text);
       if (detectedBudget) {
         incoming.budget_range = detectedBudget;
       }
     }
 
-    // Evitar que una frase de intención entre como nombre
-    if (
-      incoming.name &&
-      norm(incoming.name).toLowerCase() === norm(text).toLowerCase() &&
-      looksLikeServiceIntent(text) &&
-      expectedField !== "name"
-    ) {
-      incoming.name = null;
-    }
+    const mergedLeadBase = mergeLeadData(leadBefore, incoming);
 
-    if (!incoming.budget_range) {
-      const detectedBudget = normalizeBudget(text);
-      if (detectedBudget && expectedField === "budget") {
-        incoming.budget_range = detectedBudget;
-      }
-    }
+    const memoryPatch = buildMemoryPatch({
+      text,
+      leadBefore,
+      extracted,
+      mergedLead: mergedLeadBase,
+    });
 
-    const merged = mergeLeadData(leadBefore, incoming);
+    const mergedLead = mergeLeadData(mergedLeadBase, memoryPatch);
 
-    await upsertLeadFromConversation(merged);
+    await upsertLeadFromConversation(mergedLead);
 
     const leadAfter = await getLeadByConversationId(currentConversationId);
 
     let reply = null;
     let contactCTA = null;
 
-    // Flujo de captación
     if (!hasName(leadAfter)) {
       reply = "Perfecto. Antes de seguir, ¿cómo te llamas?";
     } else if (!hasService(leadAfter)) {
@@ -337,20 +235,18 @@ ${serviceFacts.notes}
 `;
       }
 
-      const query = `
-Servicio: ${leadAfter.interest_service}
-
-Pregunta usuario:
-${text}
-
-Presupuesto:
-${leadAfter.budget_range}
-`;
-
       let ragContext = "";
 
       try {
-        const docs = await retrieveWebsiteContext(query, { topK: 5, threshold: 0.7 });
+        const docs = await retrieveWebsiteContext(
+          `
+Servicio: ${leadAfter.interest_service}
+Pregunta usuario: ${text}
+Presupuesto: ${leadAfter.budget_range}
+Objetivo: ${leadAfter.main_goal || ""}
+Negocio: ${leadAfter.business_type || ""}
+`
+        );
 
         ragContext = docs
           .map(
@@ -365,6 +261,8 @@ ${d.chunk}
         console.log("RAG error", e.message);
       }
 
+      const memoryContext = buildLeadMemoryContext(leadAfter);
+
       const systemPrompt = `
 ${getAgentSystemPrompt()}
 
@@ -374,7 +272,9 @@ REGLAS IMPORTANTES
 2. USA INFORMACIÓN DE LA WEB SI ESTÁ DISPONIBLE
 3. LOS PRECIOS SIEMPRE DEBEN INCLUIR "+ IVA"
 4. NO INVENTES PRECIOS
-5. SI NO HAY DATO, INDICA QUE DEPENDE DEL PROYECTO
+5. USA LA MEMORIA DEL LEAD PARA DAR CONTINUIDAD
+
+${memoryContext}
 
 ${factsBlock}
 
@@ -407,37 +307,31 @@ ${ragContext}
       content: reply,
     });
 
-    // Email interno del lead
+    // Email interno lead
     try {
       const latestLead = await getLeadByConversationId(currentConversationId);
+      const signature = buildLeadSignature(latestLead);
+      const previousSignature = lastLeadEmailSent.get(currentConversationId);
 
-      if (shouldSendLeadEmail(latestLead)) {
-        const signature = buildLeadSignature(latestLead);
-        const previousSignature = getLastLeadEmailSignature(currentConversationId);
+      if (signature !== previousSignature) {
+        await sendLeadEmail({
+          lead: latestLead,
+          conversation_id: currentConversationId,
+          type: previousSignature ? "update" : "new",
+          changedFields: [],
+        });
 
-        if (signature !== previousSignature) {
-          await sendLeadEmail({
-            lead: latestLead,
-            conversation_id: currentConversationId,
-            type: previousSignature ? "update" : "new",
-            changedFields: [],
-          });
-
-          setLastLeadEmailSignature(currentConversationId, signature);
-        }
+        lastLeadEmailSent.set(currentConversationId, signature);
       }
     } catch (e) {
-      console.log("internal lead email error", e.message);
+      console.log("lead email error", e.message);
     }
 
-    // Email de confirmación al cliente
+    // Email cliente
     try {
       const latestLead = await getLeadByConversationId(currentConversationId);
 
-      if (
-        latestLead?.email &&
-        !clientConfirmationSent.get(currentConversationId)
-      ) {
+      if (latestLead?.email && !clientConfirmationSent.get(currentConversationId)) {
         await sendClientConfirmationEmail({
           lead: latestLead,
           conversation_id: currentConversationId,
@@ -446,7 +340,7 @@ ${ragContext}
         clientConfirmationSent.set(currentConversationId, true);
       }
     } catch (e) {
-      console.log("client confirmation email error", e.message);
+      console.log("client email error", e.message);
     }
 
     res.json({
