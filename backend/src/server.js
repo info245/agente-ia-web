@@ -4,12 +4,12 @@ import cors from "cors";
 
 import { extractLeadDataFromText } from "./lib/leadExtractor.js";
 import {
-  createConversation,
-  saveMessage,
-  upsertLeadFromConversation,
-  getConversationMessages,
-  getLeadByConversationId,
-  mergeLeadData
+createConversation,
+saveMessage,
+upsertLeadFromConversation,
+getConversationMessages,
+getLeadByConversationId,
+mergeLeadData
 } from "./lib/chatStore.js";
 
 import { openai } from "./lib/openaiClient.js";
@@ -18,84 +18,86 @@ import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
 import { getServiceFacts } from "./lib/websiteFacts.js";
 
+import { sendLeadEmail } from "./lib/emailService.js";
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "rag-intelligent-chat-v1";
+const BUILD_TAG = "rag-sales-assistant-v1";
 
 function norm(v){
-  return String(v || "").trim();
+return String(v || "").trim();
 }
 
 function hasName(lead){
-  return norm(lead?.name).length > 1;
+return norm(lead?.name).length > 1;
 }
 
 function hasService(lead){
-  return norm(lead?.interest_service).length > 1;
+return norm(lead?.interest_service).length > 1;
 }
 
 function hasBudget(lead){
-  return norm(lead?.budget_range).length > 1;
+return norm(lead?.budget_range).length > 1;
 }
 
 function hasContact(lead){
-  return norm(lead?.email).length > 2 || norm(lead?.phone).length > 5;
+return norm(lead?.email).length > 2 || norm(lead?.phone).length > 5;
 }
 
 function normalizeBudget(text){
 
-  const match = text.match(/(\d{2,6})/);
+const match = text.match(/(\d{2,6})/);
 
-  if(match){
+if(match){
 
-    const value = Number(match[1]);
+const value = Number(match[1]);
 
-    if(value > 20){
+if(value > 20){
 
-      return value + " €";
+return value + " €";
 
-    }
+}
 
-  }
+}
 
-  return null;
+return null;
 
 }
 
 function buildOpenAIInput(systemPrompt, history){
 
-  const input = [
-    { role:"system", content: systemPrompt }
-  ];
+const input = [
+{ role:"system", content:systemPrompt }
+];
 
-  history.forEach(msg => {
+history.forEach(msg=>{
 
-    if(msg.role === "user" || msg.role === "assistant"){
+if(msg.role === "user" || msg.role === "assistant"){
 
-      input.push({
-        role: msg.role,
-        content: msg.content
-      });
+input.push({
+role:msg.role,
+content:msg.content
+});
 
-    }
+}
 
-  });
+});
 
-  return input;
+return input;
 
 }
 
 app.get("/health",(req,res)=>{
 
-  res.json({
-    ok:true,
-    build:BUILD_TAG,
-    time:new Date().toISOString()
-  });
+res.json({
+ok:true,
+build:BUILD_TAG,
+time:new Date().toISOString()
+});
 
 });
 
@@ -110,7 +112,6 @@ let currentConversationId = conversation_id;
 if(!currentConversationId){
 
 const conversation = await createConversation({});
-
 currentConversationId = conversation.id;
 
 }
@@ -160,7 +161,6 @@ await upsertLeadFromConversation(merged);
 const leadAfter = await getLeadByConversationId(currentConversationId);
 
 let reply = null;
-
 let contactCTA = null;
 
 if(!hasName(leadAfter)){
@@ -171,7 +171,7 @@ reply = "Perfecto. Antes de seguir, ¿cómo te llamas?";
 
 else if(!hasService(leadAfter)){
 
-reply = "¿Qué servicio te interesa? SEO, Google Ads, Redes Sociales, Diseño Web o Consultoría Digital.";
+reply = "¿Qué servicio te interesa? SEO, Google Ads, Publicidad en Redes Sociales, Diseño Web o Consultoría Digital.";
 
 }
 
@@ -189,7 +189,7 @@ contactCTA = `
 
 Si quieres puedo enviarte una propuesta orientativa para ${leadAfter.interest_service}.
 
-¿Me dejas tu email o teléfono?`;
+¿Me dejas tu email o tu teléfono?`;
 
 }
 
@@ -295,6 +295,25 @@ role:"assistant",
 content:reply
 
 });
+
+try{
+
+const latestLead = await getLeadByConversationId(currentConversationId);
+
+await sendLeadEmail({
+
+lead:latestLead,
+conversation_id:currentConversationId,
+type:"update",
+changedFields:[]
+
+});
+
+}catch(e){
+
+console.log("email error",e.message);
+
+}
 
 res.json({
 
