@@ -1,181 +1,182 @@
-// backend/src/lib/leadExtractor.js
+// leadExtractor.js
 
-const SERVICE_ALIASES = [
-  { key: "Google Ads", patterns: [/google\s*ads/i, /\bsem\b/i, /campañ(a|as)\s+google/i] },
-  { key: "SEO", patterns: [/\bseo\b/i, /posicionamiento/i, /org[aá]nico/i] },
-  { key: "Meta Ads", patterns: [/meta\s*ads/i, /facebook\s*ads/i, /instagram\s*ads/i] },
+const STOPWORDS_NAME = new Set([
+  "hola", "buenas", "gracias", "vale", "ok", "perfecto", "genial",
+  "declaras", "hacienda", "quiero", "necesito", "busco", "pregunta",
+  "presupuesto", "urgencia", "prioridad", "alta", "media", "baja",
+  "servicio", "email", "correo", "telefono", "teléfono", "numero",
+  "número", "mi", "me", "llamo", "soy", "es", "de", "del", "la", "el"
+]);
 
-  // Diseño Web SOLO si lo piden explícitamente
-  { key: "Diseño Web", patterns: [/diseñ(o|ar)\s+web/i, /hacer\s+(una\s+)?web/i, /crear\s+(una\s+)?web/i, /web\s+corporativa/i, /tienda\s+online/i, /e-?commerce/i, /\bwordpress\b/i] },
-
-  { key: "Automatización", patterns: [/automatiz/i, /\bcrm\b/i, /\bzapier\b/i, /\bmake\b/i, /\bn8n\b/i] },
-  { key: "IA", patterns: [/\bagente\s+ia\b/i, /\bchatbot\b/i, /\bia\b/i] },
-];
-
-const GENERIC_SERVICES = new Set(["IA", "Automatización"]);
-export function isGenericService(service) {
-  return GENERIC_SERVICES.has(String(service || ""));
+function cleanText(text = "") {
+  return String(text)
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function extractEmail(text) {
-  const m = String(text || "").match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-  return m ? m[0].trim() : null;
+function toTitleCase(str = "") {
+  return str
+    .toLowerCase()
+    .replace(/\b([a-záéíóúüñ])/gi, (m) => m.toUpperCase());
 }
 
-function extractPhone(text) {
-  const cleaned = String(text || "").replace(/[().-]/g, " ").replace(/\s+/g, " ");
-  const m = cleaned.match(/(\+?\d{1,3}\s*)?(\d[\d\s]{7,14}\d)/);
-  if (!m) return null;
-  const digits = m[0].replace(/\D/g, "");
-  return digits.length >= 9 ? digits : null;
+function isLikelyQuestion(text = "") {
+  const t = cleanText(text).toLowerCase();
+  return t.includes("?") ||
+    /^(que|qué|como|cómo|cuando|cuándo|donde|dónde|por que|por qué|cuanto|cuánto|declaras|puedes|tienes|ofreces|hacéis|haceis)\b/i.test(t);
 }
 
-function extractNameFromPhrases(text) {
-  const t = String(text || "").trim();
-  const patterns = [
-    /me llamo\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,2})/i,
-    /soy\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,2})/i,
-    /mi nombre es\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,2})/i,
-  ];
-  for (const re of patterns) {
-    const m = t.match(re);
-    if (m && m[1]) return m[1].trim().replace(/[.,;:]+$/g, "");
+function looksLikeValidName(name = "") {
+  const value = cleanText(name);
+
+  if (!value) return false;
+  if (value.length < 2 || value.length > 40) return false;
+  if (/\d/.test(value)) return false;
+  if (/[?!=@#$%^&*()_+=[\]{};:"\\|<>/]/.test(value)) return false;
+
+  const words = value.split(" ").filter(Boolean);
+  if (words.length > 3) return false;
+
+  for (const word of words) {
+    const w = word.toLowerCase();
+    if (STOPWORDS_NAME.has(w)) return false;
+    if (w.length < 2) return false;
   }
-  return null;
+
+  return true;
 }
 
-/**
- * Fallback: si el usuario responde SOLO con un nombre (ej: "Antonio", "Antonio García")
- * - 1 a 3 palabras
- * - solo letras (y espacios)
- * - sin @ (email) y sin dígitos (teléfono)
- */
-function extractNameStandalone(text) {
-  const t = String(text || "").trim();
+function extractName(message = "") {
+  const text = cleanText(message);
 
-  if (!t) return null;
-  if (t.includes("@")) return null;
-  if (/\d/.test(t)) return null;
+  if (!text) return null;
+  if (isLikelyQuestion(text)) return null;
 
-  // quitar puntuación final
-  const cleaned = t.replace(/[.,;:!?]+$/g, "").trim();
+  const patterns = [
+    /\bme llamo\s+([A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+){0,2})\b/i,
+    /\bsoy\s+([A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+){0,2})\b/i,
+    /\bmi nombre es\s+([A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+){0,2})\b/i,
+    /\bnombre\s*[:\-]\s*([A-Za-zÁÉÍÓÚáéíóúÑñÜü]+(?:\s+[A-Za-zÁÉÍÓÚáéíóúÑñÜü]+){0,2})\b/i,
+  ];
 
-  // máximo 3 palabras
-  const parts = cleaned.split(/\s+/).filter(Boolean);
-  if (parts.length < 1 || parts.length > 3) return null;
-
-  // solo letras (incluye acentos/ñ)
-  const onlyLetters = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,2}$/.test(cleaned);
-  if (!onlyLetters) return null;
-
-  // evitar respuestas típicas que NO son nombre
-  const blacklist = new Set(["si", "sí", "ok", "vale", "perfecto", "gracias", "hola", "buenas"]);
-  if (blacklist.has(cleaned.toLowerCase())) return null;
-
-  // Capitalización simple
-  const formatted = parts
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
-
-  return formatted;
-}
-
-function extractUrgency(text) {
-  const t = String(text || "").toLowerCase();
-  if (/(urgente|inmediato|hoy|ya|esta\s+semana|cuanto\s+antes)/i.test(t)) return "alta";
-  if (/(este\s+mes|pronto|en\s+breve)/i.test(t)) return "media";
-  if (/(sin\s+prisa|m[aá]s\s+adelante|en\s+unos\s+meses)/i.test(t)) return "baja";
-  return null;
-}
-
-function normalizeMoneyNumber(str) {
-  return String(str).replace(/[.,](?=\d{3}\b)/g, "");
-}
-
-function extractBudget(text) {
-  const t = String(text || "");
-
-  const range = t.match(/(\d{3,6})\s*(€|eur)?\s*[-–]\s*(\d{3,6})\s*(€|eur)?/i);
-  if (range) return `${range[1]}-${range[3]} €`;
-
-  const between = t.match(/entre\s+(\d{3,6})\s*(€|eur)?\s+y\s+(\d{3,6})\s*(€|eur)?/i);
-  if (between) return `${between[1]}-${between[3]} €`;
-
-  const kw = t.match(
-    /(presupuesto|inversi[oó]n|gasto|budget)\D{0,25}(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(k)?\s*(€|eur)?\s*(\/\s*mes|al\s+mes|mensual(es)?|mes)?/i
-  );
-  if (kw) {
-    let num = Number(normalizeMoneyNumber(kw[2]));
-    if (kw[3]) num *= 1000;
-    if (Number.isFinite(num) && num >= 50) {
-      const isMonthly = !!kw[5];
-      return isMonthly ? `${num} €/mes` : `${num} €`;
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      const candidate = cleanText(match[1]);
+      if (looksLikeValidName(candidate)) {
+        return toTitleCase(candidate);
+      }
     }
   }
 
-  const simple = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(k)?\s*(€|eur)\b/i);
-  if (simple) {
-    let num = Number(normalizeMoneyNumber(simple[1]));
-    if (simple[2]) num *= 1000;
-    if (Number.isFinite(num) && num >= 50) return `${num} €`;
+  // Solo aceptar mensaje completo como nombre si es MUY claramente un nombre
+  // Ejemplo válido: "Moure"
+  // Ejemplo inválido: "Declaras a Hacienda"
+  if (!text.includes(" ") && looksLikeValidName(text)) {
+    return toTitleCase(text);
   }
 
   return null;
 }
 
-function pickService(text) {
+function extractEmail(message = "") {
+  const text = cleanText(message);
+  const match = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
+  return match ? match[0].toLowerCase() : null;
+}
+
+function extractPhone(message = "") {
+  const text = cleanText(message);
+  const normalized = text.replace(/[^\d+]/g, "");
+  const match = normalized.match(/(?:\+34)?[6-9]\d{8}\b/);
+  return match ? match[0] : null;
+}
+
+function extractUrgency(message = "") {
+  const text = cleanText(message).toLowerCase();
+
   if (!text) return null;
 
-  const ordered = [...SERVICE_ALIASES].sort((a, b) => {
-    const aGen = isGenericService(a.key) ? 1 : 0;
-    const bGen = isGenericService(b.key) ? 1 : 0;
-    return aGen - bGen;
-  });
-
-  for (const s of ordered) {
-    if (s.patterns.some((re) => re.test(text))) return s.key;
+  // Alta
+  if (
+    /\b(urgente|muy urgente|cuanto antes|lo antes posible|inmediato|inmediata|alta prioridad|prioridad alta|mi prioridad es alta|urgencia alta)\b/i.test(text)
+  ) {
+    return "alta";
   }
+
+  // Media
+  if (
+    /\b(media prioridad|prioridad media|mi prioridad es media|urgencia media|sin prisa pero pronto|pronto)\b/i.test(text)
+  ) {
+    return "media";
+  }
+
+  // Baja
+  if (
+    /\b(sin prisa|baja prioridad|prioridad baja|mi prioridad es baja|urgencia baja|más adelante|cuando se pueda)\b/i.test(text)
+  ) {
+    return "baja";
+  }
+
+  // Frases simples con prioridad/urgencia
+  const priorityMatch = text.match(/\b(?:prioridad|urgencia)\s+(?:es\s+)?(alta|media|baja)\b/i);
+  if (priorityMatch?.[1]) {
+    return priorityMatch[1].toLowerCase();
+  }
+
   return null;
 }
 
-function extractConsent(text) {
-  const t = String(text || "").toLowerCase();
-  if (/(acepto|consiento|autorizo|pueden\s+contactarme)/i.test(t)) return true;
-  if (/(no\s+acepto|no\s+consiento|no\s+me\s+contacten|no\s+contactar)/i.test(t)) return false;
+function extractBudgetRange(message = "") {
+  const text = cleanText(message).toLowerCase();
+  if (!text) return null;
+
+  if (/\b(menos de|hasta)\s*([0-9]{2,6})\s*€?/i.test(text)) return "hasta_x";
+  if (/\bentre\s*([0-9]{2,6})\s*y\s*([0-9]{2,6})\s*€?/i.test(text)) return "rango";
+  if (/\b(más de|a partir de)\s*([0-9]{2,6})\s*€?/i.test(text)) return "mas_de_x";
+
   return null;
 }
 
-export function extractLeadDataFromText(text) {
-  const email = extractEmail(text);
-  const phone = extractPhone(text);
+function extractInterestService(message = "", serviceCatalog = []) {
+  const text = cleanText(message).toLowerCase();
+  if (!text) return null;
 
-  // nombre: primero patrones, luego fallback standalone
-  const name = extractNameFromPhrases(text) || extractNameStandalone(text);
+  // 1. Coincidencia exacta por catálogo
+  for (const service of serviceCatalog) {
+    const serviceName = String(service).toLowerCase().trim();
+    if (serviceName && text.includes(serviceName)) {
+      return service;
+    }
+  }
 
-  const interest_service = pickService(text);
-  const urgency = extractUrgency(text);
-  const budget_range = extractBudget(text);
-  const consent = extractConsent(text);
+  // 2. Reglas simples TMedia
+  if (/\b(google ads|ads|campañas)\b/i.test(text)) return "Google Ads";
+  if (/\b(seo|posicionamiento)\b/i.test(text)) return "SEO";
+  if (/\b(web|pagina web|página web|diseño web)\b/i.test(text)) return "Diseño Web";
+  if (/\b(chatbot|ia|inteligencia artificial|agente ia)\b/i.test(text)) return "Chatbot IA";
+  if (/\b(meta ads|facebook ads|instagram ads)\b/i.test(text)) return "Meta Ads";
 
-  let lead_score = 0;
-  if (name) lead_score += 15;
-  if (email) lead_score += 20;
-  if (phone) lead_score += 20;
-  if (interest_service) lead_score += 15;
-  if (budget_range) lead_score += 15;
-  if (urgency === "alta") lead_score += 15;
-  if (urgency === "media") lead_score += 10;
+  return null;
+}
 
+export function extractLeadData(message = "", serviceCatalog = []) {
   return {
-    name,
-    email,
-    phone,
-    interest_service,
-    urgency,
-    budget_range,
-    summary: String(text || "").slice(0, 500),
-    lead_score: Math.min(100, lead_score),
-    consent,
-    consent_at: consent === true ? new Date().toISOString() : null,
+    name: extractName(message),
+    email: extractEmail(message),
+    phone: extractPhone(message),
+    interest_service: extractInterestService(message, serviceCatalog),
+    urgency: extractUrgency(message),
+    budget_range: extractBudgetRange(message),
   };
 }
+
+export {
+  extractName,
+  extractEmail,
+  extractPhone,
+  extractUrgency,
+  extractBudgetRange,
+  extractInterestService,
+  looksLikeValidName,
+};
