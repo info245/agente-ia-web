@@ -12,7 +12,7 @@ export const WEBSITE_FACTS = {
     },
 
     SEO: {
-      min_monthly_fee: "300 € + IVA",
+      min_monthly_fee: "200 € + IVA",
       url: "https://t-mediaglobal.com/agencia-seo/",
       description:
         "Servicios de posicionamiento SEO orientados a mejorar la visibilidad orgánica en Google mediante optimización técnica, estrategia de contenidos y autoridad digital.",
