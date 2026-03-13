@@ -29,7 +29,7 @@ app.options("*", cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "memory-v1-service-protected-v1";
+const BUILD_TAG = "memory-v3-lead-response-enabled";
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -121,8 +121,9 @@ app.get("/debug/extract", async (req, res) => {
     res.json({
       ok: true,
       build: BUILD_TAG,
-      input: text,
-      extracted,
+      conversation_id: currentConversationId,
+      reply,
+      lead: leadAfter || null,
     });
   } catch (error) {
     res.status(500).json({
@@ -178,7 +179,6 @@ app.post("/messages", async (req, res) => {
     const history = await getConversationMessages(currentConversationId, 15);
     const leadBefore = await getLeadByConversationId(currentConversationId);
 
-    // IMPORTANTE: pasamos el lead actual al extractor
     const extracted = extractLeadDataFromText(text, leadBefore);
 
     const incoming = {
@@ -216,6 +216,16 @@ app.post("/messages", async (req, res) => {
     await upsertLeadFromConversation(mergedLead);
 
     const leadAfter = await getLeadByConversationId(currentConversationId);
+
+    console.log("---- LEAD DEBUG ----");
+    console.log("text:", text);
+    console.log("leadBefore:", leadBefore);
+    console.log("extracted:", extracted);
+    console.log("incoming:", incoming);
+    console.log("memoryPatch:", memoryPatch);
+    console.log("mergedLead:", mergedLead);
+    console.log("leadAfter:", leadAfter);
+    console.log("--------------------");
 
     let reply = null;
     let contactCTA = null;
@@ -367,6 +377,7 @@ ${ragContext}
       build: BUILD_TAG,
       conversation_id: currentConversationId,
       reply,
+      lead: leadAfter || null,
     });
   } catch (error) {
     console.log("error", error);
