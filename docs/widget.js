@@ -41,6 +41,69 @@
 
   function clearConversationId() {
     localStorage.removeItem(CONFIG.conversationIdStorageKey);
+    sessionStorage.removeItem("agente_ia_last_lead_signature");
+  }
+
+  function buildLeadSignature(lead) {
+    if (!lead) return null;
+
+    return JSON.stringify({
+      conversation_id: lead.conversation_id || "",
+      name: lead.name || "",
+      email: lead.email || "",
+      phone: lead.phone || "",
+      service: lead.interest_service || "",
+      budget: lead.budget_range || "",
+      urgency: lead.urgency || "",
+    });
+  }
+
+  function pushLeadToDataLayer(lead) {
+    if (!lead) return;
+
+    const hasUsefulLeadData =
+      !!lead.name ||
+      !!lead.email ||
+      !!lead.phone ||
+      !!lead.interest_service ||
+      !!lead.budget_range ||
+      !!lead.urgency;
+
+    if (!hasUsefulLeadData) return;
+
+    const signature = buildLeadSignature(lead);
+    const lastSignature = sessionStorage.getItem("agente_ia_last_lead_signature");
+
+    if (signature && signature === lastSignature) {
+      return;
+    }
+
+    if (signature) {
+      sessionStorage.setItem("agente_ia_last_lead_signature", signature);
+    }
+
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: "chatbot_lead",
+      conversation_id: lead.conversation_id || getConversationId() || "",
+      lead_name: lead.name || "",
+      lead_email: lead.email || "",
+      lead_phone: lead.phone || "",
+      lead_service: lead.interest_service || "",
+      lead_budget: lead.budget_range || "",
+      lead_urgency: lead.urgency || "",
+    });
+
+    console.log("dataLayer chatbot_lead enviado:", {
+      event: "chatbot_lead",
+      conversation_id: lead.conversation_id || getConversationId() || "",
+      lead_name: lead.name || "",
+      lead_email: lead.email || "",
+      lead_phone: lead.phone || "",
+      lead_service: lead.interest_service || "",
+      lead_budget: lead.budget_range || "",
+      lead_urgency: lead.urgency || "",
+    });
   }
 
   // ====== FETCH ROBUSTO (con timeout y errores detallados) ======
@@ -63,9 +126,9 @@
         signal: controller.signal,
       });
 
-      // Leemos como texto para poder mostrar errores aunque no sea JSON
       const rawText = await res.text();
       let data = null;
+
       try {
         data = JSON.parse(rawText);
       } catch {
@@ -258,7 +321,16 @@
     try {
       const data = await postMessage({ text, conversationId, externalUserId });
 
-      if (data?.conversation_id) setConversationId(data.conversation_id);
+      if (data?.conversation_id) {
+        setConversationId(data.conversation_id);
+      }
+
+      if (data?.lead) {
+        pushLeadToDataLayer({
+          ...data.lead,
+          conversation_id: data.conversation_id || data.lead.conversation_id || "",
+        });
+      }
 
       append("assistant", data?.reply || "Sin respuesta del backend.");
       updateMini();
