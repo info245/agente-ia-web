@@ -29,7 +29,7 @@ app.options("*", cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "memory-v3-lead-response-enabled";
+const BUILD_TAG = "memory-v4-chat-completed-enabled";
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -52,6 +52,15 @@ function hasBudget(lead) {
 
 function hasContact(lead) {
   return norm(lead?.email).length >= 3 || norm(lead?.phone).length >= 6;
+}
+
+function isCompletedLead(lead) {
+  const hasLeadName = norm(lead?.name).length >= 2;
+  const hasLeadService = norm(lead?.interest_service).length >= 2;
+  const hasLeadContact =
+    norm(lead?.email).length >= 3 || norm(lead?.phone).length >= 6;
+
+  return hasLeadName && hasLeadService && hasLeadContact;
 }
 
 function normalizeBudget(text) {
@@ -121,9 +130,8 @@ app.get("/debug/extract", async (req, res) => {
     res.json({
       ok: true,
       build: BUILD_TAG,
-      conversation_id: currentConversationId,
-      reply,
-      lead: leadAfter || null,
+      input: text,
+      extracted,
     });
   } catch (error) {
     res.status(500).json({
@@ -378,6 +386,7 @@ ${ragContext}
       conversation_id: currentConversationId,
       reply,
       lead: leadAfter || null,
+      chat_completed: isCompletedLead(leadAfter),
     });
   } catch (error) {
     console.log("error", error);
