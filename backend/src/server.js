@@ -29,7 +29,7 @@ app.options("*", cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "memory-v4-chat-completed-enabled";
+const BUILD_TAG = "memory-v5-chat-completed-final-only";
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -54,13 +54,27 @@ function hasContact(lead) {
   return norm(lead?.email).length >= 3 || norm(lead?.phone).length >= 6;
 }
 
-function isCompletedLead(lead) {
-  const hasLeadName = norm(lead?.name).length >= 2;
-  const hasLeadService = norm(lead?.interest_service).length >= 2;
-  const hasLeadContact =
-    norm(lead?.email).length >= 3 || norm(lead?.phone).length >= 6;
+function isCompletedLeadData(lead) {
+  return hasName(lead) && hasService(lead) && hasContact(lead);
+}
 
-  return hasLeadName && hasLeadService && hasLeadContact;
+function isClosingReply(reply) {
+  const t = String(reply || "").toLowerCase();
+
+  if (!t) return false;
+
+  return (
+    /te contactar[ée]/i.test(t) ||
+    /gracias por confiar/i.test(t) ||
+    /quedo atento/i.test(t) ||
+    /te escribir[ée]/i.test(t) ||
+    /nos pondremos en contacto/i.test(t) ||
+    /hemos recibido/i.test(t)
+  );
+}
+
+function shouldMarkChatCompleted(lead, reply) {
+  return isCompletedLeadData(lead) && isClosingReply(reply);
 }
 
 function normalizeBudget(text) {
@@ -225,16 +239,6 @@ app.post("/messages", async (req, res) => {
 
     const leadAfter = await getLeadByConversationId(currentConversationId);
 
-    console.log("---- LEAD DEBUG ----");
-    console.log("text:", text);
-    console.log("leadBefore:", leadBefore);
-    console.log("extracted:", extracted);
-    console.log("incoming:", incoming);
-    console.log("memoryPatch:", memoryPatch);
-    console.log("mergedLead:", mergedLead);
-    console.log("leadAfter:", leadAfter);
-    console.log("--------------------");
-
     let reply = null;
     let contactCTA = null;
 
@@ -386,7 +390,7 @@ ${ragContext}
       conversation_id: currentConversationId,
       reply,
       lead: leadAfter || null,
-      chat_completed: isCompletedLead(leadAfter),
+      chat_completed: shouldMarkChatCompleted(leadAfter, reply),
     });
   } catch (error) {
     console.log("error", error);
