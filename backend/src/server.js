@@ -1,4 +1,3 @@
-// backend/src/server.js
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -10,8 +9,9 @@ import {
   upsertLeadFromConversation,
   getConversationMessages,
   getLeadByConversationId,
-  mergeLeadData,
 } from "./lib/chatStore.js";
+
+import { mergeLeadData } from "./lib/leadMerge.js";
 
 import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
@@ -29,7 +29,7 @@ app.options("*", cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "memory-v6-question-first-chat-completed";
+const BUILD_TAG = "memory-v8-safe-merge-final-summary-confirmation";
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -69,7 +69,10 @@ function isClosingReply(reply) {
     /quedo atento/i.test(t) ||
     /te escribir[ée]/i.test(t) ||
     /nos pondremos en contacto/i.test(t) ||
-    /hemos recibido/i.test(t)
+    /hemos recibido/i.test(t) ||
+    /en breve recibirás/i.test(t) ||
+    /te enviaremos/i.test(t) ||
+    /recibirás la propuesta/i.test(t)
   );
 }
 
@@ -135,7 +138,49 @@ function buildLeadSignature(lead) {
     pain_points: lead?.pain_points || null,
     preferred_contact_channel: lead?.preferred_contact_channel || null,
     last_intent: lead?.last_intent || null,
+    summary: lead?.summary || null,
   });
+}
+
+function buildTranscript(messages = []) {
+  return messages
+    .filter((m) => m?.role === "user" || m?.role === "assistant")
+    .map((m) => `${m.role === "user" ? "Usuario" : "Asistente"}: ${String(m.content || "").trim()}`)
+    .join("\n");
+}
+
+async function generateFinalConversationSummary({ lead, messages }) {
+  const transcript = buildTranscript(messages);
+
+  const prompt = `
+Eres un asistente comercial de TMedia Global.
+
+Tu tarea es redactar un resumen final único de todo el lead usando TODA la conversación, no solo el último tramo.
+
+REGLAS:
+- Escribe el resumen en español.
+- Haz un resumen comercial útil, claro y breve.
+- Longitud: 4 a 7 frases.
+- Incluye solo información útil para ventas.
+- Si falta un dato, no lo inventes.
+- Prioriza: servicio de interés, necesidad principal, urgencia, presupuesto, datos de contacto, contexto del negocio y siguiente paso comercial.
+- No pongas etiquetas tipo "Nombre:", "Email:", etc.
+- No repitas literalmente frases vacías como "gracias" o "ok".
+- Devuelve solo el resumen final, sin introducciones ni viñetas.
+
+Lead estructurado actual:
+${JSON.stringify(lead || {}, null, 2)}
+
+Conversación completa:
+${transcript}
+`;
+
+  const result = await openai.responses.create({
+    model: "gpt-4.1-mini",
+    input: prompt,
+  });
+
+  return result.output_text?.trim() || "";
 }
 
 app.get("/health", (req, res) => {
@@ -209,7 +254,7 @@ app.post("/messages", async (req, res) => {
       content: text,
     });
 
-    const history = await getConversationMessages(currentConversationId, 15);
+    const history = await getConversationMessages(currentConversationId, 30);
     const leadBefore = await getLeadByConversationId(currentConversationId);
 
     const extracted = extractLeadDataFromText(text, leadBefore);
@@ -222,10 +267,16 @@ app.post("/messages", async (req, res) => {
       interest_service: extracted?.interest_service ?? null,
       urgency: extracted?.urgency ?? null,
       budget_range: extracted?.budget_range ?? null,
-      summary: text,
+      summary: leadBefore?.summary ?? null,
       lead_score: extracted?.lead_score ?? null,
       consent: extracted?.consent ?? null,
       consent_at: extracted?.consent_at ?? null,
+      business_type: extracted?.business_type ?? null,
+      main_goal: extracted?.main_goal ?? null,
+      current_situation: extracted?.current_situation ?? null,
+      pain_points: extracted?.pain_points ?? null,
+      preferred_contact_channel: extracted?.preferred_contact_channel ?? null,
+      last_intent: extracted?.last_intent ?? null,
     };
 
     if (!incoming.budget_range) {
@@ -235,7 +286,11 @@ app.post("/messages", async (req, res) => {
       }
     }
 
-    const mergedLeadBase = mergeLeadData(leadBefore, incoming);
+    const mergedLeadBase = mergeLeadData({
+      currentLead: leadBefore || {},
+      extractedLead: incoming,
+      lastUserMessage: text,
+    });
 
     const memoryPatch = buildMemoryPatch({
       text,
@@ -244,11 +299,18 @@ app.post("/messages", async (req, res) => {
       mergedLead: mergedLeadBase,
     });
 
-    const mergedLead = mergeLeadData(mergedLeadBase, memoryPatch);
+    const mergedLead = mergeLeadData({
+      currentLead: mergedLeadBase,
+      extractedLead: memoryPatch || {},
+      lastUserMessage: text,
+    });
 
-    await upsertLeadFromConversation(mergedLead);
+    await upsertLeadFromConversation({
+      ...mergedLead,
+      conversation_id: currentConversationId,
+    });
 
-    const leadAfter = await getLeadByConversationId(currentConversationId);
+    let leadAfter = await getLeadByConversationId(currentConversationId);
 
     console.log("---- LEAD DEBUG ----");
     console.log("text:", text);
@@ -380,6 +442,33 @@ ${ragContext}
       content: reply,
     });
 
+    leadAfter = await getLeadByConversationId(currentConversationId);
+
+    let chatCompleted = shouldMarkChatCompleted(leadAfter, reply);
+
+    if (chatCompleted) {
+      try {
+        const fullMessages = await getConversationMessages(currentConversationId, 100);
+
+        const finalSummary = await generateFinalConversationSummary({
+          lead: leadAfter,
+          messages: fullMessages,
+        });
+
+        if (finalSummary) {
+          await upsertLeadFromConversation({
+            ...leadAfter,
+            conversation_id: currentConversationId,
+            summary: finalSummary,
+          });
+
+          leadAfter = await getLeadByConversationId(currentConversationId);
+        }
+      } catch (e) {
+        console.log("final summary error", e.message);
+      }
+    }
+
     try {
       const latestLead = await getLeadByConversationId(currentConversationId);
       const signature = buildLeadSignature(latestLead);
@@ -402,7 +491,11 @@ ${ragContext}
     try {
       const latestLead = await getLeadByConversationId(currentConversationId);
 
-      if (latestLead?.email && !clientConfirmationSent.get(currentConversationId)) {
+      if (
+        latestLead?.email &&
+        chatCompleted &&
+        !clientConfirmationSent.get(currentConversationId)
+      ) {
         await sendClientConfirmationEmail({
           lead: latestLead,
           conversation_id: currentConversationId,
@@ -420,7 +513,7 @@ ${ragContext}
       conversation_id: currentConversationId,
       reply,
       lead: leadAfter || null,
-      chat_completed: shouldMarkChatCompleted(leadAfter, reply),
+      chat_completed: chatCompleted,
     });
   } catch (error) {
     console.log("error", error);
