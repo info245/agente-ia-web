@@ -29,7 +29,7 @@ app.options("*", cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "memory-v5-chat-completed-final-only";
+const BUILD_TAG = "memory-v6-question-first-chat-completed";
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -75,6 +75,17 @@ function isClosingReply(reply) {
 
 function shouldMarkChatCompleted(lead, reply) {
   return isCompletedLeadData(lead) && isClosingReply(reply);
+}
+
+function isUserQuestion(text) {
+  const t = String(text || "").trim().toLowerCase();
+
+  if (!t) return false;
+  if (t.includes("?")) return true;
+
+  return /^(que|qué|como|cómo|cuanto|cuánto|cual|cuál|precio|precios|presupuesto|coste|costes|tarifa|tarifas)\b/i.test(
+    t
+  );
 }
 
 function normalizeBudget(text) {
@@ -239,19 +250,34 @@ app.post("/messages", async (req, res) => {
 
     const leadAfter = await getLeadByConversationId(currentConversationId);
 
+    console.log("---- LEAD DEBUG ----");
+    console.log("text:", text);
+    console.log("leadBefore:", leadBefore);
+    console.log("extracted:", extracted);
+    console.log("incoming:", incoming);
+    console.log("memoryPatch:", memoryPatch);
+    console.log("mergedLead:", mergedLead);
+    console.log("leadAfter:", leadAfter);
+    console.log("--------------------");
+
     let reply = null;
     let contactCTA = null;
+    const userAskedQuestion = isUserQuestion(text);
 
-    if (!hasName(leadAfter)) {
+    if (!hasName(leadAfter) && !userAskedQuestion) {
       reply = "Perfecto. Antes de seguir, ¿cómo te llamas?";
-    } else if (!hasService(leadAfter)) {
+    } else if (!hasService(leadAfter) && !userAskedQuestion) {
       reply =
         "¿Qué servicio te interesa? SEO, Google Ads, Publicidad en Redes Sociales, Diseño Web o Consultoría Digital.";
-    } else if (!hasBudget(leadAfter)) {
-      reply = `Gracias, ${leadAfter.name}. ¿Qué presupuesto aproximado tienes para ${leadAfter.interest_service}?`;
     } else {
-      if (!hasContact(leadAfter)) {
+      if (!hasBudget(leadAfter) && hasService(leadAfter)) {
         contactCTA = `
+
+Si quieres, para orientarte mejor, también puedo valorar contigo el presupuesto aproximado que tienes para ${leadAfter.interest_service}.`;
+      }
+
+      if (!hasContact(leadAfter) && hasService(leadAfter)) {
+        contactCTA = `${contactCTA || ""}
 
 Si quieres, puedo enviarte una propuesta orientativa para ${leadAfter.interest_service}.
 
@@ -283,9 +309,9 @@ ${serviceFacts.notes}
       try {
         const docs = await retrieveWebsiteContext(
           `
-Servicio: ${leadAfter.interest_service}
+Servicio: ${leadAfter.interest_service || ""}
 Pregunta usuario: ${text}
-Presupuesto: ${leadAfter.budget_range}
+Presupuesto: ${leadAfter.budget_range || ""}
 Objetivo: ${leadAfter.main_goal || ""}
 Negocio: ${leadAfter.business_type || ""}
 `
@@ -316,6 +342,10 @@ REGLAS IMPORTANTES
 3. LOS PRECIOS SIEMPRE DEBEN INCLUIR "+ IVA"
 4. NO INVENTES PRECIOS
 5. USA LA MEMORIA DEL LEAD PARA DAR CONTINUIDAD
+6. SI EL USUARIO HACE UNA PREGUNTA DIRECTA, RESPÓNDELA PRIMERO
+7. DESPUÉS DE RESPONDER, PUEDES HACER UNA PREGUNTA COMERCIAL BREVE SI FALTA ALGÚN DATO
+8. SI EXISTE INFORMACIÓN VERIFICADA DE LA WEB, USA SOLO ESA INFORMACIÓN PARA HABLAR DE PRECIOS
+9. NO DES RANGOS DE PRECIOS SI NO ESTÁN EXPLÍCITAMENTE EN LA INFORMACIÓN VERIFICADA
 
 ${memoryContext}
 
