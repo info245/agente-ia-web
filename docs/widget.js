@@ -15,7 +15,7 @@
     primaryColor: colorFromAttr || "#111827",
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
-    requestTimeoutMs: 25000, // 25s (Render free a veces tarda)
+    requestTimeoutMs: 25000,
   };
 
   // ====== HELPERS ======
@@ -42,6 +42,7 @@
   function clearConversationId() {
     localStorage.removeItem(CONFIG.conversationIdStorageKey);
     sessionStorage.removeItem("agente_ia_last_lead_signature");
+    sessionStorage.removeItem("agente_ia_last_completed_signature");
   }
 
   function buildLeadSignature(lead) {
@@ -58,6 +59,18 @@
     });
   }
 
+  function buildCompletedSignature(lead) {
+    if (!lead) return null;
+
+    return JSON.stringify({
+      conversation_id: lead.conversation_id || "",
+      email: lead.email || "",
+      phone: lead.phone || "",
+      service: lead.interest_service || "",
+      completed: true,
+    });
+  }
+
   function pushLeadToDataLayer(lead) {
     if (!lead) return;
 
@@ -69,12 +82,16 @@
       !!lead.budget_range ||
       !!lead.urgency;
 
-    if (!hasUsefulLeadData) return;
+    if (!hasUsefulLeadData) {
+      console.log("chatbot_lead no enviado: lead sin datos útiles", lead);
+      return;
+    }
 
     const signature = buildLeadSignature(lead);
     const lastSignature = sessionStorage.getItem("agente_ia_last_lead_signature");
 
     if (signature && signature === lastSignature) {
+      console.log("chatbot_lead no enviado: firma duplicada", signature);
       return;
     }
 
@@ -83,18 +100,8 @@
     }
 
     window.dataLayer = window.dataLayer || [];
-    window.dataLayer.push({
-      event: "chatbot_lead",
-      conversation_id: lead.conversation_id || getConversationId() || "",
-      lead_name: lead.name || "",
-      lead_email: lead.email || "",
-      lead_phone: lead.phone || "",
-      lead_service: lead.interest_service || "",
-      lead_budget: lead.budget_range || "",
-      lead_urgency: lead.urgency || "",
-    });
 
-    console.log("dataLayer chatbot_lead enviado:", {
+    const payload = {
       event: "chatbot_lead",
       conversation_id: lead.conversation_id || getConversationId() || "",
       lead_name: lead.name || "",
@@ -103,16 +110,62 @@
       lead_service: lead.interest_service || "",
       lead_budget: lead.budget_range || "",
       lead_urgency: lead.urgency || "",
-    });
+      lead_score: lead.lead_score || 0,
+    };
+
+    window.dataLayer.push(payload);
+    console.log("dataLayer chatbot_lead enviado:", payload);
   }
 
-  // ====== FETCH ROBUSTO (con timeout y errores detallados) ======
+  function pushChatCompletedToDataLayer(lead) {
+    if (!lead) {
+      console.log("chatbot_completed no enviado: lead nulo");
+      return;
+    }
+
+    const signature = buildCompletedSignature(lead);
+    const lastCompletedSignature = sessionStorage.getItem("agente_ia_last_completed_signature");
+
+    if (signature && signature === lastCompletedSignature) {
+      console.log("chatbot_completed no enviado: firma duplicada", signature);
+      return;
+    }
+
+    if (signature) {
+      sessionStorage.setItem("agente_ia_last_completed_signature", signature);
+    }
+
+    window.dataLayer = window.dataLayer || [];
+
+    const payload = {
+      event: "chatbot_completed",
+      conversation_id: lead.conversation_id || getConversationId() || "",
+      lead_name: lead.name || "",
+      lead_email: lead.email || "",
+      lead_phone: lead.phone || "",
+      lead_service: lead.interest_service || "",
+      lead_budget: lead.budget_range || "",
+      lead_urgency: lead.urgency || "",
+      lead_score: lead.lead_score || 0,
+      chat_completed: true,
+    };
+
+    window.dataLayer.push(payload);
+    console.log("dataLayer chatbot_completed enviado:", payload);
+  }
+
+  function isChatCompleted(value) {
+    return value === true || value === "true" || value === 1 || value === "1";
+  }
+
+  // ====== FETCH ROBUSTO ======
   async function postMessage({ text, conversationId, externalUserId }) {
     const payload = {
       text,
       external_user_id: externalUserId,
       channel: CONFIG.channel,
     };
+
     if (conversationId) payload.conversation_id = conversationId;
 
     const controller = new AbortController();
@@ -296,9 +349,11 @@
   function openPanel() {
     el.panel.classList.add("open");
     updateMini();
+
     if (el.messages.childElementCount === 0) {
       append("assistant", "Hola, soy tu agente IA. ¿En qué puedo ayudarte?");
     }
+
     setTimeout(() => el.input.focus(), 50);
   }
 
@@ -321,15 +376,41 @@
     try {
       const data = await postMessage({ text, conversationId, externalUserId });
 
+      console.log("Respuesta backend /messages:", data);
+
       if (data?.conversation_id) {
         setConversationId(data.conversation_id);
       }
 
+      let normalizedLead = null;
+
       if (data?.lead) {
-        pushLeadToDataLayer({
+        normalizedLead = {
           ...data.lead,
           conversation_id: data.conversation_id || data.lead.conversation_id || "",
-        });
+        };
+
+        pushLeadToDataLayer(normalizedLead);
+      } else {
+        console.log("No viene data.lead en esta respuesta");
+      }
+
+      if (isChatCompleted(data?.chat_completed)) {
+        const completedPayload =
+          normalizedLead || {
+            conversation_id: data?.conversation_id || getConversationId() || "",
+            name: "",
+            email: "",
+            phone: "",
+            interest_service: "",
+            budget_range: "",
+            urgency: "",
+            lead_score: 0,
+          };
+
+        pushChatCompletedToDataLayer(completedPayload);
+      } else {
+        console.log("chat_completed no detectado como true:", data?.chat_completed);
       }
 
       append("assistant", data?.reply || "Sin respuesta del backend.");
