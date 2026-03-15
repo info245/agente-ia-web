@@ -23,6 +23,10 @@ function escapeHtml(str = "") {
     .replaceAll("'", "&#039;");
 }
 
+function nl2br(str = "") {
+  return escapeHtml(str).replace(/\n/g, "<br>");
+}
+
 let transporter = null;
 
 function getTransporter() {
@@ -72,9 +76,10 @@ export async function sendLeadEmail({
     ["Lead score", lead?.lead_score],
     ["Consentimiento", lead?.consent ? "Sí" : "No"],
     ["Conversation ID", conversation_id || lead?.conversation_id],
-    ["Resumen", lead?.summary],
     ["Creado", lead?.created_at],
   ];
+
+  const summaryText = lead?.summary || "Sin resumen disponible";
 
   const changedHtml =
     type === "update" && changedFields.length
@@ -82,10 +87,11 @@ export async function sendLeadEmail({
       : "";
 
   const html = `
-  <div style="font-family: Arial, sans-serif; line-height: 1.4">
-    <h2>${typeLabel} lead capturado</h2>
+  <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111;">
+    <h2 style="margin-bottom: 12px;">${typeLabel} lead capturado</h2>
     ${changedHtml}
-    <table cellpadding="6" cellspacing="0" border="1" style="border-collapse: collapse; font-size: 14px">
+
+    <table cellpadding="6" cellspacing="0" border="1" style="border-collapse: collapse; font-size: 14px; margin-bottom: 18px;">
       <tbody>
         ${rows
           .map(
@@ -95,13 +101,18 @@ export async function sendLeadEmail({
           .join("")}
       </tbody>
     </table>
+
+    <h3 style="margin: 18px 0 8px;">Resumen final de la conversación</h3>
+    <div style="font-size: 14px; background: #f7f7f7; border: 1px solid #ddd; padding: 12px; border-radius: 6px;">
+      ${nl2br(summaryText)}
+    </div>
   </div>`;
 
   const textBase = rows.map(([k, v]) => `${k}: ${v ?? ""}`).join("\n");
   const text =
     type === "update" && changedFields.length
-      ? `Campos actualizados: ${changedFields.join(", ")}\n\n${textBase}`
-      : textBase;
+      ? `Campos actualizados: ${changedFields.join(", ")}\n\n${textBase}\n\nResumen final de la conversación:\n${summaryText}`
+      : `${textBase}\n\nResumen final de la conversación:\n${summaryText}`;
 
   const t = getTransporter();
 
@@ -122,15 +133,22 @@ export async function sendClientConfirmationEmail({ lead, conversation_id }) {
   if (!clientFrom) throw new Error("LEADS_CLIENT_EMAIL_FROM está vacío");
 
   const subject = "Hemos recibido tu solicitud - TMedia Global";
+  const summaryText = lead?.summary || "Hemos recibido tu solicitud correctamente.";
 
   const html = `
-  <div style="font-family: Arial, sans-serif; line-height: 1.5">
+  <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111;">
     <h2>Gracias${lead?.name ? ", " + escapeHtml(lead.name) : ""}</h2>
     <p>Hemos recibido correctamente tu solicitud en TMedia Global.</p>
     <p><b>Servicio de interés:</b> ${escapeHtml(lead?.interest_service || "No indicado")}</p>
     <p><b>Presupuesto indicado:</b> ${escapeHtml(lead?.budget_range || "No indicado")}</p>
-    <p><b>Resumen:</b><br>${escapeHtml(lead?.summary || "")}</p>
-    <p>Revisaremos la información y te contactaremos lo antes posible.</p>
+
+    <h3 style="margin: 18px 0 8px;">Resumen de tu solicitud</h3>
+    <div style="font-size: 14px; background: #f7f7f7; border: 1px solid #ddd; padding: 12px; border-radius: 6px;">
+      ${nl2br(summaryText)}
+    </div>
+
+    <p style="margin-top: 16px;">Revisaremos la información y te contactaremos lo antes posible.</p>
+
     <hr/>
     <p style="font-size: 13px; color: #444;">
       TMedia Global<br/>
@@ -146,8 +164,10 @@ Hemos recibido correctamente tu solicitud en TMedia Global.
 Servicio de interés: ${lead?.interest_service || "No indicado"}
 Presupuesto indicado: ${lead?.budget_range || "No indicado"}
 
-Resumen:
-${lead?.summary || ""}
+Resumen de tu solicitud:
+${summaryText}
+
+Revisaremos la información y te contactaremos lo antes posible.
 
 Referencia de conversación: ${conversation_id || lead?.conversation_id || ""}
 `;
