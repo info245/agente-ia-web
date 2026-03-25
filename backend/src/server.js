@@ -35,8 +35,7 @@ app.options("*", cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG =
-  "memory-v11-staged-questions-valid-name-business-negative-safe";
+const BUILD_TAG = "memory-v13-inline-slot-flow-no-loop-safe";
 
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -140,6 +139,19 @@ function isNegativeResponse(text) {
   );
 }
 
+function isUnknownResponse(text) {
+  const t = normalizeText(text);
+
+  return (
+    t === "no lo se" ||
+    t === "no lo sé" ||
+    t === "ni idea" ||
+    t === "depende" ||
+    t === "aun no lo se" ||
+    t === "aún no lo sé"
+  );
+}
+
 function isLikelyValidName(value) {
   const raw = String(value || "").trim();
   const t = normalizeText(raw);
@@ -166,6 +178,10 @@ function isLikelyValidName(value) {
     "presupuesto",
     "cuanto cuesta",
     "cuánto cuesta",
+    "tienda online",
+    "ecommerce",
+    "soy autonomo",
+    "soy autónomo",
   ];
 
   if (blockedPhrases.some((p) => t.includes(p))) return false;
@@ -209,6 +225,10 @@ function hasBusinessType(lead) {
   return norm(lead?.business_type).length >= 2;
 }
 
+function hasBusinessActivity(lead) {
+  return norm(lead?.business_activity).length >= 4;
+}
+
 function hasMainGoal(lead) {
   return norm(lead?.main_goal).length >= 4;
 }
@@ -218,7 +238,13 @@ function hasUrgency(lead) {
 }
 
 function isCompletedLeadData(lead) {
-  return hasName(lead) && hasService(lead) && hasBusinessType(lead) && hasContact(lead);
+  return (
+    hasName(lead) &&
+    hasBusinessType(lead) &&
+    hasBusinessActivity(lead) &&
+    hasService(lead) &&
+    hasContact(lead)
+  );
 }
 
 function isClosingReply(reply) {
@@ -261,6 +287,182 @@ function normalizeBudget(text) {
   return null;
 }
 
+function detectService(text) {
+  const t = normalizeText(text);
+
+  if (t.includes("google ads") || t === "ads") return "Google Ads";
+  if (t.includes("seo")) return "SEO";
+  if (
+    t.includes("meta ads") ||
+    t.includes("facebook ads") ||
+    t.includes("instagram ads") ||
+    t.includes("redes sociales")
+  ) {
+    return "Publicidad en Redes Sociales";
+  }
+  if (
+    t.includes("diseno web") ||
+    t.includes("diseño web") ||
+    t.includes("pagina web") ||
+    t.includes("página web") ||
+    t === "web"
+  ) {
+    return "Diseño Web";
+  }
+  if (t.includes("consultoria") || t.includes("consultoría")) {
+    return "Consultoría Digital";
+  }
+
+  return null;
+}
+
+function detectBusinessType(text) {
+  const raw = norm(text);
+  const t = normalizeText(text);
+
+  if (!raw) return null;
+  if (isNegativeResponse(text)) return "proyecto personal";
+  if (t.includes("autonom")) return "autonomo";
+  if (t.includes("empresa")) return "empresa";
+  if (t.includes("negocio")) return "negocio";
+  if (t.includes("proyecto")) return "proyecto";
+  if (t.includes("tienda online") || t.includes("ecommerce")) return "ecommerce";
+  if (t.includes("clinica") || t.includes("clínica")) return "clinica";
+  if (t.includes("agencia")) return "agencia";
+  if (t.includes("despacho")) return "despacho";
+
+  return null;
+}
+
+function detectBusinessActivity(text) {
+  const raw = norm(text);
+  const t = normalizeText(text);
+
+  if (!raw) return null;
+  if (isUserQuestion(text)) return null;
+  if (isLikelyValidName(text)) return null;
+  if (detectService(text)) return null;
+
+  const triggers = [
+    "tengo una",
+    "tenemos una",
+    "soy ",
+    "somos ",
+    "me dedico a",
+    "nos dedicamos a",
+    "vendo",
+    "vendemos",
+    "ofrezco",
+    "ofrecemos",
+    "trabajo en",
+    "trabajamos en",
+  ];
+
+  if (triggers.some((x) => t.includes(x))) return raw;
+  if (t.includes("tienda online")) return raw;
+  if (t.includes("ecommerce")) return raw;
+  if (t.includes("clinica") || t.includes("clínica")) return raw;
+  if (t.includes("abogado") || t.includes("bufete")) return raw;
+  if (t.includes("dental") || t.includes("dentista")) return raw;
+
+  return null;
+}
+
+function detectMainGoal(text) {
+  const raw = norm(text);
+  const t = normalizeText(text);
+
+  if (!raw) return null;
+  if (isUserQuestion(text)) return null;
+
+  const triggers = [
+    "quiero",
+    "necesito",
+    "busco",
+    "me gustaria",
+    "me gustaría",
+    "mi objetivo",
+    "captar",
+    "conseguir",
+    "vender",
+    "aumentar",
+    "mejorar",
+    "generar",
+  ];
+
+  if (triggers.some((x) => t.includes(x))) return raw;
+
+  return null;
+}
+
+function detectEmail(text) {
+  const m = String(text || "").match(
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i
+  );
+  return m ? m[0] : null;
+}
+
+function detectPhone(text) {
+  const digits = String(text || "").replace(/[^\d+]/g, "");
+  if (digits.length >= 6) return digits;
+  return null;
+}
+
+function getCurrentStep(lead) {
+  if (!hasName(lead)) return "ask_name";
+  if (!hasBusinessType(lead)) return "ask_business_type";
+  if (!hasBusinessActivity(lead)) return "ask_business_activity";
+  if (!hasService(lead)) return "ask_service";
+  if (!hasMainGoal(lead)) return "ask_goal";
+  if (!hasBudget(lead)) return "ask_budget";
+  if (!hasUrgency(lead)) return "ask_urgency";
+  if (!hasContact(lead)) return "ask_contact";
+  return "ready_for_ai";
+}
+
+function getQuestionForStep(step, lead) {
+  const safeName = getSafeLeadName(lead);
+
+  switch (step) {
+    case "ask_name":
+      return "Antes de seguir, ¿cómo te llamas?";
+    case "ask_business_type":
+      return safeName
+        ? `Encantado, ${safeName}. ¿Tienes una empresa, eres autónomo o es un proyecto que estás empezando?`
+        : "¿Tienes una empresa, eres autónomo o es un proyecto que estás empezando?";
+    case "ask_business_activity":
+      return "Perfecto. ¿A qué te dedicas exactamente o cuál es vuestra actividad principal?";
+    case "ask_service":
+      return "Gracias. ¿Qué servicio te interesa ahora mismo: SEO, Google Ads, Redes Sociales, Diseño Web o Consultoría Digital?";
+    case "ask_goal":
+      return "Entendido. ¿Cuál es tu objetivo principal ahora mismo?";
+    case "ask_budget":
+      return lead?.interest_service
+        ? `Para ${lead.interest_service}, ¿con qué presupuesto aproximado te gustaría trabajar?`
+        : "¿Con qué presupuesto aproximado te gustaría trabajar?";
+    case "ask_urgency":
+      return "Perfecto. ¿Qué prioridad tiene para ti? ¿Te gustaría empezar cuanto antes o lo estás valorando a medio plazo?";
+    case "ask_contact":
+      return "Genial. Para poder enviarte una propuesta orientativa o contactarte, ¿me dejas tu email o tu teléfono?";
+    default:
+      return null;
+  }
+}
+
+function cleanReply(reply) {
+  let text = String(reply || "").trim();
+  text = text.replace(/\n{3,}/g, "\n\n");
+
+  const paragraphs = text
+    .split("\n")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length <= 2) return text;
+
+  return paragraphs.slice(0, 2).join("\n\n");
+}
+
 function buildOpenAIInput(systemPrompt, history) {
   const input = [{ role: "system", content: systemPrompt }];
 
@@ -285,11 +487,15 @@ function buildLeadSignature(lead) {
     urgency: lead?.urgency || null,
     budget_range: lead?.budget_range || null,
     business_type: lead?.business_type || null,
+    business_activity: lead?.business_activity || null,
+    company_name: lead?.company_name || null,
     main_goal: lead?.main_goal || null,
     current_situation: lead?.current_situation || null,
     pain_points: lead?.pain_points || null,
     preferred_contact_channel: lead?.preferred_contact_channel || null,
     last_intent: lead?.last_intent || null,
+    current_step: lead?.current_step || null,
+    last_question: lead?.last_question || null,
     summary: lead?.summary || null,
   });
 }
@@ -306,20 +512,6 @@ function buildTranscript(messages = []) {
     .join("\n");
 }
 
-function cleanReply(reply) {
-  let text = String(reply || "").trim();
-  text = text.replace(/\n{3,}/g, "\n\n");
-
-  const paragraphs = text
-    .split("\n")
-    .map((p) => p.trim())
-    .filter(Boolean);
-
-  if (paragraphs.length <= 2) return text;
-
-  return paragraphs.slice(0, 2).join("\n\n");
-}
-
 async function generateFinalConversationSummary({ lead, messages }) {
   const transcript = buildTranscript(messages);
 
@@ -334,7 +526,7 @@ REGLAS:
 - Longitud: 4 a 7 frases.
 - Incluye solo información útil para ventas.
 - Si falta un dato, no lo inventes.
-- Prioriza: servicio de interés, necesidad principal, urgencia, presupuesto, datos de contacto, contexto del negocio y siguiente paso comercial.
+- Prioriza: servicio de interés, necesidad principal, urgencia, presupuesto, datos de contacto, contexto del negocio, actividad y siguiente paso comercial.
 - No pongas etiquetas tipo "Nombre:", "Email:", etc.
 - No repitas literalmente frases vacías como "gracias" o "ok".
 - Devuelve solo el resumen final, sin introducciones ni viñetas.
@@ -409,6 +601,110 @@ function getWhatsAppTextFromMessage(message) {
   return null;
 }
 
+function applyFlowPatch(lead, text) {
+  const step = lead?.current_step || getCurrentStep(lead || {});
+  const patch = {};
+
+  const detectedEmail = detectEmail(text);
+  const detectedPhone = detectPhone(text);
+  const detectedService = detectService(text);
+  const detectedBudget = normalizeBudget(text);
+  const detectedBusinessType = detectBusinessType(text);
+  const detectedBusinessActivity = detectBusinessActivity(text);
+  const detectedGoal = detectMainGoal(text);
+
+  if (detectedEmail && !lead?.email) patch.email = detectedEmail;
+  if (detectedPhone && !lead?.phone) patch.phone = detectedPhone;
+  if (detectedService && !lead?.interest_service) patch.interest_service = detectedService;
+
+  switch (step) {
+    case "ask_name":
+      if (isLikelyValidName(text)) {
+        patch.name = norm(text);
+      }
+      break;
+
+    case "ask_business_type":
+      if (detectedBusinessType) {
+        patch.business_type = detectedBusinessType;
+      } else if (isUnknownResponse(text)) {
+        patch.business_type = "pendiente_definir";
+      }
+      break;
+
+    case "ask_business_activity":
+      if (detectedBusinessActivity) {
+        patch.business_activity = detectedBusinessActivity;
+      } else if (isUnknownResponse(text)) {
+        patch.business_activity = "pendiente";
+      } else if (detectedService) {
+        patch.business_activity = "pendiente";
+      }
+      break;
+
+    case "ask_service":
+      if (detectedService) {
+        patch.interest_service = detectedService;
+      }
+      break;
+
+    case "ask_goal":
+      if (detectedGoal) {
+        patch.main_goal = detectedGoal;
+      } else if (isUnknownResponse(text)) {
+        patch.main_goal = "pendiente_definir";
+      }
+      break;
+
+    case "ask_budget":
+      if (detectedBudget) {
+        patch.budget_range = detectedBudget;
+      } else if (isUnknownResponse(text)) {
+        patch.budget_range = "pendiente";
+      }
+      break;
+
+    case "ask_urgency":
+      if (
+        normalizeText(text).includes("urgente") ||
+        normalizeText(text).includes("cuanto antes") ||
+        normalizeText(text).includes("cuánto antes") ||
+        normalizeText(text).includes("ya") ||
+        normalizeText(text).includes("esta semana")
+      ) {
+        patch.urgency = "alta";
+      } else if (
+        normalizeText(text).includes("este mes") ||
+        normalizeText(text).includes("en breve") ||
+        normalizeText(text).includes("pronto")
+      ) {
+        patch.urgency = "media";
+      } else if (
+        normalizeText(text).includes("sin prisa") ||
+        normalizeText(text).includes("mas adelante") ||
+        normalizeText(text).includes("más adelante") ||
+        isUnknownResponse(text)
+      ) {
+        patch.urgency = "baja";
+      }
+      break;
+
+    case "ask_contact":
+      if (detectedEmail) patch.email = detectedEmail;
+      if (detectedPhone) patch.phone = detectedPhone;
+      break;
+  }
+
+  const merged = { ...(lead || {}), ...patch };
+  const nextStep = getCurrentStep(merged);
+
+  return {
+    patch,
+    nextStep,
+    nextQuestion: nextStep === "ready_for_ai" ? null : getQuestionForStep(nextStep, merged),
+  };
+}
+
 async function processIncomingMessage({
   text,
   conversation_id,
@@ -453,11 +749,15 @@ async function processIncomingMessage({
     consent: extracted?.consent ?? null,
     consent_at: extracted?.consent_at ?? null,
     business_type: extracted?.business_type ?? null,
+    business_activity: extracted?.business_activity ?? null,
+    company_name: extracted?.company_name ?? null,
     main_goal: extracted?.main_goal ?? null,
     current_situation: extracted?.current_situation ?? null,
     pain_points: extracted?.pain_points ?? null,
     preferred_contact_channel: extracted?.preferred_contact_channel ?? null,
     last_intent: extracted?.last_intent ?? null,
+    current_step: leadBefore?.current_step ?? null,
+    last_question: leadBefore?.last_question ?? null,
   };
 
   if (!incoming.budget_range) {
@@ -489,11 +789,15 @@ async function processIncomingMessage({
   await upsertLeadFromConversation({
     ...mergedLead,
     conversation_id: currentConversationId,
+    business_activity:
+      mergedLead?.business_activity ?? leadBefore?.business_activity ?? null,
+    company_name: mergedLead?.company_name ?? leadBefore?.company_name ?? null,
+    current_step: leadBefore?.current_step ?? null,
+    last_question: leadBefore?.last_question ?? null,
   });
 
   let leadAfter = await getLeadByConversationId(currentConversationId);
 
-  // Si el extractor ha guardado una frase como nombre, la invalidamos
   if (!isLikelyValidName(leadAfter?.name) && leadAfter?.name) {
     await upsertLeadFromConversation({
       ...leadAfter,
@@ -504,12 +808,34 @@ async function processIncomingMessage({
     leadAfter = await getLeadByConversationId(currentConversationId);
   }
 
-  // Si responde "no" a la pregunta de empresa/proyecto, lo tratamos como proyecto personal
-  if (!hasBusinessType(leadAfter) && isNegativeResponse(text)) {
+  const flow = applyFlowPatch(leadAfter || {}, text);
+
+  if (Object.keys(flow.patch || {}).length > 0) {
+    const updatedLead = {
+      ...leadAfter,
+      ...flow.patch,
+      current_step: flow.nextStep,
+      last_question: flow.nextQuestion,
+    };
+
+    await upsertLeadFromConversation({
+      ...updatedLead,
+      conversation_id: currentConversationId,
+    });
+
+    leadAfter = await getLeadByConversationId(currentConversationId);
+  } else {
+    const currentStep = getCurrentStep(leadAfter || {});
+    const currentQuestion =
+      currentStep === "ready_for_ai"
+        ? null
+        : getQuestionForStep(currentStep, leadAfter || {});
+
     await upsertLeadFromConversation({
       ...leadAfter,
       conversation_id: currentConversationId,
-      business_type: "proyecto personal",
+      current_step: currentStep,
+      last_question: currentQuestion,
     });
 
     leadAfter = await getLeadByConversationId(currentConversationId);
@@ -522,38 +848,16 @@ async function processIncomingMessage({
   console.log("incoming:", incoming);
   console.log("memoryPatch:", memoryPatch);
   console.log("mergedLead:", mergedLead);
+  console.log("flowPatch:", flow.patch);
+  console.log("flowNextStep:", flow.nextStep);
   console.log("leadAfter:", leadAfter);
   console.log("--------------------");
 
   let reply = null;
-  const userIntent = isLikelyQuestionOrIntent(text);
+  const nextStep = getCurrentStep(leadAfter || {});
 
-  if (!hasName(leadAfter)) {
-    if (userIntent) {
-      reply = "Claro. Antes de orientarte mejor, ¿cómo te llamas?";
-    } else {
-      reply = "Perfecto. Antes de seguir, ¿cómo te llamas?";
-    }
-  } else if (!hasBusinessType(leadAfter)) {
-    reply = `Encantado, ${getSafeLeadName(
-      leadAfter
-    )}. ¿Tienes una empresa o es un proyecto que estás empezando?`;
-  } else if (!hasMainGoal(leadAfter)) {
-    reply =
-      "Perfecto. ¿A qué os dedicáis exactamente o cuál es vuestra actividad principal?";
-  } else if (!hasService(leadAfter)) {
-    reply =
-      "Gracias. ¿Qué servicio te interesa ahora mismo: SEO, Google Ads, Redes Sociales, Diseño Web o Consultoría Digital?";
-  } else if (!hasBudget(leadAfter)) {
-    reply = `Entendido. Para ${
-      leadAfter.interest_service
-    }, ¿con qué presupuesto aproximado te gustaría trabajar?`;
-  } else if (!hasUrgency(leadAfter)) {
-    reply =
-      "Perfecto. ¿Qué prioridad tiene para ti? ¿Te gustaría empezar cuanto antes o lo estás valorando a medio plazo?";
-  } else if (!hasContact(leadAfter)) {
-    reply =
-      "Genial. Para poder enviarte una propuesta orientativa o contactarte, ¿me dejas tu email o tu teléfono?";
+  if (nextStep !== "ready_for_ai") {
+    reply = getQuestionForStep(nextStep, leadAfter || {});
   } else {
     const serviceFacts = getServiceFacts(leadAfter.interest_service);
 
@@ -585,6 +889,7 @@ Pregunta usuario: ${text}
 Presupuesto: ${leadAfter.budget_range || ""}
 Objetivo: ${leadAfter.main_goal || ""}
 Negocio: ${leadAfter.business_type || ""}
+Actividad: ${leadAfter.business_activity || ""}
 `
       );
 
@@ -619,6 +924,7 @@ REGLAS IMPORTANTES
 9. NO DES RANGOS DE PRECIOS SI NO ESTÁN EXPLÍCITAMENTE EN LA INFORMACIÓN VERIFICADA
 10. RESPUESTAS BREVES: MÁXIMO 2 PÁRRAFOS CORTOS
 11. NO HAGAS VARIAS PREGUNTAS SEGUIDAS EN EL MISMO MENSAJE
+12. EL LEAD YA HA PASADO EL FLUJO DE CAPTACIÓN, ASÍ QUE NO VUELVAS A PEDIR NOMBRE, ACTIVIDAD, SERVICIO, PRESUPUESTO, URGENCIA O CONTACTO SI YA EXISTEN
 
 ${memoryContext}
 
@@ -640,22 +946,6 @@ ${ragContext}
 
     if (!reply) {
       reply = "Cuéntame un poco más sobre tu proyecto para poder orientarte mejor.";
-    }
-
-    let nextQuestion = "";
-
-    if (!hasBudget(leadAfter)) {
-      nextQuestion = `\n\nSi te parece, lo siguiente es ver el presupuesto aproximado que quieres dedicar a ${leadAfter.interest_service}.`;
-    } else if (!hasUrgency(leadAfter)) {
-      nextQuestion =
-        "\n\nTambién me ayudaría saber si lo necesitas cuanto antes o si lo estás valorando sin prisa.";
-    } else if (!hasContact(leadAfter)) {
-      nextQuestion =
-        "\n\nY cuando quieras, me puedes dejar tu email o teléfono para enviarte una propuesta orientativa.";
-    }
-
-    if (nextQuestion) {
-      reply += nextQuestion;
     }
 
     reply = cleanReply(reply);
