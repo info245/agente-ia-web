@@ -36,7 +36,7 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
 const BUILD_TAG =
-  "memory-v10-staged-questions-valid-name-whatsapp-safe";
+  "memory-v11-staged-questions-valid-name-business-negative-safe";
 
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -123,6 +123,20 @@ function isLikelyQuestionOrIntent(text) {
     t.includes("cuánto cuesta") ||
     t.includes("precio") ||
     t.includes("presupuesto")
+  );
+}
+
+function isNegativeResponse(text) {
+  const t = normalizeText(text);
+
+  return (
+    t === "no" ||
+    t === "nop" ||
+    t === "nope" ||
+    t === "no tengo" ||
+    t === "no tengo empresa" ||
+    t === "no empresa" ||
+    t === "no tengo negocio"
   );
 }
 
@@ -479,12 +493,23 @@ async function processIncomingMessage({
 
   let leadAfter = await getLeadByConversationId(currentConversationId);
 
-  // Blindaje extra: si el extractor ha guardado una frase como nombre, la invalidamos
+  // Si el extractor ha guardado una frase como nombre, la invalidamos
   if (!isLikelyValidName(leadAfter?.name) && leadAfter?.name) {
     await upsertLeadFromConversation({
       ...leadAfter,
       conversation_id: currentConversationId,
       name: null,
+    });
+
+    leadAfter = await getLeadByConversationId(currentConversationId);
+  }
+
+  // Si responde "no" a la pregunta de empresa/proyecto, lo tratamos como proyecto personal
+  if (!hasBusinessType(leadAfter) && isNegativeResponse(text)) {
+    await upsertLeadFromConversation({
+      ...leadAfter,
+      conversation_id: currentConversationId,
+      business_type: "proyecto personal",
     });
 
     leadAfter = await getLeadByConversationId(currentConversationId);
