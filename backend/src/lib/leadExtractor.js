@@ -101,6 +101,7 @@ const NAME_STOPWORDS = new Set([
   "me",
   "llamo",
   "soy",
+  "somos",
   "nombre",
   "es",
   "de",
@@ -121,6 +122,19 @@ const NAME_STOPWORDS = new Set([
   "facebook",
   "ia",
   "chatbot",
+  "empresa",
+  "negocio",
+  "autonomo",
+  "autónomo",
+  "proyecto",
+  "tienda",
+  "online",
+  "ecommerce",
+  "e-commerce",
+  "tengo",
+  "tenemos",
+  "dedico",
+  "dedicamos",
 ]);
 
 export function isGenericService(service) {
@@ -131,25 +145,94 @@ function cleanText(text = "") {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
 
+function normalizeText(text = "") {
+  return String(text || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function toTitleCase(str = "") {
   return str
     .toLowerCase()
     .replace(/\b([a-záéíóúüñ])/gi, (m) => m.toUpperCase());
 }
 
+function isNegativeResponse(text = "") {
+  const t = normalizeText(text);
+
+  return (
+    t === "no" ||
+    t === "nop" ||
+    t === "nope" ||
+    t === "no tengo" ||
+    t === "no tengo empresa" ||
+    t === "no empresa" ||
+    t === "no tengo negocio"
+  );
+}
+
+function isUnknownResponse(text = "") {
+  const t = normalizeText(text);
+
+  return (
+    t === "no lo se" ||
+    t === "no lo sé" ||
+    t === "ni idea" ||
+    t === "depende" ||
+    t === "aun no lo se" ||
+    t === "aún no lo sé"
+  );
+}
+
 export function looksLikeValidName(name = "") {
   const value = cleanText(name);
+  const normalized = normalizeText(value);
 
   if (!value) return false;
   if (value.length < 2 || value.length > 40) return false;
   if (/\d/.test(value)) return false;
   if (/[?!=@#$%^&*()_+=[\]{};:"\\|<>/]/.test(value)) return false;
+  if (isLikelyQuestion(value)) return false;
+  if (isNegativeResponse(value) || isUnknownResponse(value)) return false;
+  if (isLikelyServiceIntent(value)) return false;
+
+  const blockedPhrases = [
+    "quiero",
+    "necesito",
+    "google ads",
+    "seo",
+    "diseno web",
+    "diseño web",
+    "consultoria",
+    "consultoría",
+    "publicidad",
+    "redes sociales",
+    "meta ads",
+    "declaras a hacienda",
+    "precio",
+    "presupuesto",
+    "cuanto cuesta",
+    "cuánto cuesta",
+    "tienda online",
+    "ecommerce",
+    "e-commerce",
+    "tengo una",
+    "tenemos una",
+    "me dedico",
+    "nos dedicamos",
+    "soy autonomo",
+    "soy autónomo",
+  ];
+
+  if (blockedPhrases.some((p) => normalized.includes(p))) return false;
 
   const words = value.split(/\s+/).filter(Boolean);
   if (words.length === 0 || words.length > 3) return false;
 
   for (const word of words) {
-    const w = word.toLowerCase();
+    const w = normalizeText(word);
     if (w.length < 2) return false;
     if (NAME_STOPWORDS.has(w)) return false;
   }
@@ -178,6 +261,30 @@ function isLikelyQuestion(text = "") {
 
   return /^(que|qué|como|cómo|cuando|cuándo|donde|dónde|por que|por qué|cuanto|cuánto|declaras|puedes|tienes|ofreces)\b/i.test(
     t
+  );
+}
+
+function isLikelyServiceIntent(text = "") {
+  const t = normalizeText(text);
+
+  return (
+    t.includes("google ads") ||
+    t.includes("seo") ||
+    t.includes("meta ads") ||
+    t.includes("facebook ads") ||
+    t.includes("instagram ads") ||
+    t.includes("redes sociales") ||
+    t.includes("publicidad") ||
+    t.includes("diseno web") ||
+    t.includes("diseño web") ||
+    t.includes("pagina web") ||
+    t.includes("página web") ||
+    t.includes("consultoria") ||
+    t.includes("consultoría") ||
+    t.includes("automatiz") ||
+    t.includes("chatbot") ||
+    t.includes("agente ia") ||
+    t.includes("inteligencia artificial")
   );
 }
 
@@ -239,14 +346,18 @@ function extractUrgency(text = "") {
     return "baja";
   }
 
-  const m = t.match(/\b(?:mi\s+)?(?:prioridad|urgencia)\s+(?:es\s+)?(alta|media|baja)\b/i);
+  const m = t.match(
+    /\b(?:mi\s+)?(?:prioridad|urgencia)\s+(?:es\s+)?(alta|media|baja)\b/i
+  );
   return m?.[1] ? m[1].toLowerCase() : null;
 }
 
 function extractBudget(text = "") {
   const t = String(text);
 
-  const between = t.match(/entre\s+(\d{2,6})\s*(€|eur)?\s+y\s+(\d{2,6})\s*(€|eur)?/i);
+  const between = t.match(
+    /entre\s+(\d{2,6})\s*(€|eur)?\s+y\s+(\d{2,6})\s*(€|eur)?/i
+  );
   if (between) return `${between[1]}-${between[3]} €`;
 
   const simple = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(€|eur)\b/i);
@@ -255,15 +366,16 @@ function extractBudget(text = "") {
     if (Number.isFinite(num) && num >= 10) return `${num} €`;
   }
 
+  const normalized = normalizeText(t);
+  if (normalized.includes("menos de 500")) return "menos de 500 €";
+  if (normalized.includes("alrededor de 500")) return "500 €";
+  if (normalized.includes("alrededor de 1000")) return "1000 €";
+
   return null;
 }
 
 function pickService(text = "", existingService = null) {
   const t = String(text);
-
-  if (/(ecommerce|e-commerce|tienda\s+online|shopify|woocommerce)/i.test(t)) {
-    return existingService || null;
-  }
 
   for (const s of SERVICE_ALIASES) {
     if (s.patterns.some((re) => re.test(t))) return s.key;
@@ -275,7 +387,9 @@ function pickService(text = "", existingService = null) {
 function extractConsent(text = "") {
   const t = String(text).toLowerCase();
 
-  if (/(no\s+acepto|no\s+consiento|no\s+me\s+contacten|no\s+contactar)/i.test(t)) {
+  if (
+    /(no\s+acepto|no\s+consiento|no\s+me\s+contacten|no\s+contactar)/i.test(t)
+  ) {
     return false;
   }
 
@@ -284,6 +398,133 @@ function extractConsent(text = "") {
   }
 
   return null;
+}
+
+function extractBusinessType(text = "") {
+  const raw = cleanText(text);
+  const t = normalizeText(raw);
+
+  if (!raw) return null;
+  if (isNegativeResponse(raw)) return "proyecto personal";
+  if (t.includes("autonom")) return "autonomo";
+  if (t.includes("empresa")) return "empresa";
+  if (t.includes("negocio")) return "negocio";
+  if (t.includes("proyecto")) return "proyecto";
+  if (t.includes("tienda online") || t.includes("ecommerce") || t.includes("e-commerce")) {
+    return "ecommerce";
+  }
+  if (t.includes("clinica") || t.includes("clínica")) return "clinica";
+  if (t.includes("agencia")) return "agencia";
+  if (t.includes("despacho")) return "despacho";
+
+  return null;
+}
+
+function extractBusinessActivity(text = "") {
+  const raw = cleanText(text);
+  const t = normalizeText(raw);
+
+  if (!raw) return null;
+  if (isLikelyQuestion(raw)) return null;
+  if (looksLikeValidName(raw)) return null;
+  if (extractEmail(raw) || extractPhone(raw)) return null;
+  if (pickService(raw, null)) return null;
+
+  const triggers = [
+    "tengo una",
+    "tenemos una",
+    "soy ",
+    "somos ",
+    "me dedico a",
+    "nos dedicamos a",
+    "vendo",
+    "vendemos",
+    "ofrezco",
+    "ofrecemos",
+    "trabajo en",
+    "trabajamos en",
+  ];
+
+  if (triggers.some((x) => t.includes(x))) return raw;
+  if (t.includes("tienda online")) return raw;
+  if (t.includes("ecommerce")) return raw;
+  if (t.includes("clinica") || t.includes("clínica")) return raw;
+  if (t.includes("abogado") || t.includes("bufete")) return raw;
+  if (t.includes("dental") || t.includes("dentista")) return raw;
+
+  return null;
+}
+
+function extractMainGoal(text = "") {
+  const raw = cleanText(text);
+  const t = normalizeText(raw);
+
+  if (!raw) return null;
+  if (isLikelyQuestion(raw)) return null;
+  if (looksLikeValidName(raw)) return null;
+
+  const triggers = [
+    "quiero",
+    "necesito",
+    "busco",
+    "me gustaria",
+    "me gustaría",
+    "mi objetivo",
+    "captar",
+    "conseguir",
+    "vender",
+    "aumentar",
+    "mejorar",
+    "generar",
+  ];
+
+  if (triggers.some((x) => t.includes(x))) return raw;
+
+  return null;
+}
+
+function extractPreferredContactChannel({ email, phone }) {
+  if (email) return "email";
+  if (phone) return "phone";
+  return null;
+}
+
+function extractLastIntent({ text, interest_service, main_goal }) {
+  if (interest_service) {
+    return `interes_${interest_service.toLowerCase().replace(/\s+/g, "_")}`;
+  }
+
+  if (main_goal) return "objetivo_comercial";
+  if (isLikelyQuestion(text)) return "pregunta";
+
+  return null;
+}
+
+function calculateLeadScore({
+  name,
+  email,
+  phone,
+  interest_service,
+  budget_range,
+  urgency,
+  business_type,
+  business_activity,
+  main_goal,
+}) {
+  let lead_score = 0;
+
+  if (name) lead_score += 15;
+  if (email) lead_score += 15;
+  if (phone) lead_score += 15;
+  if (interest_service) lead_score += 15;
+  if (business_type) lead_score += 10;
+  if (business_activity) lead_score += 10;
+  if (main_goal) lead_score += 10;
+  if (budget_range) lead_score += 10;
+  if (urgency === "alta") lead_score += 10;
+  if (urgency === "media") lead_score += 5;
+
+  return Math.min(100, lead_score);
 }
 
 export function extractLeadDataFromText(text, existingLead = null) {
@@ -296,15 +537,27 @@ export function extractLeadDataFromText(text, existingLead = null) {
   const urgency = extractUrgency(safeText);
   const budget_range = extractBudget(safeText);
   const consent = extractConsent(safeText);
+  const business_type = extractBusinessType(safeText);
+  const business_activity = extractBusinessActivity(safeText);
+  const main_goal = extractMainGoal(safeText);
+  const preferred_contact_channel = extractPreferredContactChannel({ email, phone });
+  const last_intent = extractLastIntent({
+    text: safeText,
+    interest_service,
+    main_goal,
+  });
 
-  let lead_score = 0;
-  if (name) lead_score += 15;
-  if (email) lead_score += 20;
-  if (phone) lead_score += 20;
-  if (interest_service) lead_score += 15;
-  if (budget_range) lead_score += 15;
-  if (urgency === "alta") lead_score += 15;
-  if (urgency === "media") lead_score += 10;
+  const lead_score = calculateLeadScore({
+    name,
+    email,
+    phone,
+    interest_service,
+    budget_range,
+    urgency,
+    business_type,
+    business_activity,
+    main_goal,
+  });
 
   return {
     name,
@@ -314,8 +567,18 @@ export function extractLeadDataFromText(text, existingLead = null) {
     urgency,
     budget_range,
     summary: safeText.slice(0, 500),
-    lead_score: Math.min(100, lead_score),
+    lead_score,
     consent,
     consent_at: consent === true ? new Date().toISOString() : null,
+
+    // nuevos campos para el flujo
+    business_type,
+    business_activity,
+    company_name: null,
+    main_goal,
+    current_situation: null,
+    pain_points: null,
+    preferred_contact_channel,
+    last_intent,
   };
 }
