@@ -233,8 +233,8 @@ export async function getLeadByConversationId(conversation_id) {
  * Upsert del lead por conversation_id
  *
  * NOTA:
- * Tu tabla usa lead_Score con S mayúscula.
- * Aquí aceptamos lead_score o lead_Score y lo guardamos correctamente.
+ * Guardamos en lead_score porque es el nombre correcto que espera Supabase.
+ * Aceptamos tanto lead_score como lead_Score al leer el objeto de entrada.
  */
 export async function upsertLeadFromConversation(lead = {}) {
   const safeConversationId = clean(lead.conversation_id);
@@ -252,10 +252,7 @@ export async function upsertLeadFromConversation(lead = {}) {
     urgency: clean(lead.urgency),
     budget_range: clean(lead.budget_range),
     summary: clean(lead.summary),
-    lead_Score:
-      lead.lead_Score ??
-      lead.lead_score ??
-      null,
+    lead_score: lead.lead_score ?? lead.lead_Score ?? null,
     consent:
       typeof lead.consent === "boolean"
         ? lead.consent
