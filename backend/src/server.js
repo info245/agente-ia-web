@@ -18,9 +18,15 @@ import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
 import { getServiceFacts } from "./lib/websiteFacts.js";
-import { sendLeadEmail, sendClientConfirmationEmail } from "./lib/emailService.js";
+import {
+  sendLeadEmail,
+  sendClientConfirmationEmail,
+} from "./lib/emailService.js";
 
-import { buildMemoryPatch, buildLeadMemoryContext } from "./lib/memoryUtils.js";
+import {
+  buildMemoryPatch,
+  buildLeadMemoryContext,
+} from "./lib/memoryUtils.js";
 
 const app = express();
 
@@ -29,10 +35,41 @@ app.options("*", cors());
 app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "memory-v8-safe-merge-final-summary-confirmation";
+const BUILD_TAG =
+  "memory-v9-safe-merge-final-summary-confirmation-whatsapp-dedup";
+
+const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
+
+// Anti-duplicados simple en memoria para WhatsApp webhook
+// Nota: esto sirve para una sola instancia. Más adelante lo ideal sería Supabase/Redis.
+const processedWhatsAppMessages = new Map();
+const PROCESSED_MESSAGE_TTL_MS = 1000 * 60 * 60; // 1 hora
+
+function cleanupProcessedMessages() {
+  const now = Date.now();
+  for (const [id, ts] of processedWhatsAppMessages.entries()) {
+    if (now - ts > PROCESSED_MESSAGE_TTL_MS) {
+      processedWhatsAppMessages.delete(id);
+    }
+  }
+}
+
+function markWhatsAppMessageProcessed(messageId) {
+  if (!messageId) return;
+  cleanupProcessedMessages();
+  processedWhatsAppMessages.set(messageId, Date.now());
+}
+
+function hasProcessedWhatsAppMessage(messageId) {
+  if (!messageId) return false;
+  cleanupProcessedMessages();
+  return processedWhatsAppMessages.has(messageId);
+}
 
 function norm(v) {
   return String(v || "").trim();
@@ -145,7 +182,12 @@ function buildLeadSignature(lead) {
 function buildTranscript(messages = []) {
   return messages
     .filter((m) => m?.role === "user" || m?.role === "assistant")
-    .map((m) => `${m.role === "user" ? "Usuario" : "Asistente"}: ${String(m.content || "").trim()}`)
+    .map(
+      (m) =>
+        `${m.role === "user" ? "Usuario" : "Asistente"}: ${String(
+          m.content || ""
+        ).trim()}`
+    )
     .join("\n");
 }
 
@@ -181,6 +223,356 @@ ${transcript}
   });
 
   return result.output_text?.trim() || "";
+}
+
+async function sendWhatsAppText(to, bodyText) {
+  if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
+    throw new Error(
+      "Faltan variables WHATSAPP_TOKEN o WHATSAPP_PHONE_NUMBER_ID"
+    );
+  }
+
+  const response = await fetch(
+    `https://graph.facebook.com/v23.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "text",
+        text: {
+          body: String(bodyText || "").slice(0, 4096),
+        },
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.log("whatsapp send error", data);
+    throw new Error(
+      data?.error?.message || "Error enviando mensaje por WhatsApp"
+    );
+  }
+
+  return data;
+}
+
+function getWhatsAppTextFromMessage(message) {
+  if (!message) return null;
+
+  if (message.type === "text") {
+    return String(message?.text?.body || "").trim() || null;
+  }
+
+  if (message.type === "interactive") {
+    const buttonReply = message?.interactive?.button_reply?.title;
+    const listReply = message?.interactive?.list_reply?.title;
+    const value = String(buttonReply || listReply || "").trim();
+    return value || null;
+  }
+
+  return null;
+}
+
+async function processIncomingMessage({
+  text,
+  conversation_id,
+  external_user_id,
+  channel,
+}) {
+  if (!text || typeof text !== "string") {
+    throw new Error("El campo 'text' es obligatorio y debe ser texto.");
+  }
+
+  let currentConversationId = conversation_id;
+
+  if (!currentConversationId) {
+    const conversation = await createConversation({
+      channel: channel || "web",
+      external_user_id: external_user_id || null,
+    });
+    currentConversationId = conversation.id;
+  }
+
+  await saveMessage({
+    conversation_id: currentConversationId,
+    role: "user",
+    content: text,
+  });
+
+  const history = await getConversationMessages(currentConversationId, 30);
+  const leadBefore = await getLeadByConversationId(currentConversationId);
+
+  const extracted = extractLeadDataFromText(text, leadBefore);
+
+  const incoming = {
+    conversation_id: currentConversationId,
+    name: extracted?.name ?? null,
+    email: extracted?.email ?? null,
+    phone: extracted?.phone ?? null,
+    interest_service: extracted?.interest_service ?? null,
+    urgency: extracted?.urgency ?? null,
+    budget_range: extracted?.budget_range ?? null,
+    summary: leadBefore?.summary ?? null,
+    lead_score: extracted?.lead_score ?? null,
+    consent: extracted?.consent ?? null,
+    consent_at: extracted?.consent_at ?? null,
+    business_type: extracted?.business_type ?? null,
+    main_goal: extracted?.main_goal ?? null,
+    current_situation: extracted?.current_situation ?? null,
+    pain_points: extracted?.pain_points ?? null,
+    preferred_contact_channel: extracted?.preferred_contact_channel ?? null,
+    last_intent: extracted?.last_intent ?? null,
+  };
+
+  if (!incoming.budget_range) {
+    const detectedBudget = normalizeBudget(text);
+    if (detectedBudget) {
+      incoming.budget_range = detectedBudget;
+    }
+  }
+
+  const mergedLeadBase = mergeLeadData({
+    currentLead: leadBefore || {},
+    extractedLead: incoming,
+    lastUserMessage: text,
+  });
+
+  const memoryPatch = buildMemoryPatch({
+    text,
+    leadBefore,
+    extracted,
+    mergedLead: mergedLeadBase,
+  });
+
+  const mergedLead = mergeLeadData({
+    currentLead: mergedLeadBase,
+    extractedLead: memoryPatch || {},
+    lastUserMessage: text,
+  });
+
+  await upsertLeadFromConversation({
+    ...mergedLead,
+    conversation_id: currentConversationId,
+  });
+
+  let leadAfter = await getLeadByConversationId(currentConversationId);
+
+  console.log("---- LEAD DEBUG ----");
+  console.log("text:", text);
+  console.log("leadBefore:", leadBefore);
+  console.log("extracted:", extracted);
+  console.log("incoming:", incoming);
+  console.log("memoryPatch:", memoryPatch);
+  console.log("mergedLead:", mergedLead);
+  console.log("leadAfter:", leadAfter);
+  console.log("--------------------");
+
+  let reply = null;
+  let contactCTA = null;
+  const userAskedQuestion = isUserQuestion(text);
+
+  if (!hasName(leadAfter) && !userAskedQuestion) {
+    reply = "Perfecto. Antes de seguir, ¿cómo te llamas?";
+  } else if (!hasService(leadAfter) && !userAskedQuestion) {
+    reply =
+      "¿Qué servicio te interesa? SEO, Google Ads, Publicidad en Redes Sociales, Diseño Web o Consultoría Digital.";
+  } else {
+    if (!hasBudget(leadAfter) && hasService(leadAfter)) {
+      contactCTA = `
+
+Si quieres, para orientarte mejor, también puedo valorar contigo el presupuesto aproximado que tienes para ${leadAfter.interest_service}.`;
+    }
+
+    if (!hasContact(leadAfter) && hasService(leadAfter)) {
+      contactCTA = `${contactCTA || ""}
+
+Si quieres, puedo enviarte una propuesta orientativa para ${
+        leadAfter.interest_service
+      }.
+
+¿Me dejas tu email o tu teléfono?`;
+    }
+
+    const serviceFacts = getServiceFacts(leadAfter.interest_service);
+
+    let factsBlock = "";
+
+    if (serviceFacts) {
+      factsBlock = `
+INFORMACIÓN VERIFICADA DE LA WEB
+
+Servicio: ${leadAfter.interest_service}
+
+Precio mínimo: ${serviceFacts.min_monthly_fee || serviceFacts.min_project_fee}
+
+Página oficial:
+${serviceFacts.url}
+
+Notas:
+${serviceFacts.notes}
+`;
+    }
+
+    let ragContext = "";
+
+    try {
+      const docs = await retrieveWebsiteContext(
+        `
+Servicio: ${leadAfter.interest_service || ""}
+Pregunta usuario: ${text}
+Presupuesto: ${leadAfter.budget_range || ""}
+Objetivo: ${leadAfter.main_goal || ""}
+Negocio: ${leadAfter.business_type || ""}
+`
+      );
+
+      ragContext = docs
+        .map(
+          (d) => `
+Fuente: ${d.url}
+
+${d.chunk}
+`
+        )
+        .join("\n");
+    } catch (e) {
+      console.log("RAG error", e.message);
+    }
+
+    const memoryContext = buildLeadMemoryContext(leadAfter);
+
+    const systemPrompt = `
+${getAgentSystemPrompt()}
+
+REGLAS IMPORTANTES
+
+1. RESPONDE SIEMPRE LA PREGUNTA DEL USUARIO
+2. USA INFORMACIÓN DE LA WEB SI ESTÁ DISPONIBLE
+3. LOS PRECIOS SIEMPRE DEBEN INCLUIR "+ IVA"
+4. NO INVENTES PRECIOS
+5. USA LA MEMORIA DEL LEAD PARA DAR CONTINUIDAD
+6. SI EL USUARIO HACE UNA PREGUNTA DIRECTA, RESPÓNDELA PRIMERO
+7. DESPUÉS DE RESPONDER, PUEDES HACER UNA PREGUNTA COMERCIAL BREVE SI FALTA ALGÚN DATO
+8. SI EXISTE INFORMACIÓN VERIFICADA DE LA WEB, USA SOLO ESA INFORMACIÓN PARA HABLAR DE PRECIOS
+9. NO DES RANGOS DE PRECIOS SI NO ESTÁN EXPLÍCITAMENTE EN LA INFORMACIÓN VERIFICADA
+
+${memoryContext}
+
+${factsBlock}
+
+CONTEXTO WEB
+
+${ragContext}
+`;
+
+    const openaiInput = buildOpenAIInput(systemPrompt, history);
+
+    const ai = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: openaiInput,
+    });
+
+    reply = ai.output_text?.trim();
+
+    if (!reply) {
+      reply =
+        "Cuéntame un poco más sobre tu proyecto para poder orientarte mejor.";
+    }
+
+    if (contactCTA) {
+      reply += contactCTA;
+    }
+  }
+
+  await saveMessage({
+    conversation_id: currentConversationId,
+    role: "assistant",
+    content: reply,
+  });
+
+  leadAfter = await getLeadByConversationId(currentConversationId);
+
+  let chatCompleted = shouldMarkChatCompleted(leadAfter, reply);
+
+  if (chatCompleted) {
+    try {
+      const fullMessages = await getConversationMessages(
+        currentConversationId,
+        100
+      );
+
+      const finalSummary = await generateFinalConversationSummary({
+        lead: leadAfter,
+        messages: fullMessages,
+      });
+
+      if (finalSummary) {
+        await upsertLeadFromConversation({
+          ...leadAfter,
+          conversation_id: currentConversationId,
+          summary: finalSummary,
+        });
+
+        leadAfter = await getLeadByConversationId(currentConversationId);
+      }
+    } catch (e) {
+      console.log("final summary error", e.message);
+    }
+  }
+
+  try {
+    const latestLead = await getLeadByConversationId(currentConversationId);
+    const signature = buildLeadSignature(latestLead);
+    const previousSignature = lastLeadEmailSent.get(currentConversationId);
+
+    if (signature !== previousSignature) {
+      await sendLeadEmail({
+        lead: latestLead,
+        conversation_id: currentConversationId,
+        type: previousSignature ? "update" : "new",
+        changedFields: [],
+      });
+
+      lastLeadEmailSent.set(currentConversationId, signature);
+    }
+  } catch (e) {
+    console.log("lead email error", e.message);
+  }
+
+  try {
+    const latestLead = await getLeadByConversationId(currentConversationId);
+
+    if (
+      latestLead?.email &&
+      chatCompleted &&
+      !clientConfirmationSent.get(currentConversationId)
+    ) {
+      await sendClientConfirmationEmail({
+        lead: latestLead,
+        conversation_id: currentConversationId,
+      });
+
+      clientConfirmationSent.set(currentConversationId, true);
+    }
+  } catch (e) {
+    console.log("client email error", e.message);
+  }
+
+  return {
+    ok: true,
+    build: BUILD_TAG,
+    conversation_id: currentConversationId,
+    reply,
+    lead: leadAfter || null,
+    chat_completed: chatCompleted,
+  };
 }
 
 app.get("/health", (req, res) => {
@@ -231,290 +623,14 @@ app.post("/messages", async (req, res) => {
   try {
     const { text, conversation_id, external_user_id, channel } = req.body || {};
 
-    if (!text || typeof text !== "string") {
-      return res.status(400).json({
-        ok: false,
-        error: "El campo 'text' es obligatorio y debe ser texto.",
-      });
-    }
-
-    let currentConversationId = conversation_id;
-
-    if (!currentConversationId) {
-      const conversation = await createConversation({
-        channel: channel || "web",
-        external_user_id: external_user_id || null,
-      });
-      currentConversationId = conversation.id;
-    }
-
-    await saveMessage({
-      conversation_id: currentConversationId,
-      role: "user",
-      content: text,
-    });
-
-    const history = await getConversationMessages(currentConversationId, 30);
-    const leadBefore = await getLeadByConversationId(currentConversationId);
-
-    const extracted = extractLeadDataFromText(text, leadBefore);
-
-    const incoming = {
-      conversation_id: currentConversationId,
-      name: extracted?.name ?? null,
-      email: extracted?.email ?? null,
-      phone: extracted?.phone ?? null,
-      interest_service: extracted?.interest_service ?? null,
-      urgency: extracted?.urgency ?? null,
-      budget_range: extracted?.budget_range ?? null,
-      summary: leadBefore?.summary ?? null,
-      lead_score: extracted?.lead_score ?? null,
-      consent: extracted?.consent ?? null,
-      consent_at: extracted?.consent_at ?? null,
-      business_type: extracted?.business_type ?? null,
-      main_goal: extracted?.main_goal ?? null,
-      current_situation: extracted?.current_situation ?? null,
-      pain_points: extracted?.pain_points ?? null,
-      preferred_contact_channel: extracted?.preferred_contact_channel ?? null,
-      last_intent: extracted?.last_intent ?? null,
-    };
-
-    if (!incoming.budget_range) {
-      const detectedBudget = normalizeBudget(text);
-      if (detectedBudget) {
-        incoming.budget_range = detectedBudget;
-      }
-    }
-
-    const mergedLeadBase = mergeLeadData({
-      currentLead: leadBefore || {},
-      extractedLead: incoming,
-      lastUserMessage: text,
-    });
-
-    const memoryPatch = buildMemoryPatch({
+    const result = await processIncomingMessage({
       text,
-      leadBefore,
-      extracted,
-      mergedLead: mergedLeadBase,
+      conversation_id,
+      external_user_id,
+      channel,
     });
 
-    const mergedLead = mergeLeadData({
-      currentLead: mergedLeadBase,
-      extractedLead: memoryPatch || {},
-      lastUserMessage: text,
-    });
-
-    await upsertLeadFromConversation({
-      ...mergedLead,
-      conversation_id: currentConversationId,
-    });
-
-    let leadAfter = await getLeadByConversationId(currentConversationId);
-
-    console.log("---- LEAD DEBUG ----");
-    console.log("text:", text);
-    console.log("leadBefore:", leadBefore);
-    console.log("extracted:", extracted);
-    console.log("incoming:", incoming);
-    console.log("memoryPatch:", memoryPatch);
-    console.log("mergedLead:", mergedLead);
-    console.log("leadAfter:", leadAfter);
-    console.log("--------------------");
-
-    let reply = null;
-    let contactCTA = null;
-    const userAskedQuestion = isUserQuestion(text);
-
-    if (!hasName(leadAfter) && !userAskedQuestion) {
-      reply = "Perfecto. Antes de seguir, ¿cómo te llamas?";
-    } else if (!hasService(leadAfter) && !userAskedQuestion) {
-      reply =
-        "¿Qué servicio te interesa? SEO, Google Ads, Publicidad en Redes Sociales, Diseño Web o Consultoría Digital.";
-    } else {
-      if (!hasBudget(leadAfter) && hasService(leadAfter)) {
-        contactCTA = `
-
-Si quieres, para orientarte mejor, también puedo valorar contigo el presupuesto aproximado que tienes para ${leadAfter.interest_service}.`;
-      }
-
-      if (!hasContact(leadAfter) && hasService(leadAfter)) {
-        contactCTA = `${contactCTA || ""}
-
-Si quieres, puedo enviarte una propuesta orientativa para ${leadAfter.interest_service}.
-
-¿Me dejas tu email o tu teléfono?`;
-      }
-
-      const serviceFacts = getServiceFacts(leadAfter.interest_service);
-
-      let factsBlock = "";
-
-      if (serviceFacts) {
-        factsBlock = `
-INFORMACIÓN VERIFICADA DE LA WEB
-
-Servicio: ${leadAfter.interest_service}
-
-Precio mínimo: ${serviceFacts.min_monthly_fee || serviceFacts.min_project_fee}
-
-Página oficial:
-${serviceFacts.url}
-
-Notas:
-${serviceFacts.notes}
-`;
-      }
-
-      let ragContext = "";
-
-      try {
-        const docs = await retrieveWebsiteContext(
-          `
-Servicio: ${leadAfter.interest_service || ""}
-Pregunta usuario: ${text}
-Presupuesto: ${leadAfter.budget_range || ""}
-Objetivo: ${leadAfter.main_goal || ""}
-Negocio: ${leadAfter.business_type || ""}
-`
-        );
-
-        ragContext = docs
-          .map(
-            (d) => `
-Fuente: ${d.url}
-
-${d.chunk}
-`
-          )
-          .join("\n");
-      } catch (e) {
-        console.log("RAG error", e.message);
-      }
-
-      const memoryContext = buildLeadMemoryContext(leadAfter);
-
-      const systemPrompt = `
-${getAgentSystemPrompt()}
-
-REGLAS IMPORTANTES
-
-1. RESPONDE SIEMPRE LA PREGUNTA DEL USUARIO
-2. USA INFORMACIÓN DE LA WEB SI ESTÁ DISPONIBLE
-3. LOS PRECIOS SIEMPRE DEBEN INCLUIR "+ IVA"
-4. NO INVENTES PRECIOS
-5. USA LA MEMORIA DEL LEAD PARA DAR CONTINUIDAD
-6. SI EL USUARIO HACE UNA PREGUNTA DIRECTA, RESPÓNDELA PRIMERO
-7. DESPUÉS DE RESPONDER, PUEDES HACER UNA PREGUNTA COMERCIAL BREVE SI FALTA ALGÚN DATO
-8. SI EXISTE INFORMACIÓN VERIFICADA DE LA WEB, USA SOLO ESA INFORMACIÓN PARA HABLAR DE PRECIOS
-9. NO DES RANGOS DE PRECIOS SI NO ESTÁN EXPLÍCITAMENTE EN LA INFORMACIÓN VERIFICADA
-
-${memoryContext}
-
-${factsBlock}
-
-CONTEXTO WEB
-
-${ragContext}
-`;
-
-      const openaiInput = buildOpenAIInput(systemPrompt, history);
-
-      const ai = await openai.responses.create({
-        model: "gpt-4.1-mini",
-        input: openaiInput,
-      });
-
-      reply = ai.output_text?.trim();
-
-      if (!reply) {
-        reply = "Cuéntame un poco más sobre tu proyecto para poder orientarte mejor.";
-      }
-
-      if (contactCTA) {
-        reply += contactCTA;
-      }
-    }
-
-    await saveMessage({
-      conversation_id: currentConversationId,
-      role: "assistant",
-      content: reply,
-    });
-
-    leadAfter = await getLeadByConversationId(currentConversationId);
-
-    let chatCompleted = shouldMarkChatCompleted(leadAfter, reply);
-
-    if (chatCompleted) {
-      try {
-        const fullMessages = await getConversationMessages(currentConversationId, 100);
-
-        const finalSummary = await generateFinalConversationSummary({
-          lead: leadAfter,
-          messages: fullMessages,
-        });
-
-        if (finalSummary) {
-          await upsertLeadFromConversation({
-            ...leadAfter,
-            conversation_id: currentConversationId,
-            summary: finalSummary,
-          });
-
-          leadAfter = await getLeadByConversationId(currentConversationId);
-        }
-      } catch (e) {
-        console.log("final summary error", e.message);
-      }
-    }
-
-    try {
-      const latestLead = await getLeadByConversationId(currentConversationId);
-      const signature = buildLeadSignature(latestLead);
-      const previousSignature = lastLeadEmailSent.get(currentConversationId);
-
-      if (signature !== previousSignature) {
-        await sendLeadEmail({
-          lead: latestLead,
-          conversation_id: currentConversationId,
-          type: previousSignature ? "update" : "new",
-          changedFields: [],
-        });
-
-        lastLeadEmailSent.set(currentConversationId, signature);
-      }
-    } catch (e) {
-      console.log("lead email error", e.message);
-    }
-
-    try {
-      const latestLead = await getLeadByConversationId(currentConversationId);
-
-      if (
-        latestLead?.email &&
-        chatCompleted &&
-        !clientConfirmationSent.get(currentConversationId)
-      ) {
-        await sendClientConfirmationEmail({
-          lead: latestLead,
-          conversation_id: currentConversationId,
-        });
-
-        clientConfirmationSent.set(currentConversationId, true);
-      }
-    } catch (e) {
-      console.log("client email error", e.message);
-    }
-
-    res.json({
-      ok: true,
-      build: BUILD_TAG,
-      conversation_id: currentConversationId,
-      reply,
-      lead: leadAfter || null,
-      chat_completed: chatCompleted,
-    });
+    res.json(result);
   } catch (error) {
     console.log("error", error);
 
@@ -522,6 +638,98 @@ ${ragContext}
       ok: false,
       error: error.message,
     });
+  }
+});
+
+app.get("/webhooks/whatsapp", (req, res) => {
+  try {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    if (mode === "subscribe" && token === WHATSAPP_VERIFY_TOKEN) {
+      console.log("whatsapp webhook verified");
+      return res.status(200).send(challenge);
+    }
+
+    return res.sendStatus(403);
+  } catch (error) {
+    console.log("whatsapp verify error", error);
+    return res.sendStatus(500);
+  }
+});
+
+app.post("/webhooks/whatsapp", async (req, res) => {
+  try {
+    // Responder rápido a Meta para evitar reintentos innecesarios
+    res.sendStatus(200);
+
+    const entries = req.body?.entry || [];
+
+    for (const entry of entries) {
+      const changes = entry?.changes || [];
+
+      for (const change of changes) {
+        const value = change?.value || {};
+
+        // Ignorar status de mensajes enviados por tu negocio
+        if (Array.isArray(value?.statuses) && value.statuses.length > 0) {
+          continue;
+        }
+
+        const messages = value?.messages || [];
+        if (!messages.length) continue;
+
+        for (const message of messages) {
+          const messageId = message?.id;
+
+          if (hasProcessedWhatsAppMessage(messageId)) {
+            console.log("whatsapp duplicate skipped", { messageId });
+            continue;
+          }
+
+          markWhatsAppMessageProcessed(messageId);
+
+          const from = message?.from;
+          const text = getWhatsAppTextFromMessage(message);
+
+          if (!from) continue;
+
+          // Si no es texto soportado, respuesta controlada
+          if (!text) {
+            try {
+              await sendWhatsAppText(
+                from,
+                "Ahora mismo solo puedo procesar mensajes de texto."
+              );
+            } catch (e) {
+              console.log("non-text reply error", e.message);
+            }
+            continue;
+          }
+
+          console.log("incoming whatsapp", {
+            from,
+            text,
+            messageId,
+            type: message?.type,
+          });
+
+          const result = await processIncomingMessage({
+            text,
+            conversation_id: null,
+            external_user_id: from,
+            channel: "whatsapp",
+          });
+
+          if (result?.reply) {
+            await sendWhatsAppText(from, result.reply);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.log("whatsapp webhook error", error);
   }
 });
 
