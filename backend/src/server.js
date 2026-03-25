@@ -36,7 +36,7 @@ app.use(express.json({ limit: "1mb" }));
 
 const PORT = process.env.PORT || 3000;
 const BUILD_TAG =
-  "memory-v9-safe-merge-final-summary-confirmation-whatsapp-dedup";
+  "memory-v10-staged-questions-valid-name-whatsapp-safe";
 
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -44,11 +44,8 @@ const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
-
-// Anti-duplicados simple en memoria para WhatsApp webhook
-// Nota: esto sirve para una sola instancia. Más adelante lo ideal sería Supabase/Redis.
 const processedWhatsAppMessages = new Map();
-const PROCESSED_MESSAGE_TTL_MS = 1000 * 60 * 60; // 1 hora
+const PROCESSED_MESSAGE_TTL_MS = 1000 * 60 * 60;
 
 function cleanupProcessedMessages() {
   const now = Date.now();
@@ -75,8 +72,111 @@ function norm(v) {
   return String(v || "").trim();
 }
 
+function normalizeText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isUserQuestion(text) {
+  const t = String(text || "").trim().toLowerCase();
+
+  if (!t) return false;
+  if (t.includes("?")) return true;
+
+  return /^(que|qué|como|cómo|cuanto|cuánto|cual|cuál|precio|precios|presupuesto|coste|costes|tarifa|tarifas)\b/i.test(
+    t
+  );
+}
+
+function isLikelyServiceIntent(text) {
+  const t = normalizeText(text);
+
+  return (
+    t.includes("google ads") ||
+    t.includes("seo") ||
+    t.includes("meta ads") ||
+    t.includes("redes sociales") ||
+    t.includes("publicidad") ||
+    t.includes("diseno web") ||
+    t.includes("diseño web") ||
+    t.includes("consultoria") ||
+    t.includes("consultoría") ||
+    t.includes("web") ||
+    t.includes("campanas") ||
+    t.includes("campañas")
+  );
+}
+
+function isLikelyQuestionOrIntent(text) {
+  const t = normalizeText(text);
+
+  return (
+    isUserQuestion(text) ||
+    t.includes("quiero") ||
+    t.includes("necesito") ||
+    t.includes("busco") ||
+    t.includes("me interesa") ||
+    t.includes("cuanto cuesta") ||
+    t.includes("cuánto cuesta") ||
+    t.includes("precio") ||
+    t.includes("presupuesto")
+  );
+}
+
+function isLikelyValidName(value) {
+  const raw = String(value || "").trim();
+  const t = normalizeText(raw);
+
+  if (!raw) return false;
+  if (raw.length < 2 || raw.length > 40) return false;
+  if (/\d/.test(raw)) return false;
+  if (/[?@]/.test(raw)) return false;
+
+  const blockedPhrases = [
+    "quiero",
+    "necesito",
+    "google ads",
+    "seo",
+    "diseno web",
+    "diseño web",
+    "consultoria",
+    "consultoría",
+    "publicidad",
+    "redes sociales",
+    "meta ads",
+    "declaras a hacienda",
+    "precio",
+    "presupuesto",
+    "cuanto cuesta",
+    "cuánto cuesta",
+  ];
+
+  if (blockedPhrases.some((p) => t.includes(p))) return false;
+  if (isLikelyServiceIntent(raw)) return false;
+
+  const words = raw
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter(Boolean);
+
+  if (!words.length || words.length > 4) return false;
+
+  const allowedWord = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü'-]+$/;
+  if (!words.every((w) => allowedWord.test(w))) return false;
+
+  return true;
+}
+
+function getSafeLeadName(lead) {
+  const candidate = lead?.name;
+  return isLikelyValidName(candidate) ? String(candidate).trim() : null;
+}
+
 function hasName(lead) {
-  return norm(lead?.name).length >= 2;
+  return !!getSafeLeadName(lead);
 }
 
 function hasService(lead) {
@@ -91,8 +191,20 @@ function hasContact(lead) {
   return norm(lead?.email).length >= 3 || norm(lead?.phone).length >= 6;
 }
 
+function hasBusinessType(lead) {
+  return norm(lead?.business_type).length >= 2;
+}
+
+function hasMainGoal(lead) {
+  return norm(lead?.main_goal).length >= 4;
+}
+
+function hasUrgency(lead) {
+  return norm(lead?.urgency).length >= 2;
+}
+
 function isCompletedLeadData(lead) {
-  return hasName(lead) && hasService(lead) && hasContact(lead);
+  return hasName(lead) && hasService(lead) && hasBusinessType(lead) && hasContact(lead);
 }
 
 function isClosingReply(reply) {
@@ -115,17 +227,6 @@ function isClosingReply(reply) {
 
 function shouldMarkChatCompleted(lead, reply) {
   return isCompletedLeadData(lead) && isClosingReply(reply);
-}
-
-function isUserQuestion(text) {
-  const t = String(text || "").trim().toLowerCase();
-
-  if (!t) return false;
-  if (t.includes("?")) return true;
-
-  return /^(que|qué|como|cómo|cuanto|cuánto|cual|cuál|precio|precios|presupuesto|coste|costes|tarifa|tarifas)\b/i.test(
-    t
-  );
 }
 
 function normalizeBudget(text) {
@@ -191,6 +292,20 @@ function buildTranscript(messages = []) {
     .join("\n");
 }
 
+function cleanReply(reply) {
+  let text = String(reply || "").trim();
+  text = text.replace(/\n{3,}/g, "\n\n");
+
+  const paragraphs = text
+    .split("\n")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length <= 2) return text;
+
+  return paragraphs.slice(0, 2).join("\n\n");
+}
+
 async function generateFinalConversationSummary({ lead, messages }) {
   const transcript = buildTranscript(messages);
 
@@ -228,9 +343,18 @@ ${transcript}
 async function sendWhatsAppText(to, bodyText) {
   if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
     throw new Error(
-      "Faltan variables WHATSAPP_TOKEN o WHATSAPP_PHONE_NUMBER_ID"
+      `Faltan variables WHATSAPP_TOKEN o WHATSAPP_PHONE_NUMBER_ID. TOKEN=${!!WHATSAPP_TOKEN} PHONE_ID=${!!WHATSAPP_PHONE_NUMBER_ID}`
     );
   }
+
+  const payload = {
+    messaging_product: "whatsapp",
+    to,
+    type: "text",
+    text: {
+      body: String(bodyText || "").slice(0, 4096),
+    },
+  };
 
   const response = await fetch(
     `https://graph.facebook.com/v23.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
@@ -240,14 +364,7 @@ async function sendWhatsAppText(to, bodyText) {
         Authorization: `Bearer ${WHATSAPP_TOKEN}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to,
-        type: "text",
-        text: {
-          body: String(bodyText || "").slice(0, 4096),
-        },
-      }),
+      body: JSON.stringify(payload),
     }
   );
 
@@ -255,9 +372,7 @@ async function sendWhatsAppText(to, bodyText) {
 
   if (!response.ok) {
     console.log("whatsapp send error", data);
-    throw new Error(
-      data?.error?.message || "Error enviando mensaje por WhatsApp"
-    );
+    throw new Error(data?.error?.message || "Error enviando mensaje por WhatsApp");
   }
 
   return data;
@@ -320,7 +435,7 @@ async function processIncomingMessage({
     urgency: extracted?.urgency ?? null,
     budget_range: extracted?.budget_range ?? null,
     summary: leadBefore?.summary ?? null,
-    lead_score: extracted?.lead_score ?? null,
+    lead_score: extracted?.lead_score ?? extracted?.lead_Score ?? null,
     consent: extracted?.consent ?? null,
     consent_at: extracted?.consent_at ?? null,
     business_type: extracted?.business_type ?? null,
@@ -364,6 +479,17 @@ async function processIncomingMessage({
 
   let leadAfter = await getLeadByConversationId(currentConversationId);
 
+  // Blindaje extra: si el extractor ha guardado una frase como nombre, la invalidamos
+  if (!isLikelyValidName(leadAfter?.name) && leadAfter?.name) {
+    await upsertLeadFromConversation({
+      ...leadAfter,
+      conversation_id: currentConversationId,
+      name: null,
+    });
+
+    leadAfter = await getLeadByConversationId(currentConversationId);
+  }
+
   console.log("---- LEAD DEBUG ----");
   console.log("text:", text);
   console.log("leadBefore:", leadBefore);
@@ -375,31 +501,35 @@ async function processIncomingMessage({
   console.log("--------------------");
 
   let reply = null;
-  let contactCTA = null;
-  const userAskedQuestion = isUserQuestion(text);
+  const userIntent = isLikelyQuestionOrIntent(text);
 
-  if (!hasName(leadAfter) && !userAskedQuestion) {
-    reply = "Perfecto. Antes de seguir, ¿cómo te llamas?";
-  } else if (!hasService(leadAfter) && !userAskedQuestion) {
+  if (!hasName(leadAfter)) {
+    if (userIntent) {
+      reply = "Claro. Antes de orientarte mejor, ¿cómo te llamas?";
+    } else {
+      reply = "Perfecto. Antes de seguir, ¿cómo te llamas?";
+    }
+  } else if (!hasBusinessType(leadAfter)) {
+    reply = `Encantado, ${getSafeLeadName(
+      leadAfter
+    )}. ¿Tienes una empresa o es un proyecto que estás empezando?`;
+  } else if (!hasMainGoal(leadAfter)) {
     reply =
-      "¿Qué servicio te interesa? SEO, Google Ads, Publicidad en Redes Sociales, Diseño Web o Consultoría Digital.";
+      "Perfecto. ¿A qué os dedicáis exactamente o cuál es vuestra actividad principal?";
+  } else if (!hasService(leadAfter)) {
+    reply =
+      "Gracias. ¿Qué servicio te interesa ahora mismo: SEO, Google Ads, Redes Sociales, Diseño Web o Consultoría Digital?";
+  } else if (!hasBudget(leadAfter)) {
+    reply = `Entendido. Para ${
+      leadAfter.interest_service
+    }, ¿con qué presupuesto aproximado te gustaría trabajar?`;
+  } else if (!hasUrgency(leadAfter)) {
+    reply =
+      "Perfecto. ¿Qué prioridad tiene para ti? ¿Te gustaría empezar cuanto antes o lo estás valorando a medio plazo?";
+  } else if (!hasContact(leadAfter)) {
+    reply =
+      "Genial. Para poder enviarte una propuesta orientativa o contactarte, ¿me dejas tu email o tu teléfono?";
   } else {
-    if (!hasBudget(leadAfter) && hasService(leadAfter)) {
-      contactCTA = `
-
-Si quieres, para orientarte mejor, también puedo valorar contigo el presupuesto aproximado que tienes para ${leadAfter.interest_service}.`;
-    }
-
-    if (!hasContact(leadAfter) && hasService(leadAfter)) {
-      contactCTA = `${contactCTA || ""}
-
-Si quieres, puedo enviarte una propuesta orientativa para ${
-        leadAfter.interest_service
-      }.
-
-¿Me dejas tu email o tu teléfono?`;
-    }
-
     const serviceFacts = getServiceFacts(leadAfter.interest_service);
 
     let factsBlock = "";
@@ -459,9 +589,11 @@ REGLAS IMPORTANTES
 4. NO INVENTES PRECIOS
 5. USA LA MEMORIA DEL LEAD PARA DAR CONTINUIDAD
 6. SI EL USUARIO HACE UNA PREGUNTA DIRECTA, RESPÓNDELA PRIMERO
-7. DESPUÉS DE RESPONDER, PUEDES HACER UNA PREGUNTA COMERCIAL BREVE SI FALTA ALGÚN DATO
+7. DESPUÉS DE RESPONDER, HAZ COMO MÁXIMO UNA PREGUNTA COMERCIAL
 8. SI EXISTE INFORMACIÓN VERIFICADA DE LA WEB, USA SOLO ESA INFORMACIÓN PARA HABLAR DE PRECIOS
 9. NO DES RANGOS DE PRECIOS SI NO ESTÁN EXPLÍCITAMENTE EN LA INFORMACIÓN VERIFICADA
+10. RESPUESTAS BREVES: MÁXIMO 2 PÁRRAFOS CORTOS
+11. NO HAGAS VARIAS PREGUNTAS SEGUIDAS EN EL MISMO MENSAJE
 
 ${memoryContext}
 
@@ -482,13 +614,26 @@ ${ragContext}
     reply = ai.output_text?.trim();
 
     if (!reply) {
-      reply =
-        "Cuéntame un poco más sobre tu proyecto para poder orientarte mejor.";
+      reply = "Cuéntame un poco más sobre tu proyecto para poder orientarte mejor.";
     }
 
-    if (contactCTA) {
-      reply += contactCTA;
+    let nextQuestion = "";
+
+    if (!hasBudget(leadAfter)) {
+      nextQuestion = `\n\nSi te parece, lo siguiente es ver el presupuesto aproximado que quieres dedicar a ${leadAfter.interest_service}.`;
+    } else if (!hasUrgency(leadAfter)) {
+      nextQuestion =
+        "\n\nTambién me ayudaría saber si lo necesitas cuanto antes o si lo estás valorando sin prisa.";
+    } else if (!hasContact(leadAfter)) {
+      nextQuestion =
+        "\n\nY cuando quieras, me puedes dejar tu email o teléfono para enviarte una propuesta orientativa.";
     }
+
+    if (nextQuestion) {
+      reply += nextQuestion;
+    }
+
+    reply = cleanReply(reply);
   }
 
   await saveMessage({
@@ -499,14 +644,11 @@ ${ragContext}
 
   leadAfter = await getLeadByConversationId(currentConversationId);
 
-  let chatCompleted = shouldMarkChatCompleted(leadAfter, reply);
+  const chatCompleted = shouldMarkChatCompleted(leadAfter, reply);
 
   if (chatCompleted) {
     try {
-      const fullMessages = await getConversationMessages(
-        currentConversationId,
-        100
-      );
+      const fullMessages = await getConversationMessages(currentConversationId, 100);
 
       const finalSummary = await generateFinalConversationSummary({
         lead: leadAfter,
@@ -661,7 +803,6 @@ app.get("/webhooks/whatsapp", (req, res) => {
 
 app.post("/webhooks/whatsapp", async (req, res) => {
   try {
-    // Responder rápido a Meta para evitar reintentos innecesarios
     res.sendStatus(200);
 
     const entries = req.body?.entry || [];
@@ -672,7 +813,6 @@ app.post("/webhooks/whatsapp", async (req, res) => {
       for (const change of changes) {
         const value = change?.value || {};
 
-        // Ignorar status de mensajes enviados por tu negocio
         if (Array.isArray(value?.statuses) && value.statuses.length > 0) {
           continue;
         }
@@ -695,7 +835,6 @@ app.post("/webhooks/whatsapp", async (req, res) => {
 
           if (!from) continue;
 
-          // Si no es texto soportado, respuesta controlada
           if (!text) {
             try {
               await sendWhatsAppText(
