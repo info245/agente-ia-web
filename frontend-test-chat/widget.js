@@ -1,7 +1,7 @@
 (() => {
   // ====== CONFIG (edita aquí si quieres) ======
   const CONFIG = {
-    backendBaseUrl: "http://localhost:3000",
+    backendBaseUrl: "https://agente-ia-web-backend.onrender.com",
     channel: "web",
     brandName: "Agente IA",
     position: "right", // right | left

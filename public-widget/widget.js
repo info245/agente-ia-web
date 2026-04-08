@@ -8,7 +8,8 @@
   const colorFromAttr = currentScript?.getAttribute("data-color");
 
   const CONFIG = {
-    backendBaseUrl: backendFromAttr || "http://localhost:3000",
+    backendBaseUrl:
+      backendFromAttr || "https://agente-ia-web-backend.onrender.com",
     channel: "web",
     brandName: brandFromAttr || "Agente IA",
     position: posFromAttr === "left" ? "left" : "right",
