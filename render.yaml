@@ -1,0 +1,52 @@
+services:
+  - type: web
+    name: agente-ia-web-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: PORT
+        value: 3000
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_BUSINESS_ACCOUNT_ID
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_API_VERSION
+        value: v23.0
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_SECURE
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: LEADS_EMAIL_ENABLED
+        sync: false
+      - key: LEADS_EMAIL_TO
+        sync: false
+      - key: LEADS_EMAIL_FROM
+        sync: false
+      - key: LEADS_EMAIL_REPLY_TO
+        sync: false
+      - key: LEADS_CLIENT_EMAIL_ENABLED
+        sync: false
+      - key: LEADS_CLIENT_EMAIL_FROM
+        sync: false
