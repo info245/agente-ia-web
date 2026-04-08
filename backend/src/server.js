@@ -408,6 +408,11 @@ function detectPhone(text) {
   return null;
 }
 
+function normalizeWhatsAppPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length >= 6 ? digits : null;
+}
+
 function getCurrentStep(lead) {
   if (!hasName(lead)) return "ask_name";
   if (!hasBusinessType(lead)) return "ask_business_type";
@@ -733,6 +738,10 @@ async function processIncomingMessage({
 
   const history = await getConversationMessages(currentConversationId, 30);
   const leadBefore = await getLeadByConversationId(currentConversationId);
+  const whatsappPhone =
+    channel === "whatsapp"
+      ? normalizeWhatsAppPhone(external_user_id)
+      : null;
 
   const extracted = extractLeadDataFromText(text, leadBefore);
 
@@ -740,7 +749,7 @@ async function processIncomingMessage({
     conversation_id: currentConversationId,
     name: extracted?.name ?? null,
     email: extracted?.email ?? null,
-    phone: extracted?.phone ?? null,
+    phone: extracted?.phone ?? whatsappPhone ?? leadBefore?.phone ?? null,
     interest_service: extracted?.interest_service ?? null,
     urgency: extracted?.urgency ?? null,
     budget_range: extracted?.budget_range ?? null,
@@ -754,7 +763,9 @@ async function processIncomingMessage({
     main_goal: extracted?.main_goal ?? null,
     current_situation: extracted?.current_situation ?? null,
     pain_points: extracted?.pain_points ?? null,
-    preferred_contact_channel: extracted?.preferred_contact_channel ?? null,
+    preferred_contact_channel:
+      extracted?.preferred_contact_channel ??
+      (channel === "whatsapp" ? "whatsapp" : null),
     last_intent: extracted?.last_intent ?? null,
     current_step: leadBefore?.current_step ?? null,
     last_question: leadBefore?.last_question ?? null,
