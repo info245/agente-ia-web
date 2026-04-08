@@ -40,6 +40,7 @@ const BUILD_TAG = "memory-v13-inline-slot-flow-no-loop-safe";
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v25.0";
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -568,7 +569,7 @@ async function sendWhatsAppText(to, bodyText) {
   };
 
   const response = await fetch(
-    `https://graph.facebook.com/v23.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+    `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
     {
       method: "POST",
       headers: {
