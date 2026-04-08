@@ -1187,8 +1187,28 @@ app.post("/webhooks/whatsapp", async (req, res) => {
             channel: "whatsapp",
           });
 
+          console.log("whatsapp processed result", {
+            from,
+            conversation_id: result?.conversation_id || null,
+            hasReply: !!result?.reply,
+            chat_completed: result?.chat_completed || false,
+          });
+
           if (result?.reply) {
-            await sendWhatsAppText(from, result.reply);
+            try {
+              const sendResult = await sendWhatsAppText(from, result.reply);
+              console.log("whatsapp send ok", {
+                from,
+                messageId: sendResult?.messages?.[0]?.id || null,
+              });
+            } catch (e) {
+              console.log("whatsapp send failure", {
+                from,
+                error: e.message,
+              });
+            }
+          } else {
+            console.log("whatsapp empty reply skipped", { from });
           }
         }
       }
