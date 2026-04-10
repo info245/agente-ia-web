@@ -177,6 +177,8 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
     .section {
       padding: 26px 38px;
       border-bottom: 1px solid var(--line);
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .section:last-child {
       border-bottom: 0;
@@ -192,6 +194,8 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
     table {
       width: 100%;
       border-collapse: collapse;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     th, td {
       border-bottom: 1px solid var(--line);
@@ -217,11 +221,15 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       display: grid;
       gap: 10px;
       margin-top: 18px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .totals-meta {
       display: flex;
       justify-content: flex-end;
       margin-top: 16px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .billing-pill {
       display: inline-flex;
@@ -274,6 +282,10 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       box-shadow: 0 10px 24px rgba(31, 94, 255, 0.22);
     }
     @media print {
+      html {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
       body {
         background: #fff;
         padding: 0;
@@ -286,6 +298,59 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
         border: 0;
         border-radius: 0;
         box-shadow: none;
+      }
+      .hero {
+        padding: 24px 28px 20px;
+      }
+      .brand-logo {
+        width: 110px;
+        margin-bottom: 12px;
+      }
+      .brand h1 {
+        font-size: 1.75rem;
+        margin-bottom: 8px;
+      }
+      .hero-grid {
+        gap: 10px;
+        margin-top: 18px;
+      }
+      .hero-card {
+        padding: 10px 12px;
+        border-radius: 14px;
+      }
+      .section {
+        padding: 18px 28px;
+      }
+      .section h2 {
+        margin-bottom: 10px;
+        font-size: 1.05rem;
+      }
+      .copy {
+        font-size: 0.95rem;
+        line-height: 1.45;
+      }
+      th, td {
+        padding: 10px 10px;
+        font-size: 0.92rem;
+      }
+      .totals {
+        width: min(320px, 100%);
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .total-row {
+        padding: 10px 12px;
+      }
+      .totals-meta {
+        margin-top: 10px;
+      }
+      .billing-pill {
+        padding: 7px 12px;
+        font-size: 0.9rem;
+      }
+      .footer {
+        font-size: 0.82rem;
+        line-height: 1.45;
       }
     }
     @media (max-width: 860px) {
