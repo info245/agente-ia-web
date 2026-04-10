@@ -7,6 +7,7 @@ const state = {
 };
 
 const LEAD_PAGE_SIZE = 15;
+const API_BASE = `${window.location.origin}/api/crm`;
 
 const el = {
   refreshBtn: document.getElementById("refreshBtn"),
@@ -62,7 +63,7 @@ async function fetchJson(url, options = {}) {
 
   if (!contentType.includes("application/json")) {
     const preview = raw.trim().slice(0, 120);
-    throw new Error(`La API no devolvio JSON. Respuesta: ${preview || `HTTP ${res.status}`}`);
+    throw new Error(`La API no devolvio JSON en ${options.method || "GET"} ${url}. Respuesta: ${preview || `HTTP ${res.status}`}`);
   }
 
   let data;
@@ -256,7 +257,7 @@ function setStatus(target, message = "", kind = "") {
 }
 
 async function loadLeads() {
-  const data = await fetchJson("/api/crm/leads");
+  const data = await fetchJson(`${API_BASE}/leads`);
   state.leads = data.leads || [];
 
   if (!state.selectedLead && state.leads.length) {
@@ -283,12 +284,12 @@ async function loadLeads() {
 }
 
 async function loadMessages(conversationId) {
-  const data = await fetchJson(`/api/crm/conversations/${conversationId}/messages`);
+  const data = await fetchJson(`${API_BASE}/conversations/${conversationId}/messages`);
   renderMessages(data.messages || []);
 }
 
 async function loadQuote(leadId) {
-  const data = await fetchJson(`/api/crm/leads/${leadId}/quote`);
+  const data = await fetchJson(`${API_BASE}/leads/${leadId}/quote`);
   renderQuote(data.quote || null);
 }
 
@@ -327,7 +328,7 @@ async function saveLead() {
       internal_notes: el.internalNotes.value,
     };
 
-    await fetchJson(`/api/crm/leads/${state.selectedLead.id}`, {
+    await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -392,7 +393,7 @@ async function saveQuote() {
       currency: "EUR",
     };
 
-    const data = await fetchJson(`/api/crm/leads/${state.selectedLead.id}/quote`, {
+    const data = await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}/quote`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
