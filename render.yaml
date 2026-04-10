@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: agente-ia-web-backend
+    name: tmedia-global-ai
     runtime: node
     rootDir: backend
-    buildCommand: npm install
+    buildCommand: npm install && npx puppeteer browsers install chrome --path /opt/render/project/.cache/puppeteer
     startCommand: npm start
     healthCheckPath: /health
     autoDeploy: true
@@ -12,6 +12,8 @@ services:
         value: 22.22.0
       - key: PORT
         value: 3000
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/project/.cache/puppeteer
       - key: OPENAI_API_KEY
         sync: false
       - key: SUPABASE_URL
@@ -27,7 +29,9 @@ services:
       - key: WHATSAPP_VERIFY_TOKEN
         sync: false
       - key: WHATSAPP_API_VERSION
-        value: v23.0
+        value: v25.0
+      - key: WHATSAPP_APP_SECRET
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
