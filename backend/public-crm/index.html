@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRM TMedia</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="crm-shell">
+    <aside class="crm-sidebar">
+      <div class="crm-sidebar-header">
+        <h1>CRM</h1>
+        <button id="refreshBtn" type="button">Actualizar</button>
+      </div>
+      <div id="leadList" class="lead-list"></div>
+    </aside>
+
+    <main class="crm-main">
+      <section class="crm-card crm-summary">
+        <div class="crm-card-header">
+          <h2 id="leadTitle">Selecciona un lead</h2>
+          <span id="leadChannel" class="pill">-</span>
+        </div>
+        <div id="leadMeta" class="lead-meta"></div>
+      </section>
+
+      <section class="crm-grid">
+        <section class="crm-card">
+          <div class="crm-card-header">
+            <h3>Gestion</h3>
+          </div>
+          <form id="leadForm" class="lead-form">
+            <label>
+              Estado CRM
+              <select id="crmStatus" name="crm_status">
+                <option value="nuevo">nuevo</option>
+                <option value="contactado">contactado</option>
+                <option value="cualificado">cualificado</option>
+                <option value="presupuesto_borrador">presupuesto_borrador</option>
+                <option value="presupuesto_enviado">presupuesto_enviado</option>
+                <option value="negociacion">negociacion</option>
+                <option value="ganado">ganado</option>
+                <option value="perdido">perdido</option>
+              </select>
+            </label>
+
+            <label>
+              Estado presupuesto
+              <select id="quoteStatus" name="quote_status">
+                <option value="sin_presupuesto">sin_presupuesto</option>
+                <option value="draft">draft</option>
+                <option value="sent">sent</option>
+                <option value="accepted">accepted</option>
+                <option value="rejected">rejected</option>
+              </select>
+            </label>
+
+            <label>
+              Responsable
+              <input id="assignedTo" name="assigned_to" type="text" />
+            </label>
+
+            <label>
+              Siguiente accion
+              <input id="nextAction" name="next_action" type="text" />
+            </label>
+
+            <label>
+              Seguimiento
+              <input id="followUpAt" name="follow_up_at" type="datetime-local" />
+            </label>
+
+            <label>
+              Notas internas
+              <textarea id="internalNotes" name="internal_notes" rows="8"></textarea>
+            </label>
+
+            <button id="saveBtn" type="submit">Guardar cambios</button>
+          </form>
+        </section>
+
+        <section class="crm-card">
+          <div class="crm-card-header">
+            <h3>Conversacion</h3>
+          </div>
+          <div id="messageList" class="message-list"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

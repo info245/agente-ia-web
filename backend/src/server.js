@@ -1,14 +1,19 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import crypto from "crypto";
+import { fileURLToPath } from "url";
 
 import { extractLeadDataFromText } from "./lib/leadExtractor.js";
 import {
   createConversation,
   saveMessage,
+  saveConversationEvent,
   upsertLeadFromConversation,
   getConversationMessages,
   getLeadByConversationId,
+  listCrmLeads,
+  updateLeadCrmFields,
 } from "./lib/chatStore.js";
 
 import { mergeLeadData } from "./lib/leadMerge.js";
@@ -29,10 +34,19 @@ import {
 } from "./lib/memoryUtils.js";
 
 const app = express();
+const crmPublicDir = fileURLToPath(new URL("../public-crm", import.meta.url));
 
 app.use(cors());
 app.options("*", cors());
-app.use(express.json({ limit: "1mb" }));
+app.use(
+  express.json({
+    limit: "1mb",
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
+app.use("/crm", express.static(crmPublicDir));
 
 const PORT = process.env.PORT || 3000;
 const BUILD_TAG = "memory-v13-inline-slot-flow-no-loop-safe";
@@ -41,6 +55,8 @@ const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v25.0";
+const WHATSAPP_APP_SECRET =
+  process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET || "";
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -343,6 +359,7 @@ function detectBusinessActivity(text) {
   if (isUserQuestion(text)) return null;
   if (isLikelyValidName(text)) return null;
   if (detectService(text)) return null;
+  if (detectEmail(text) || detectPhone(text)) return null;
 
   const triggers = [
     "tengo una",
@@ -365,6 +382,16 @@ function detectBusinessActivity(text) {
   if (t.includes("clinica") || t.includes("clínica")) return raw;
   if (t.includes("abogado") || t.includes("bufete")) return raw;
   if (t.includes("dental") || t.includes("dentista")) return raw;
+  if (
+    /\b(venta|ventas|fabricacion|fabricaciÃ³n|distribucion|distribuciÃ³n|comercio|tienda|negocio|servicio|servicios|consultoria|consultorÃ­a|asesoria|asesorÃ­a|reparacion|reparaciÃ³n|instalacion|instalaciÃ³n|alquiler|formacion|formaciÃ³n|marketing|publicidad|helados|ropa|comida|restauracion|restauraciÃ³n|cafeteria|cafeterÃ­a)\b/i.test(
+      t
+    )
+  ) {
+    return raw;
+  }
+  if (raw.split(/\s+/).filter(Boolean).length >= 2 && raw.length >= 8) {
+    return raw;
+  }
 
   return null;
 }
@@ -407,11 +434,69 @@ function detectPhone(text) {
   const digits = String(text || "").replace(/[^\d+]/g, "");
   if (digits.length >= 6) return digits;
   return null;
+  if (
+    /\b(venta|ventas|fabricacion|fabricación|distribucion|distribución|comercio|tienda|negocio|servicio|servicios|consultoria|consultoría|asesoria|asesoría|reparacion|reparación|instalacion|instalación|alquiler|formacion|formación|marketing|publicidad|helados|ropa|comida|restauracion|restauración|cafeteria|cafetería)\b/i.test(
+      t
+    )
+  ) {
+    return raw;
+  }
+
+  if (raw.split(/\s+/).filter(Boolean).length >= 2 && raw.length >= 8) {
+    return raw;
+  }
+
+  return null;
 }
 
 function normalizeWhatsAppPhone(value) {
   const digits = String(value || "").replace(/\D/g, "");
   return digits.length >= 6 ? digits : null;
+}
+
+function hasRepeatedSameQuestion(lead, expectedStep) {
+  return lead?.current_step === expectedStep && norm(lead?.last_question).length > 0;
+}
+
+function looksLikeUsefulFreeTextAnswer(text) {
+  const raw = norm(text);
+  if (!raw) return false;
+  if (isUserQuestion(raw)) return false;
+  if (detectEmail(raw) || detectPhone(raw)) return false;
+  return raw.length >= 3;
+}
+
+function validateMetaSignature(req) {
+  if (!WHATSAPP_APP_SECRET) {
+    return { ok: true, skipped: true };
+  }
+
+  const signatureHeader =
+    req.get("x-hub-signature-256") || req.get("X-Hub-Signature-256");
+  if (!signatureHeader || !signatureHeader.startsWith("sha256=")) {
+    return { ok: false, reason: "missing-signature" };
+  }
+
+  const rawBody = req.rawBody;
+  if (!rawBody || !Buffer.isBuffer(rawBody)) {
+    return { ok: false, reason: "missing-raw-body" };
+  }
+
+  const expected = crypto
+    .createHmac("sha256", WHATSAPP_APP_SECRET)
+    .update(rawBody)
+    .digest("hex");
+  const received = signatureHeader.slice("sha256=".length);
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  const receivedBuffer = Buffer.from(received, "utf8");
+
+  if (expectedBuffer.length !== receivedBuffer.length) {
+    return { ok: false, reason: "signature-length-mismatch" };
+  }
+
+  return crypto.timingSafeEqual(expectedBuffer, receivedBuffer)
+    ? { ok: true }
+    : { ok: false, reason: "signature-mismatch" };
 }
 
 function getCurrentStep(lead) {
@@ -504,6 +589,14 @@ function buildLeadSignature(lead) {
     last_question: lead?.last_question || null,
     summary: lead?.summary || null,
   });
+}
+
+async function trackConversationEvent(params) {
+  try {
+    await saveConversationEvent(params);
+  } catch (e) {
+    console.log("conversation event error", e.message);
+  }
 }
 
 function buildTranscript(messages = []) {
@@ -645,6 +738,11 @@ function applyFlowPatch(lead, text) {
         patch.business_activity = "pendiente";
       } else if (detectedService) {
         patch.business_activity = "pendiente";
+      } else if (
+        hasRepeatedSameQuestion(lead, "ask_business_activity") &&
+        looksLikeUsefulFreeTextAnswer(text)
+      ) {
+        patch.business_activity = norm(text);
       }
       break;
 
@@ -659,6 +757,11 @@ function applyFlowPatch(lead, text) {
         patch.main_goal = detectedGoal;
       } else if (isUnknownResponse(text)) {
         patch.main_goal = "pendiente_definir";
+      } else if (
+        hasRepeatedSameQuestion(lead, "ask_goal") &&
+        looksLikeUsefulFreeTextAnswer(text)
+      ) {
+        patch.main_goal = norm(text);
       }
       break;
 
@@ -722,6 +825,7 @@ async function processIncomingMessage({
   }
 
   let currentConversationId = conversation_id;
+  let createdConversation = false;
 
   if (!currentConversationId) {
     const conversation = await createConversation({
@@ -729,6 +833,19 @@ async function processIncomingMessage({
       external_user_id: external_user_id || null,
     });
     currentConversationId = conversation.id;
+    createdConversation = true;
+  }
+
+  if (createdConversation) {
+    await trackConversationEvent({
+      conversation_id: currentConversationId,
+      event_type: "conversation_started",
+      channel: channel || "web",
+      external_user_id: external_user_id || null,
+      payload: {
+        first_message: String(text || "").slice(0, 500),
+      },
+    });
   }
 
   await saveMessage({
@@ -737,8 +854,20 @@ async function processIncomingMessage({
     content: text,
   });
 
+  await trackConversationEvent({
+    conversation_id: currentConversationId,
+    event_type: "message_received",
+    channel: channel || "web",
+    external_user_id: external_user_id || null,
+    payload: {
+      role: "user",
+      text: String(text || "").slice(0, 500),
+    },
+  });
+
   const history = await getConversationMessages(currentConversationId, 30);
   const leadBefore = await getLeadByConversationId(currentConversationId);
+  const leadSignatureBefore = buildLeadSignature(leadBefore || {});
   const whatsappPhone =
     channel === "whatsapp"
       ? normalizeWhatsAppPhone(external_user_id)
@@ -949,12 +1078,18 @@ ${ragContext}
 
     const openaiInput = buildOpenAIInput(systemPrompt, history);
 
-    const ai = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: openaiInput,
-    });
+    try {
+      const ai = await openai.responses.create({
+        model: "gpt-4.1-mini",
+        input: openaiInput,
+      });
 
-    reply = ai.output_text?.trim();
+      reply = ai.output_text?.trim();
+    } catch (e) {
+      console.log("openai reply error", e.message);
+      reply =
+        "He recibido tu mensaje, pero ahora mismo estoy teniendo un problema puntual para responder. Si quieres, vuelve a escribirme en unos segundos.";
+    }
 
     if (!reply) {
       reply = "Cuéntame un poco más sobre tu proyecto para poder orientarte mejor.";
@@ -969,7 +1104,37 @@ ${ragContext}
     content: reply,
   });
 
+  await trackConversationEvent({
+    conversation_id: currentConversationId,
+    event_type: "message_sent",
+    channel: channel || "web",
+    external_user_id: external_user_id || null,
+    payload: {
+      role: "assistant",
+      text: String(reply || "").slice(0, 500),
+    },
+  });
+
   leadAfter = await getLeadByConversationId(currentConversationId);
+  const leadSignatureAfter = buildLeadSignature(leadAfter || {});
+
+  if (leadSignatureBefore !== leadSignatureAfter) {
+    await trackConversationEvent({
+      conversation_id: currentConversationId,
+      event_type: "lead_updated",
+      channel: channel || "web",
+      external_user_id: external_user_id || null,
+      payload: {
+        lead_score: leadAfter?.lead_score ?? null,
+        interest_service: leadAfter?.interest_service || null,
+        budget_range: leadAfter?.budget_range || null,
+        urgency: leadAfter?.urgency || null,
+        has_name: !!leadAfter?.name,
+        has_email: !!leadAfter?.email,
+        has_phone: !!leadAfter?.phone,
+      },
+    });
+  }
 
   const chatCompleted = shouldMarkChatCompleted(leadAfter, reply);
 
@@ -994,6 +1159,19 @@ ${ragContext}
     } catch (e) {
       console.log("final summary error", e.message);
     }
+  }
+
+  if (chatCompleted) {
+    await trackConversationEvent({
+      conversation_id: currentConversationId,
+      event_type: "chat_completed",
+      channel: channel || "web",
+      external_user_id: external_user_id || null,
+      payload: {
+        lead_score: leadAfter?.lead_score ?? null,
+        interest_service: leadAfter?.interest_service || null,
+      },
+    });
   }
 
   try {
@@ -1088,6 +1266,55 @@ app.get("/debug/lead/:conversationId", async (req, res) => {
   }
 });
 
+app.get("/api/crm/leads", async (req, res) => {
+  try {
+    const leads = await listCrmLeads(200);
+
+    const enriched = await Promise.all(
+      leads.map(async (lead) => {
+        const conversationId = lead?.conversation_id;
+        let lastMessage = null;
+
+        if (conversationId) {
+          const messages = await getConversationMessages(conversationId, 1).catch(() => []);
+          lastMessage = messages?.[0] || null;
+        }
+
+        return {
+          ...lead,
+          channel: lead?.conversations?.channel || "web",
+          external_user_id: lead?.conversations?.external_user_id || null,
+          conversation_created_at: lead?.conversations?.created_at || null,
+          last_message: lastMessage,
+        };
+      })
+    );
+
+    res.json({ ok: true, leads: enriched });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
+  try {
+    const messages = await getConversationMessages(req.params.conversationId, 200);
+    const lead = await getLeadByConversationId(req.params.conversationId);
+    res.json({ ok: true, messages, lead });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.patch("/api/crm/leads/:leadId", async (req, res) => {
+  try {
+    const updated = await updateLeadCrmFields(req.params.leadId, req.body || {});
+    res.json({ ok: true, lead: updated });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.post("/messages", async (req, res) => {
   try {
     const { text, conversation_id, external_user_id, channel } = req.body || {};
@@ -1130,6 +1357,12 @@ app.get("/webhooks/whatsapp", (req, res) => {
 
 app.post("/webhooks/whatsapp", async (req, res) => {
   try {
+    const signatureValidation = validateMetaSignature(req);
+    if (!signatureValidation.ok) {
+      console.log("whatsapp signature validation failed", signatureValidation);
+      return res.sendStatus(401);
+    }
+
     res.sendStatus(200);
 
     const entries = req.body?.entry || [];

@@ -6,6 +6,11 @@ function clean(value) {
   return v.length ? v : null;
 }
 
+function cleanJson(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value;
+}
+
 export async function getLatestConversationByExternalUserId({
   channel,
   external_user_id,
@@ -118,6 +123,54 @@ export async function saveMessage({
   return data;
 }
 
+export async function saveConversationEvent({
+  conversation_id,
+  event_type,
+  channel = null,
+  external_user_id = null,
+  payload = null,
+} = {}) {
+  const safeConversationId = clean(conversation_id);
+  const safeEventType = clean(event_type);
+
+  if (!safeConversationId) {
+    throw new Error("saveConversationEvent: conversation_id es obligatorio");
+  }
+  if (!safeEventType) {
+    throw new Error("saveConversationEvent: event_type es obligatorio");
+  }
+
+  const insertPayload = {
+    conversation_id: safeConversationId,
+    event_type: safeEventType,
+    channel: clean(channel),
+    external_user_id: clean(external_user_id),
+    payload: cleanJson(payload),
+  };
+
+  const { data, error } = await supabase
+    .from("conversation_events")
+    .insert(insertPayload)
+    .select()
+    .single();
+
+  if (error) {
+    const message = String(error.message || "").toLowerCase();
+    if (
+      message.includes("conversation_events") ||
+      message.includes("does not exist") ||
+      message.includes("payload")
+    ) {
+      console.log("conversation_events skipped", error.message);
+      return { skipped: true, reason: error.message };
+    }
+
+    throw error;
+  }
+
+  return data;
+}
+
 export async function getConversationMessages(conversation_id, limit = 30) {
   const safeConversationId = clean(conversation_id);
   if (!safeConversationId) {
@@ -152,6 +205,55 @@ export async function getLeadByConversationId(conversation_id) {
 
   if (error) throw error;
   return data || null;
+}
+
+export async function listCrmLeads(limit = 200) {
+  const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 200;
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select(
+      `
+      *,
+      conversations (
+        id,
+        channel,
+        external_user_id,
+        created_at
+      )
+    `
+    )
+    .order("created_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (error) throw error;
+  return data || [];
+}
+
+export async function updateLeadCrmFields(leadId, patch = {}) {
+  const safeLeadId = clean(leadId);
+  if (!safeLeadId) {
+    throw new Error("updateLeadCrmFields: leadId es obligatorio");
+  }
+
+  const payload = {
+    crm_status: clean(patch.crm_status),
+    assigned_to: clean(patch.assigned_to),
+    internal_notes: clean(patch.internal_notes),
+    next_action: clean(patch.next_action),
+    follow_up_at: patch.follow_up_at || null,
+    quote_status: clean(patch.quote_status),
+  };
+
+  const { data, error } = await supabase
+    .from("leads")
+    .update(payload)
+    .eq("id", safeLeadId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 }
 
 export async function upsertLeadFromConversation(lead = {}) {
