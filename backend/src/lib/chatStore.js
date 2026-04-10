@@ -11,6 +11,18 @@ function cleanJson(value) {
   return value;
 }
 
+function cleanQuoteItems(value) {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => ({
+      concept: clean(item?.concept),
+      quantity: Number.isFinite(Number(item?.quantity)) ? Number(item.quantity) : 0,
+      unit_price: Number.isFinite(Number(item?.unit_price)) ? Number(item.unit_price) : 0,
+    }))
+    .filter((item) => item.concept || item.quantity || item.unit_price);
+}
+
 export async function getLatestConversationByExternalUserId({
   channel,
   external_user_id,
@@ -309,6 +321,8 @@ export async function upsertLatestQuoteForLead(lead = {}, quote = {}) {
       summary: clean(quote.summary),
       scope: clean(quote.scope),
       assumptions: clean(quote.assumptions),
+      tax_rate: Number.isFinite(Number(quote.tax_rate)) ? Number(quote.tax_rate) : 0,
+      items: cleanQuoteItems(quote.items),
     },
     html_snapshot: clean(quote.html_snapshot),
     sent_via: clean(quote.sent_via),

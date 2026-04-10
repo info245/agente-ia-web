@@ -4,6 +4,7 @@ const state = {
   selectedLead: null,
   selectedQuote: null,
   leadPage: 0,
+  quoteItems: [],
 };
 
 const LEAD_PAGE_SIZE = 15;
@@ -32,13 +33,19 @@ const el = {
   followUpAt: document.getElementById("followUpAt"),
   internalNotes: document.getElementById("internalNotes"),
   quoteTitle: document.getElementById("quoteTitle"),
-  quoteTotal: document.getElementById("quoteTotal"),
+  quoteCurrency: document.getElementById("quoteCurrency"),
+  quoteTaxRate: document.getElementById("quoteTaxRate"),
   quoteSummary: document.getElementById("quoteSummary"),
   quoteScope: document.getElementById("quoteScope"),
   quoteBody: document.getElementById("quoteBody"),
   quoteAssumptions: document.getElementById("quoteAssumptions"),
   quoteAutofillBtn: document.getElementById("quoteAutofillBtn"),
   quoteSaveBtn: document.getElementById("quoteSaveBtn"),
+  quoteAddItemBtn: document.getElementById("quoteAddItemBtn"),
+  quoteItemsList: document.getElementById("quoteItemsList"),
+  quoteSubtotal: document.getElementById("quoteSubtotal"),
+  quoteTax: document.getElementById("quoteTax"),
+  quoteTotal: document.getElementById("quoteTotal"),
   quoteSaveStatus: document.getElementById("quoteSaveStatus"),
 };
 
@@ -46,6 +53,14 @@ function fmtDate(value) {
   if (!value) return "-";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString("es-ES");
+}
+
+function fmtMoney(value, currency = "EUR") {
+  const amount = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: currency || "EUR",
+  }).format(amount);
 }
 
 function toDatetimeLocal(value) {
@@ -242,12 +257,23 @@ function renderMessages(messages = []) {
 function renderQuote(quote) {
   state.selectedQuote = quote || null;
   const content = quote?.content_json || {};
+  state.quoteItems = Array.isArray(content.items) && content.items.length
+    ? content.items.map((item) => ({
+        concept: item?.concept || "",
+        quantity: Number(item?.quantity || 1),
+        unit_price: Number(item?.unit_price || 0),
+      }))
+    : [];
+
   el.quoteTitle.value = quote?.title || "";
-  el.quoteTotal.value = quote?.total ?? "";
+  el.quoteCurrency.value = quote?.currency || "EUR";
+  el.quoteTaxRate.value = content.tax_rate ?? 21;
   el.quoteSummary.value = content.summary || "";
   el.quoteScope.value = content.scope || "";
   el.quoteBody.value = content.body || "";
   el.quoteAssumptions.value = content.assumptions || "";
+  renderQuoteItems();
+  updateQuoteTotals();
 }
 
 function setStatus(target, message = "", kind = "") {
@@ -373,6 +399,11 @@ function buildQuoteSuggestion(lead) {
   return {
     title: `Propuesta ${service}`,
     summary: `${service} para ${business}`,
+    tax_rate: 21,
+    items: [
+      { concept: `Setup inicial de ${service}`, quantity: 1, unit_price: 180 },
+      { concept: `Gestion mensual de ${service}`, quantity: 1, unit_price: 300 },
+    ],
     scope: [
       "Analisis inicial del negocio y del punto de partida.",
       `Definicion de estrategia para ${service}.`,
@@ -388,10 +419,97 @@ function autofillQuote() {
   if (!state.selectedLead) return;
   const draft = buildQuoteSuggestion(state.selectedLead);
   el.quoteTitle.value = draft.title;
+  el.quoteTaxRate.value = draft.tax_rate;
   el.quoteSummary.value = draft.summary;
   el.quoteScope.value = draft.scope;
   el.quoteBody.value = draft.body;
   el.quoteAssumptions.value = draft.assumptions;
+  state.quoteItems = draft.items.map((item) => ({ ...item }));
+  renderQuoteItems();
+  updateQuoteTotals();
+}
+
+function createEmptyQuoteItem() {
+  return { concept: "", quantity: 1, unit_price: 0 };
+}
+
+function renderQuoteItems() {
+  el.quoteItemsList.innerHTML = "";
+
+  if (!state.quoteItems.length) {
+    el.quoteItemsList.innerHTML = '<div class="empty">No hay partidas todavia.</div>';
+    return;
+  }
+
+  state.quoteItems.forEach((item, index) => {
+    const row = document.createElement("div");
+    row.className = "quote-item";
+    row.innerHTML = `
+      <label>
+        Concepto
+        <input type="text" data-field="concept" data-index="${index}" value="${item.concept || ""}" />
+      </label>
+      <label>
+        Cantidad
+        <input type="number" min="0" step="1" data-field="quantity" data-index="${index}" value="${item.quantity || 1}" />
+      </label>
+      <label>
+        Precio unitario
+        <input type="number" min="0" step="0.01" data-field="unit_price" data-index="${index}" value="${item.unit_price || 0}" />
+      </label>
+      <button type="button" class="quote-item-remove" data-remove-index="${index}">Quitar</button>
+    `;
+    el.quoteItemsList.appendChild(row);
+  });
+
+  el.quoteItemsList.querySelectorAll("input").forEach((input) => {
+    input.addEventListener("input", handleQuoteItemChange);
+  });
+
+  el.quoteItemsList.querySelectorAll("[data-remove-index]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const index = Number(button.getAttribute("data-remove-index"));
+      state.quoteItems.splice(index, 1);
+      renderQuoteItems();
+      updateQuoteTotals();
+    });
+  });
+}
+
+function handleQuoteItemChange(event) {
+  const field = event.target.getAttribute("data-field");
+  const index = Number(event.target.getAttribute("data-index"));
+  if (!field || Number.isNaN(index) || !state.quoteItems[index]) return;
+
+  if (field === "concept") {
+    state.quoteItems[index][field] = event.target.value;
+  } else {
+    state.quoteItems[index][field] = Number(event.target.value || 0);
+  }
+
+  updateQuoteTotals();
+}
+
+function calculateQuoteTotals() {
+  const subtotal = state.quoteItems.reduce((sum, item) => {
+    const qty = Number.isFinite(Number(item.quantity)) ? Number(item.quantity) : 0;
+    const price = Number.isFinite(Number(item.unit_price)) ? Number(item.unit_price) : 0;
+    return sum + qty * price;
+  }, 0);
+
+  const taxRate = Number.isFinite(Number(el.quoteTaxRate.value)) ? Number(el.quoteTaxRate.value) : 0;
+  const tax = subtotal * (taxRate / 100);
+  const total = subtotal + tax;
+
+  return { subtotal, tax, total, taxRate };
+}
+
+function updateQuoteTotals() {
+  const { subtotal, tax, total } = calculateQuoteTotals();
+  const currency = el.quoteCurrency.value || "EUR";
+  el.quoteSubtotal.textContent = fmtMoney(subtotal, currency);
+  el.quoteTax.textContent = fmtMoney(tax, currency);
+  el.quoteTotal.textContent = fmtMoney(total, currency);
 }
 
 async function saveQuote() {
@@ -404,13 +522,17 @@ async function saveQuote() {
   try {
     const payload = {
       title: el.quoteTitle.value,
-      total: el.quoteTotal.value,
+      subtotal: calculateQuoteTotals().subtotal,
+      tax: calculateQuoteTotals().tax,
+      total: calculateQuoteTotals().total,
+      currency: el.quoteCurrency.value || "EUR",
       summary: el.quoteSummary.value,
       scope: el.quoteScope.value,
       body: el.quoteBody.value,
       assumptions: el.quoteAssumptions.value,
+      items: state.quoteItems,
+      tax_rate: calculateQuoteTotals().taxRate,
       status: "draft",
-      currency: "EUR",
     };
 
     const data = await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}/quote`, {
@@ -454,6 +576,13 @@ el.leadNextBtn.addEventListener("click", () => {
 });
 el.quoteAutofillBtn.addEventListener("click", autofillQuote);
 el.quoteSaveBtn.addEventListener("click", saveQuote);
+el.quoteAddItemBtn.addEventListener("click", () => {
+  state.quoteItems.push(createEmptyQuoteItem());
+  renderQuoteItems();
+  updateQuoteTotals();
+});
+el.quoteTaxRate.addEventListener("input", updateQuoteTotals);
+el.quoteCurrency.addEventListener("input", updateQuoteTotals);
 
 loadLeads().catch((error) => {
   el.leadTableBody.innerHTML = `<tr><td colspan="8" class="empty">Error cargando CRM: ${error.message}</td></tr>`;

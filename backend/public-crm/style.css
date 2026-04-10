@@ -91,6 +91,7 @@ textarea {
 #saveBtn,
 #quoteAutofillBtn,
 #quoteSaveBtn,
+#quoteAddItemBtn,
 #leadPrevBtn,
 #leadNextBtn {
   border: 0;
@@ -110,6 +111,7 @@ textarea {
 #saveBtn:disabled,
 #quoteAutofillBtn:disabled,
 #quoteSaveBtn:disabled,
+#quoteAddItemBtn:disabled,
 #leadPrevBtn:disabled,
 #leadNextBtn:disabled {
   opacity: 0.45;
@@ -348,6 +350,60 @@ textarea {
   gap: 12px;
 }
 
+.quote-items-box {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.quote-items-list {
+  display: grid;
+  gap: 10px;
+}
+
+.quote-item {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.quote-item-remove {
+  border: 0;
+  background: #f2ddd7;
+  color: #8b2c2c;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.quote-totals {
+  margin-top: 18px;
+  margin-left: auto;
+  width: min(360px, 100%);
+  display: grid;
+  gap: 8px;
+}
+
+.quote-total-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.quote-total-row.grand {
+  border: 2px solid var(--accent-line);
+  background: var(--accent-soft);
+}
+
 .save-status {
   min-height: 22px;
   color: var(--muted);
@@ -369,7 +425,8 @@ textarea {
 @media (max-width: 1100px) {
   .lead-meta,
   .crm-grid,
-  .quote-grid {
+  .quote-grid,
+  .quote-item {
     grid-template-columns: 1fr;
   }
 

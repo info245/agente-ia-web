@@ -156,8 +156,13 @@
           </label>
 
           <label>
-            Total
-            <input id="quoteTotal" name="total" type="number" min="0" step="0.01" />
+            Moneda
+            <input id="quoteCurrency" name="currency" type="text" value="EUR" />
+          </label>
+
+          <label>
+            IVA %
+            <input id="quoteTaxRate" name="tax_rate" type="number" min="0" step="0.01" value="21" />
           </label>
 
           <label class="quote-grid-full">
@@ -180,6 +185,29 @@
             <textarea id="quoteAssumptions" name="assumptions" rows="4"></textarea>
           </label>
         </div>
+
+        <section class="quote-items-box">
+          <div class="crm-card-header">
+            <h4>Partidas</h4>
+            <button id="quoteAddItemBtn" type="button">Añadir partida</button>
+          </div>
+          <div id="quoteItemsList" class="quote-items-list"></div>
+        </section>
+
+        <section class="quote-totals">
+          <div class="quote-total-row">
+            <span>Subtotal</span>
+            <strong id="quoteSubtotal">0,00 EUR</strong>
+          </div>
+          <div class="quote-total-row">
+            <span>IVA</span>
+            <strong id="quoteTax">0,00 EUR</strong>
+          </div>
+          <div class="quote-total-row grand">
+            <span>Total</span>
+            <strong id="quoteTotal">0,00 EUR</strong>
+          </div>
+        </section>
         <div id="quoteSaveStatus" class="save-status" aria-live="polite"></div>
       </form>
     </section>
