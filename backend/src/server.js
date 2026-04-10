@@ -1334,6 +1334,16 @@ app.get("/api/crm/leads/:leadId/quote", async (req, res) => {
   }
 });
 
+app.get("/api/crm/service-facts/:serviceName", async (req, res) => {
+  try {
+    const serviceName = decodeURIComponent(req.params.serviceName || "");
+    const facts = getServiceFacts(serviceName);
+    res.json({ ok: true, facts: facts || null });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/crm/quotes/:leadId/preview", async (req, res) => {
   try {
     const leads = await listCrmLeads(500);

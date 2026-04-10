@@ -283,6 +283,13 @@ function setStatus(target, message = "", kind = "") {
   target.className = `save-status${kind ? ` ${kind}` : ""}`;
 }
 
+async function getServiceFacts(serviceName) {
+  if (!serviceName) return null;
+  const encoded = encodeURIComponent(serviceName);
+  const data = await fetchJson(`${API_BASE}/service-facts/${encoded}`);
+  return data.facts || null;
+}
+
 async function loadLeads() {
   const data = await fetchJson(`${API_BASE}/leads`);
   state.leads = data.leads || [];
@@ -391,57 +398,82 @@ async function saveLead() {
   }
 }
 
-function buildQuoteSuggestion(lead) {
-  const service = lead?.interest_service || "servicio de marketing";
-  const business = lead?.business_activity || lead?.business_type || "tu proyecto";
-  const goal = lead?.main_goal || "mejorar resultados";
-  const budget = lead?.budget_range || "por definir";
+function buildServiceItems(service, serviceFacts = null) {
+  const normalizedService = String(service || "").toLowerCase();
 
-  let items = [
-    { concept: `Setup inicial de ${service}`, quantity: 1, unit_price: 180 },
-    { concept: `Gestion mensual de ${service}`, quantity: 1, unit_price: 300 },
-  ];
-
-  const normalizedService = service.toLowerCase();
   if (normalizedService.includes("google ads")) {
-    items = [
+    return [
       { concept: "Auditoria y planteamiento inicial de Google Ads", quantity: 1, unit_price: 190 },
-      { concept: "Configuracion y estructura de campanas", quantity: 1, unit_price: 210 },
+      { concept: "Configuracion y estructura de campañas", quantity: 1, unit_price: 210 },
       { concept: "Gestion mensual y optimizacion continua", quantity: 1, unit_price: 300 },
     ];
-  } else if (normalizedService.includes("seo")) {
-    items = [
+  }
+
+  if (normalizedService.includes("seo")) {
+    return [
       { concept: "Auditoria SEO inicial", quantity: 1, unit_price: 180 },
       { concept: "Plan de contenidos y palabras clave", quantity: 1, unit_price: 160 },
       { concept: "Optimizacion mensual SEO", quantity: 1, unit_price: 280 },
     ];
-  } else if (normalizedService.includes("meta ads")) {
-    items = [
-      { concept: "Auditoria inicial de Meta Ads", quantity: 1, unit_price: 180 },
-      { concept: "Preparacion creativa y estructura de campanas", quantity: 1, unit_price: 220 },
+  }
+
+  if (normalizedService.includes("meta ads") || normalizedService.includes("redes")) {
+    return [
+      { concept: "Auditoria inicial de campañas", quantity: 1, unit_price: 180 },
+      { concept: "Preparacion creativa y estructura de campañas", quantity: 1, unit_price: 220 },
       { concept: "Gestion mensual y optimizacion", quantity: 1, unit_price: 300 },
     ];
   }
+
+  const fallbackPrice = String(serviceFacts?.min_monthly_fee || serviceFacts?.min_project_fee || "")
+    .match(/(\d+)/)?.[1];
+
+  return [
+    {
+      concept: `Servicio base de ${service}`,
+      quantity: 1,
+      unit_price: fallbackPrice ? Number(fallbackPrice) : 300,
+    },
+  ];
+}
+
+function buildQuoteSuggestion(lead, serviceFacts = null) {
+  const service = lead?.interest_service || "servicio de marketing";
+  const business = lead?.business_activity || lead?.business_type || "tu proyecto";
+  const goal = lead?.main_goal || "mejorar resultados";
+  const budget = lead?.budget_range || "por definir";
+  const items = buildServiceItems(service, serviceFacts);
+  const includedBase = serviceFacts?.description
+    ? serviceFacts.description
+    : [
+        "Analisis inicial del negocio y del punto de partida.",
+        `Definicion de estrategia para ${service}.`,
+        "Configuracion y optimizacion continua.",
+        "Seguimiento de resultados y mejoras.",
+      ].join(" ");
+  const notes = serviceFacts?.notes || `Presupuesto orientativo detectado: ${budget}. Este borrador se puede ajustar antes de enviarlo.`;
 
   return {
     title: `Propuesta ${service}`,
     summary: `${service} para ${business}`,
     tax_rate: 21,
     items,
-    scope: [
-      "Analisis inicial del negocio y del punto de partida.",
-      `Definicion de estrategia para ${service}.`,
-      "Configuracion y optimizacion continua.",
-      "Seguimiento de resultados y mejoras.",
-    ].join("\n"),
-    body: `Hemos preparado una propuesta de ${service} para ${business}, orientada a ${goal}. El trabajo incluiria una fase inicial de analisis, puesta en marcha y seguimiento continuo para alinear la estrategia con tus objetivos.`,
-    assumptions: `Presupuesto orientativo detectado: ${budget}. Este borrador se puede ajustar antes de enviarlo.`,
+    scope: includedBase,
+    body: `Hemos preparado una propuesta de ${service} pensada para ${business}, con el objetivo de ${goal}. A continuacion tienes una version inicial del alcance y del desglose economico para revisarla y ajustarla antes del envio definitivo.`,
+    assumptions: `${notes}\n\nObjetivo principal detectado: ${goal}.\nPresupuesto orientativo detectado: ${budget}.`,
   };
 }
 
-function autofillQuote() {
+async function autofillQuote() {
   if (!state.selectedLead) return;
-  const draft = buildQuoteSuggestion(state.selectedLead);
+  let serviceFacts = null;
+  try {
+    serviceFacts = await getServiceFacts(state.selectedLead.interest_service);
+  } catch (_error) {
+    serviceFacts = null;
+  }
+
+  const draft = buildQuoteSuggestion(state.selectedLead, serviceFacts);
   el.quoteTitle.value = draft.title;
   el.quoteTaxRate.value = draft.tax_rate;
   el.quoteSummary.value = draft.summary;
