@@ -15,6 +15,8 @@ import {
   getLeadByConversationId,
   listCrmLeads,
   updateLeadCrmFields,
+  getLatestQuoteByLeadId,
+  upsertLatestQuoteForLead,
 } from "./lib/chatStore.js";
 
 import { mergeLeadData } from "./lib/leadMerge.js";
@@ -1310,14 +1312,46 @@ app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
   }
 });
 
-app.patch("/api/crm/leads/:leadId", async (req, res) => {
+async function handleCrmLeadUpdate(req, res) {
   try {
     const updated = await updateLeadCrmFields(req.params.leadId, req.body || {});
     res.json({ ok: true, lead: updated });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
+}
+
+app.patch("/api/crm/leads/:leadId", handleCrmLeadUpdate);
+app.post("/api/crm/leads/:leadId", handleCrmLeadUpdate);
+
+app.get("/api/crm/leads/:leadId/quote", async (req, res) => {
+  try {
+    const quote = await getLatestQuoteByLeadId(req.params.leadId);
+    res.json({ ok: true, quote });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
 });
+
+async function handleCrmQuoteUpsert(req, res) {
+  try {
+    const leads = await listCrmLeads(500);
+    const lead =
+      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+
+    if (!lead) {
+      return res.status(404).json({ ok: false, error: "Lead no encontrado" });
+    }
+
+    const quote = await upsertLatestQuoteForLead(lead, req.body || {});
+    res.json({ ok: true, quote });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+}
+
+app.put("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
+app.post("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
 
 app.post("/messages", async (req, res) => {
   try {

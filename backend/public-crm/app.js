@@ -329,7 +329,7 @@ async function saveLead(event) {
     };
 
     await fetchJson(`/api/crm/leads/${state.selectedLead.id}`, {
-      method: "PATCH",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
@@ -394,7 +394,7 @@ async function saveQuote() {
     };
 
     const data = await fetchJson(`/api/crm/leads/${state.selectedLead.id}/quote`, {
-      method: "PUT",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
