@@ -35,6 +35,7 @@ import {
   buildMemoryPatch,
   buildLeadMemoryContext,
 } from "./lib/memoryUtils.js";
+import { renderQuotePreviewHtml } from "./lib/quoteTemplate.js";
 
 const app = express();
 const crmPublicDir = fileURLToPath(new URL("../public-crm", import.meta.url));
@@ -1330,6 +1331,25 @@ app.get("/api/crm/leads/:leadId/quote", async (req, res) => {
     res.json({ ok: true, quote });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/crm/quotes/:leadId/preview", async (req, res) => {
+  try {
+    const leads = await listCrmLeads(500);
+    const lead =
+      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+
+    if (!lead) {
+      return res.status(404).send("Lead no encontrado");
+    }
+
+    const quote = await getLatestQuoteByLeadId(req.params.leadId);
+    const html = renderQuotePreviewHtml({ lead, quote });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(200).send(html);
+  } catch (error) {
+    return res.status(500).send(error.message);
   }
 });
 

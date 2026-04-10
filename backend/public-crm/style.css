@@ -89,6 +89,7 @@ textarea {
 
 #refreshBtn,
 #saveBtn,
+#quotePreviewBtn,
 #quoteAutofillBtn,
 #quoteSaveBtn,
 #quoteAddItemBtn,
@@ -109,6 +110,7 @@ textarea {
 
 #refreshBtn:disabled,
 #saveBtn:disabled,
+#quotePreviewBtn:disabled,
 #quoteAutofillBtn:disabled,
 #quoteSaveBtn:disabled,
 #quoteAddItemBtn:disabled,

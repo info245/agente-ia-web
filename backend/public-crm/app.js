@@ -39,6 +39,7 @@ const el = {
   quoteScope: document.getElementById("quoteScope"),
   quoteBody: document.getElementById("quoteBody"),
   quoteAssumptions: document.getElementById("quoteAssumptions"),
+  quotePreviewBtn: document.getElementById("quotePreviewBtn"),
   quoteAutofillBtn: document.getElementById("quoteAutofillBtn"),
   quoteSaveBtn: document.getElementById("quoteSaveBtn"),
   quoteAddItemBtn: document.getElementById("quoteAddItemBtn"),
@@ -576,6 +577,10 @@ el.leadNextBtn.addEventListener("click", () => {
 });
 el.quoteAutofillBtn.addEventListener("click", autofillQuote);
 el.quoteSaveBtn.addEventListener("click", saveQuote);
+el.quotePreviewBtn.addEventListener("click", () => {
+  if (!state.selectedLead?.id) return;
+  window.open(`/crm/quotes/${state.selectedLead.id}/preview`, "_blank", "noopener,noreferrer");
+});
 el.quoteAddItemBtn.addEventListener("click", () => {
   state.quoteItems.push(createEmptyQuoteItem());
   renderQuoteItems();
