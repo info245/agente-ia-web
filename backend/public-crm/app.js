@@ -310,8 +310,7 @@ async function selectLead(leadId) {
   }
 }
 
-async function saveLead(event) {
-  event.preventDefault();
+async function saveLead() {
   if (!state.selectedLead) return;
 
   el.saveBtn.disabled = true;
@@ -409,7 +408,7 @@ async function saveQuote() {
   }
 }
 
-el.leadForm.addEventListener("submit", saveLead);
+el.saveBtn.addEventListener("click", saveLead);
 el.refreshBtn.addEventListener("click", loadLeads);
 el.dateFilter.addEventListener("change", () => {
   state.leadPage = 0;
