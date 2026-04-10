@@ -26,10 +26,22 @@ function getBillingLabel(content = {}) {
   return "Mensual";
 }
 
-function drawWrappedLabelValue(doc, { x, y, width, label, value, fill = "#ffffff22", border = "#ffffff33" }) {
-  doc
-    .roundedRect(x, y, width, 58, 14)
-    .fillAndStroke(fill, border);
+function drawWrappedLabelValue(doc, {
+  x,
+  y,
+  width,
+  label,
+  value,
+  fill = "#FFFFFF",
+  border = "#FFFFFF",
+  fillOpacity = 0.12,
+  strokeOpacity = 0.18,
+}) {
+  doc.save();
+  doc.fillOpacity(fillOpacity);
+  doc.strokeOpacity(strokeOpacity);
+  doc.roundedRect(x, y, width, 58, 14).fillAndStroke(fill, border);
+  doc.restore();
 
   doc
     .fillColor("#FCEEFF")
@@ -195,9 +207,11 @@ export async function renderQuotePdfBuffer({
       { width: 460, height: 40, ellipsis: true }
     );
 
-  doc
-    .roundedRect(doc.page.width - 118, 34, 72, 26, 999)
-    .fillAndStroke("#FFFFFF22", "#FFFFFF33");
+  doc.save();
+  doc.fillOpacity(0.16);
+  doc.strokeOpacity(0.22);
+  doc.roundedRect(doc.page.width - 118, 34, 72, 26, 999).fillAndStroke("#FFFFFF", "#FFFFFF");
+  doc.restore();
   doc
     .fillColor("#FFFFFF")
     .font("Helvetica-Bold")
@@ -213,6 +227,8 @@ export async function renderQuotePdfBuffer({
     width: 150,
     label: "Cliente",
     value: leadName,
+    fill: "#D96A9A",
+    border: "#F3B9D0",
   });
   drawWrappedLabelValue(doc, {
     x: 220,
@@ -220,6 +236,8 @@ export async function renderQuotePdfBuffer({
     width: 170,
     label: "Servicio",
     value: safe(lead?.interest_service),
+    fill: "#B85FB3",
+    border: "#E4A6E1",
   });
   drawWrappedLabelValue(doc, {
     x: 406,
@@ -227,6 +245,8 @@ export async function renderQuotePdfBuffer({
     width: 136,
     label: "Contacto",
     value: safe(lead?.email || lead?.phone),
+    fill: "#8D61E6",
+    border: "#CBB8FF",
   });
 
   let y = 332;
