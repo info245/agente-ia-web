@@ -1405,9 +1405,14 @@ app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
       .replace(/^-+|-+$/g, "") || "propuesta"}-${String(lead?.id || "lead").slice(0, 8)}.pdf`;
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     return res.status(200).send(pdfBuffer);
   } catch (error) {
+    console.log("crm quote pdf error", {
+      leadId: req.params.leadId,
+      message: error?.message || String(error),
+      stack: error?.stack || null,
+    });
     return res.status(500).send(error.message);
   }
 });
