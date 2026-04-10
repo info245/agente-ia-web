@@ -162,6 +162,20 @@
           </label>
 
           <label>
+            Tipo de precio
+            <select id="quoteBillingType" name="billing_type">
+              <option value="monthly">Mensual</option>
+              <option value="one_time">Pago unico</option>
+              <option value="custom">Personalizado</option>
+            </select>
+          </label>
+
+          <label>
+            Etiqueta del precio
+            <input id="quoteBillingLabel" name="billing_label" type="text" placeholder="Ej. mensual, pago unico, trimestral..." />
+          </label>
+
+          <label>
             IVA %
             <input id="quoteTaxRate" name="tax_rate" type="number" min="0" step="0.01" value="21" />
           </label>

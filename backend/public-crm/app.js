@@ -34,6 +34,8 @@ const el = {
   internalNotes: document.getElementById("internalNotes"),
   quoteTitle: document.getElementById("quoteTitle"),
   quoteCurrency: document.getElementById("quoteCurrency"),
+  quoteBillingType: document.getElementById("quoteBillingType"),
+  quoteBillingLabel: document.getElementById("quoteBillingLabel"),
   quoteTaxRate: document.getElementById("quoteTaxRate"),
   quoteSummary: document.getElementById("quoteSummary"),
   quoteScope: document.getElementById("quoteScope"),
@@ -268,6 +270,8 @@ function renderQuote(quote) {
 
   el.quoteTitle.value = quote?.title || "";
   el.quoteCurrency.value = quote?.currency || "EUR";
+  el.quoteBillingType.value = content.billing_type || "monthly";
+  el.quoteBillingLabel.value = content.billing_label || "";
   el.quoteTaxRate.value = content.tax_rate ?? 21;
   el.quoteSummary.value = content.summary || "";
   el.quoteScope.value = content.scope || "";
@@ -437,12 +441,43 @@ function buildServiceItems(service, serviceFacts = null) {
   ];
 }
 
+function inferBillingType(service) {
+  const normalizedService = String(service || "").toLowerCase();
+
+  if (
+    normalizedService.includes("google ads") ||
+    normalizedService.includes("seo") ||
+    normalizedService.includes("meta ads") ||
+    normalizedService.includes("redes")
+  ) {
+    return "monthly";
+  }
+
+  if (
+    normalizedService.includes("web") ||
+    normalizedService.includes("dise") ||
+    normalizedService.includes("consultor")
+  ) {
+    return "one_time";
+  }
+
+  return "custom";
+}
+
+function getBillingTypeLabel(value) {
+  if (value === "monthly") return "Mensual";
+  if (value === "one_time") return "Pago unico";
+  if (value === "custom") return "Personalizado";
+  return "Mensual";
+}
+
 function buildQuoteSuggestion(lead, serviceFacts = null) {
   const service = lead?.interest_service || "servicio de marketing";
   const business = lead?.business_activity || lead?.business_type || "tu proyecto";
   const goal = lead?.main_goal || "mejorar resultados";
-  const budget = lead?.budget_range || "por definir";
   const items = buildServiceItems(service, serviceFacts);
+  const billingType = inferBillingType(service);
+  const billingLabel = getBillingTypeLabel(billingType);
   const includedBase = serviceFacts?.description
     ? serviceFacts.description
     : [
@@ -451,16 +486,17 @@ function buildQuoteSuggestion(lead, serviceFacts = null) {
         "Configuracion y optimizacion continua.",
         "Seguimiento de resultados y mejoras.",
       ].join(" ");
-  const notes = serviceFacts?.notes || `Presupuesto orientativo detectado: ${budget}. Este borrador se puede ajustar antes de enviarlo.`;
 
   return {
     title: `Propuesta ${service}`,
     summary: `${service} para ${business}`,
     tax_rate: 21,
+    billing_type: billingType,
+    billing_label: billingLabel,
     items,
     scope: includedBase,
-    body: `Hemos preparado una propuesta de ${service} pensada para ${business}, con el objetivo de ${goal}. A continuacion tienes una version inicial del alcance y del desglose economico para revisarla y ajustarla antes del envio definitivo.`,
-    assumptions: `${notes}\n\nObjetivo principal detectado: ${goal}.\nPresupuesto orientativo detectado: ${budget}.`,
+    body: `Te compartimos una propuesta inicial de ${service} para ${business}, orientada a ${goal}. Puedes revisarla y ajustarla antes del envio definitivo al cliente.`,
+    assumptions: "",
   };
 }
 
@@ -475,6 +511,8 @@ async function autofillQuote() {
 
   const draft = buildQuoteSuggestion(state.selectedLead, serviceFacts);
   el.quoteTitle.value = draft.title;
+  el.quoteBillingType.value = draft.billing_type;
+  el.quoteBillingLabel.value = draft.billing_label;
   el.quoteTaxRate.value = draft.tax_rate;
   el.quoteSummary.value = draft.summary;
   el.quoteScope.value = draft.scope;
@@ -582,6 +620,8 @@ async function saveQuote() {
       tax: calculateQuoteTotals().tax,
       total: calculateQuoteTotals().total,
       currency: el.quoteCurrency.value || "EUR",
+      billing_type: el.quoteBillingType.value || "monthly",
+      billing_label: el.quoteBillingLabel.value,
       summary: el.quoteSummary.value,
       scope: el.quoteScope.value,
       body: el.quoteBody.value,
@@ -643,6 +683,12 @@ el.quoteAddItemBtn.addEventListener("click", () => {
 });
 el.quoteTaxRate.addEventListener("input", updateQuoteTotals);
 el.quoteCurrency.addEventListener("input", updateQuoteTotals);
+el.quoteBillingType.addEventListener("change", () => {
+  const nextLabel = getBillingTypeLabel(el.quoteBillingType.value);
+  if (!el.quoteBillingLabel.value.trim() || ["Mensual", "Pago unico", "Personalizado"].includes(el.quoteBillingLabel.value.trim())) {
+    el.quoteBillingLabel.value = nextLabel;
+  }
+});
 
 loadLeads().catch((error) => {
   el.leadTableBody.innerHTML = `<tr><td colspan="8" class="empty">Error cargando CRM: ${error.message}</td></tr>`;

@@ -24,6 +24,18 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
   const total = Number.isFinite(Number(quote?.total)) ? Number(quote.total) : 0;
   const taxRate = Number.isFinite(Number(content.tax_rate)) ? Number(content.tax_rate) : 0;
   const leadName = lead?.name || lead?.phone || lead?.email || "Cliente";
+  const assumptions = String(content.assumptions || "").trim();
+  const billingType = String(content.billing_type || "monthly").trim();
+  const billingLabel = String(content.billing_label || "").trim();
+  const priceMode =
+    billingLabel ||
+    (billingType === "monthly"
+      ? "Mensual"
+      : billingType === "one_time"
+      ? "Pago unico"
+      : billingType === "custom"
+      ? "Personalizado"
+      : "Mensual");
 
   const itemsRows = items.length
     ? items
@@ -136,7 +148,7 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
     }
     .hero-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 14px;
       margin-top: 24px;
     }
@@ -228,6 +240,14 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
         box-shadow: none;
       }
     }
+    @media (max-width: 860px) {
+      .hero-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .brand-box {
+        max-width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
@@ -255,6 +275,10 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
         <div class="hero-card">
           <strong>Contacto</strong>
           ${escapeHtml(lead?.email || lead?.phone || "-")}
+        </div>
+        <div class="hero-card">
+          <strong>Precio</strong>
+          ${escapeHtml(priceMode)}
         </div>
       </div>
     </header>
@@ -301,10 +325,11 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
       <div class="copy">${escapeHtml(content.body || "")}</div>
     </section>
 
+    ${assumptions ? `
     <section class="section">
       <h2>Supuestos y notas</h2>
-      <div class="copy">${escapeHtml(content.assumptions || "Las condiciones finales pueden ajustarse antes del envio definitivo.")}</div>
-    </section>
+      <div class="copy">${escapeHtml(assumptions)}</div>
+    </section>` : ""}
 
     <section class="section footer">
       Esta propuesta ha sido generada desde el CRM interno de TMedia Global y puede editarse antes de su envio definitivo por email o WhatsApp.

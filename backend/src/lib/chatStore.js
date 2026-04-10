@@ -321,6 +321,8 @@ export async function upsertLatestQuoteForLead(lead = {}, quote = {}) {
       summary: clean(quote.summary),
       scope: clean(quote.scope),
       assumptions: clean(quote.assumptions),
+      billing_type: clean(quote.billing_type) || "monthly",
+      billing_label: clean(quote.billing_label),
       tax_rate: Number.isFinite(Number(quote.tax_rate)) ? Number(quote.tax_rate) : 0,
       items: cleanQuoteItems(quote.items),
     },
