@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import crypto from "crypto";
+import path from "path";
 import { fileURLToPath } from "url";
 
 import { extractLeadDataFromText } from "./lib/leadExtractor.js";
@@ -47,6 +48,9 @@ app.use(
   })
 );
 app.use("/crm", express.static(crmPublicDir));
+app.get("/crm", (_req, res) => {
+  res.sendFile(path.join(crmPublicDir, "index.html"));
+});
 
 const PORT = process.env.PORT || 3000;
 const BUILD_TAG = "memory-v13-inline-slot-flow-no-loop-safe";
