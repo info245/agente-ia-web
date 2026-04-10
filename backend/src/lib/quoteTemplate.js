@@ -148,7 +148,7 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
     }
     .hero-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 14px;
       margin-top: 24px;
     }
@@ -164,6 +164,11 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
       display: block;
       margin-bottom: 6px;
       color: rgba(255,255,255,0.78);
+    }
+    .hero-card-value {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      line-height: 1.45;
     }
     .section {
       padding: 26px 38px;
@@ -209,6 +214,23 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
       gap: 10px;
       margin-top: 18px;
     }
+    .totals-meta {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+    .billing-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #f3e7ff, #ecdfff);
+      border: 1px solid #d8c0ff;
+      color: #5a2aa8;
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
     .total-row {
       display: flex;
       justify-content: space-between;
@@ -248,6 +270,11 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
         max-width: 100%;
       }
     }
+    @media (max-width: 640px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -266,19 +293,15 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
       <div class="hero-grid">
         <div class="hero-card">
           <strong>Cliente</strong>
-          ${escapeHtml(leadName)}
+          <div class="hero-card-value">${escapeHtml(leadName)}</div>
         </div>
         <div class="hero-card">
           <strong>Servicio</strong>
-          ${escapeHtml(lead?.interest_service || "-")}
+          <div class="hero-card-value">${escapeHtml(lead?.interest_service || "-")}</div>
         </div>
         <div class="hero-card">
           <strong>Contacto</strong>
-          ${escapeHtml(lead?.email || lead?.phone || "-")}
-        </div>
-        <div class="hero-card">
-          <strong>Precio</strong>
-          ${escapeHtml(priceMode)}
+          <div class="hero-card-value">${escapeHtml(lead?.email || lead?.phone || "-")}</div>
         </div>
       </div>
     </header>
@@ -317,6 +340,10 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
           <span>Total</span>
           <strong>${formatMoney(total, currency)}</strong>
         </div>
+      </div>
+
+      <div class="totals-meta">
+        <div class="billing-pill">Precio ${escapeHtml(priceMode.toLowerCase())}</div>
       </div>
     </section>
 
