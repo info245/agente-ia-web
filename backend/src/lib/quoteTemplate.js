@@ -60,6 +60,36 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       </tr>
     `;
 
+  const mobileItems = items.length
+    ? items
+        .map((item) => {
+          const quantity = Number.isFinite(Number(item?.quantity)) ? Number(item.quantity) : 0;
+          const unitPrice = Number.isFinite(Number(item?.unit_price)) ? Number(item.unit_price) : 0;
+          const lineTotal = quantity * unitPrice;
+
+          return `
+            <article class="mobile-item">
+              <div class="mobile-item-title">${escapeHtml(item?.concept || "-")}</div>
+              <div class="mobile-item-grid">
+                <div class="mobile-item-cell">
+                  <span>Cantidad</span>
+                  <strong>${quantity}</strong>
+                </div>
+                <div class="mobile-item-cell">
+                  <span>Precio unitario</span>
+                  <strong>${formatMoney(unitPrice, currency)}</strong>
+                </div>
+                <div class="mobile-item-cell">
+                  <span>Importe</span>
+                  <strong>${formatMoney(lineTotal, currency)}</strong>
+                </div>
+              </div>
+            </article>
+          `;
+        })
+        .join("")
+    : `<div class="empty">Todavia no hay partidas en este presupuesto.</div>`;
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -209,6 +239,35 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
     .num {
       text-align: right;
       white-space: nowrap;
+    }
+    .mobile-items {
+      display: none;
+    }
+    .mobile-item {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255,255,255,0.82);
+    }
+    .mobile-item-title {
+      font-weight: 700;
+      margin-bottom: 8px;
+      line-height: 1.35;
+    }
+    .mobile-item-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .mobile-item-cell span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      margin-bottom: 3px;
+    }
+    .mobile-item-cell strong {
+      display: block;
+      font-size: 0.94rem;
     }
     .empty {
       color: var(--muted);
@@ -426,9 +485,12 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
         font-size: 1.15rem;
         margin-bottom: 12px;
       }
-      th, td {
-        padding: 10px 8px;
-        font-size: 0.92rem;
+      table {
+        display: none;
+      }
+      .mobile-items {
+        display: grid;
+        gap: 10px;
       }
       .total-row {
         padding: 10px 12px;
@@ -436,6 +498,11 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       .billing-pill {
         width: 100%;
         justify-content: center;
+      }
+    }
+    @media (max-width: 420px) {
+      .mobile-item-grid {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -492,6 +559,10 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
           ${itemsRows}
         </tbody>
       </table>
+
+      <div class="mobile-items">
+        ${mobileItems}
+      </div>
 
       <div class="totals">
         <div class="total-row">
