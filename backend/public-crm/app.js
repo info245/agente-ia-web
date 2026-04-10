@@ -397,14 +397,37 @@ function buildQuoteSuggestion(lead) {
   const goal = lead?.main_goal || "mejorar resultados";
   const budget = lead?.budget_range || "por definir";
 
+  let items = [
+    { concept: `Setup inicial de ${service}`, quantity: 1, unit_price: 180 },
+    { concept: `Gestion mensual de ${service}`, quantity: 1, unit_price: 300 },
+  ];
+
+  const normalizedService = service.toLowerCase();
+  if (normalizedService.includes("google ads")) {
+    items = [
+      { concept: "Auditoria y planteamiento inicial de Google Ads", quantity: 1, unit_price: 190 },
+      { concept: "Configuracion y estructura de campanas", quantity: 1, unit_price: 210 },
+      { concept: "Gestion mensual y optimizacion continua", quantity: 1, unit_price: 300 },
+    ];
+  } else if (normalizedService.includes("seo")) {
+    items = [
+      { concept: "Auditoria SEO inicial", quantity: 1, unit_price: 180 },
+      { concept: "Plan de contenidos y palabras clave", quantity: 1, unit_price: 160 },
+      { concept: "Optimizacion mensual SEO", quantity: 1, unit_price: 280 },
+    ];
+  } else if (normalizedService.includes("meta ads")) {
+    items = [
+      { concept: "Auditoria inicial de Meta Ads", quantity: 1, unit_price: 180 },
+      { concept: "Preparacion creativa y estructura de campanas", quantity: 1, unit_price: 220 },
+      { concept: "Gestion mensual y optimizacion", quantity: 1, unit_price: 300 },
+    ];
+  }
+
   return {
     title: `Propuesta ${service}`,
     summary: `${service} para ${business}`,
     tax_rate: 21,
-    items: [
-      { concept: `Setup inicial de ${service}`, quantity: 1, unit_price: 180 },
-      { concept: `Gestion mensual de ${service}`, quantity: 1, unit_price: 300 },
-    ],
+    items,
     scope: [
       "Analisis inicial del negocio y del punto de partida.",
       `Definicion de estrategia para ${service}.`,
