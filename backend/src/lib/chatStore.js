@@ -256,6 +256,76 @@ export async function updateLeadCrmFields(leadId, patch = {}) {
   return data;
 }
 
+export async function getLatestQuoteByLeadId(leadId) {
+  const safeLeadId = clean(leadId);
+  if (!safeLeadId) {
+    throw new Error("getLatestQuoteByLeadId: leadId es obligatorio");
+  }
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .select("*")
+    .eq("lead_id", safeLeadId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("quotes") || message.includes("does not exist")) {
+      return null;
+    }
+    throw error;
+  }
+
+  return data || null;
+}
+
+export async function upsertLatestQuoteForLead(lead = {}, quote = {}) {
+  const safeLeadId = clean(lead.id);
+  if (!safeLeadId) {
+    throw new Error("upsertLatestQuoteForLead: lead.id es obligatorio");
+  }
+
+  const current = await getLatestQuoteByLeadId(safeLeadId);
+
+  const total = Number.isFinite(Number(quote.total)) ? Number(quote.total) : 0;
+  const subtotal = Number.isFinite(Number(quote.subtotal))
+    ? Number(quote.subtotal)
+    : total;
+  const tax = Number.isFinite(Number(quote.tax)) ? Number(quote.tax) : 0;
+
+  const payload = {
+    lead_id: safeLeadId,
+    conversation_id: clean(lead.conversation_id),
+    title: clean(quote.title) || "Propuesta comercial",
+    status: clean(quote.status) || "draft",
+    currency: clean(quote.currency) || "EUR",
+    subtotal,
+    tax,
+    total,
+    content_json: {
+      body: clean(quote.body),
+      summary: clean(quote.summary),
+      scope: clean(quote.scope),
+      assumptions: clean(quote.assumptions),
+    },
+    html_snapshot: clean(quote.html_snapshot),
+    sent_via: clean(quote.sent_via),
+    sent_at: quote.sent_at || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const query = current
+    ? supabase.from("quotes").update(payload).eq("id", current.id)
+    : supabase.from("quotes").insert(payload);
+
+  const { data, error } = await query.select().single();
+
+  if (error) throw error;
+  return data;
+}
+
 export async function upsertLeadFromConversation(lead = {}) {
   const safeConversationId = clean(lead.conversation_id);
   if (!safeConversationId) {
