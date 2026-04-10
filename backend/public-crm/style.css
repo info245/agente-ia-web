@@ -31,7 +31,7 @@ textarea {
 }
 
 .crm-page {
-  max-width: 1480px;
+  max-width: 1720px;
   margin: 0 auto;
   padding: 24px;
   display: grid;
@@ -162,7 +162,7 @@ textarea {
 
 .lead-table {
   width: 100%;
-  min-width: 980px;
+  min-width: 1320px;
   border-collapse: collapse;
   table-layout: fixed;
   margin-top: 8px;
@@ -180,6 +180,7 @@ textarea {
   border: 2px solid var(--accent-line);
   padding: 14px 12px;
   vertical-align: top;
+  background: #fff;
 }
 
 .lead-row {
@@ -193,6 +194,10 @@ textarea {
 
 .lead-row.active {
   background: rgba(184, 150, 255, 0.14);
+}
+
+.lead-row.active td {
+  background: rgba(184, 150, 255, 0.1);
 }
 
 .lead-name-btn {
@@ -213,6 +218,49 @@ textarea {
 
 .lead-name {
   font-weight: 700;
+}
+
+.lead-table th:nth-child(1),
+.lead-table td:nth-child(1) {
+  width: 15%;
+}
+
+.lead-table th:nth-child(2),
+.lead-table td:nth-child(2) {
+  width: 14%;
+}
+
+.lead-table th:nth-child(3),
+.lead-table td:nth-child(3) {
+  width: 13%;
+}
+
+.lead-table th:nth-child(4),
+.lead-table td:nth-child(4) {
+  width: 9%;
+}
+
+.lead-table th:nth-child(5),
+.lead-table td:nth-child(5) {
+  width: 12%;
+}
+
+.lead-table th:nth-child(6),
+.lead-table td:nth-child(6) {
+  width: 20%;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.lead-table th:nth-child(7),
+.lead-table td:nth-child(7) {
+  width: 12%;
+  white-space: nowrap;
+}
+
+.lead-table th:nth-child(8),
+.lead-table td:nth-child(8) {
+  width: 11%;
 }
 
 .status-pill {
