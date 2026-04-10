@@ -90,6 +90,9 @@ textarea {
 #refreshBtn,
 #saveBtn,
 #quotePreviewBtn,
+#quotePdfBtn,
+#quoteSendEmailBtn,
+#quoteSendWhatsappBtn,
 #quoteAutofillBtn,
 #quoteSaveBtn,
 #quoteAddItemBtn,
@@ -104,13 +107,18 @@ textarea {
 }
 
 #saveBtn.is-busy,
-#quoteSaveBtn.is-busy {
+#quoteSaveBtn.is-busy,
+#quoteSendEmailBtn.is-busy,
+#quoteSendWhatsappBtn.is-busy {
   opacity: 0.7;
 }
 
 #refreshBtn:disabled,
 #saveBtn:disabled,
 #quotePreviewBtn:disabled,
+#quotePdfBtn:disabled,
+#quoteSendEmailBtn:disabled,
+#quoteSendWhatsappBtn:disabled,
 #quoteAutofillBtn:disabled,
 #quoteSaveBtn:disabled,
 #quoteAddItemBtn:disabled,
@@ -118,6 +126,26 @@ textarea {
 #leadNextBtn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.crm-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 10px;
+  margin-bottom: 12px;
+}
+
+.crm-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-icon {
+  width: 18px;
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .crm-card {
@@ -350,6 +378,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  margin-top: 6px;
 }
 
 .quote-items-box {
@@ -434,5 +463,84 @@ textarea {
 
   .crm-page {
     padding: 16px;
+  }
+
+  .crm-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 900px) {
+  .crm-topbar,
+  .crm-card-header,
+  .crm-brand {
+    align-items: stretch;
+  }
+
+  .crm-filters {
+    width: 100%;
+  }
+
+  .filter-box {
+    flex: 1 1 220px;
+  }
+
+  .crm-actions button {
+    flex: 1 1 220px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .crm-page {
+    padding: 12px;
+    gap: 14px;
+  }
+
+  .crm-topbar,
+  .crm-card-header,
+  .crm-brand {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .crm-card {
+    padding: 14px;
+    border-radius: 20px;
+  }
+
+  .crm-brand h1,
+  .crm-card-header h2,
+  .crm-card-header h3 {
+    font-size: 1.4rem;
+  }
+
+  .filter-box {
+    min-width: 100%;
+  }
+
+  .lead-table {
+    min-width: 980px;
+  }
+
+  .message-list {
+    max-height: none;
+  }
+
+  .quote-item {
+    padding: 10px;
+  }
+
+  .quote-totals {
+    width: 100%;
+  }
+
+  .crm-actions button,
+  #saveBtn,
+  #quoteAddItemBtn,
+  #leadPrevBtn,
+  #leadNextBtn {
+    width: 100%;
+    justify-content: center;
   }
 }

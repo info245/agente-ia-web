@@ -354,16 +354,88 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       }
     }
     @media (max-width: 860px) {
+      body {
+        padding: 16px;
+      }
+      .sheet {
+        border-radius: 22px;
+      }
+      .hero {
+        padding: 24px 22px 22px;
+      }
+      .brand {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .status {
+        align-self: flex-start;
+      }
       .hero-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
       .brand-box {
         max-width: 100%;
       }
+      .section {
+        padding: 22px;
+      }
+      .totals,
+      .totals-meta {
+        width: 100%;
+      }
+      .totals-meta {
+        justify-content: flex-start;
+      }
     }
     @media (max-width: 640px) {
+      body {
+        padding: 10px;
+      }
+      .print-bar {
+        padding: 10px 10px 0;
+      }
+      .sheet {
+        border-radius: 18px;
+      }
+      .hero {
+        padding: 18px 16px 18px;
+      }
+      .brand-logo {
+        width: 118px;
+        margin-bottom: 12px;
+      }
+      .brand h1 {
+        font-size: 1.75rem;
+        line-height: 1.1;
+      }
+      .copy {
+        line-height: 1.55;
+      }
       .hero-grid {
         grid-template-columns: 1fr;
+        margin-top: 16px;
+      }
+      .hero-card {
+        padding: 12px 14px;
+        border-radius: 16px;
+      }
+      .section {
+        padding: 18px 16px;
+      }
+      .section h2 {
+        font-size: 1.15rem;
+        margin-bottom: 12px;
+      }
+      th, td {
+        padding: 10px 8px;
+        font-size: 0.92rem;
+      }
+      .total-row {
+        padding: 10px 12px;
+      }
+      .billing-pill {
+        width: 100%;
+        justify-content: center;
       }
     }
   </style>

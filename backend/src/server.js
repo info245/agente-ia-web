@@ -40,6 +40,7 @@ import {
 } from "./lib/memoryUtils.js";
 import { renderQuotePreviewHtml } from "./lib/quoteTemplate.js";
 import { renderHtmlToPdfBuffer } from "./lib/htmlPdf.js";
+import { renderQuotePdfBuffer } from "./lib/quotePdf.js";
 
 const app = express();
 const crmPublicDir = fileURLToPath(new URL("../public-crm", import.meta.url));
@@ -707,13 +708,28 @@ async function sendWhatsAppText(to, bodyText) {
 }
 
 function normalizeLeadPhoneForWhatsApp(lead = {}) {
-  const fromPhone = normalizeWhatsAppPhone(lead?.phone);
-  if (fromPhone) return fromPhone;
+  const externalFlat = normalizeWhatsAppPhone(lead?.external_user_id);
+  if ((lead?.channel === "whatsapp" || lead?.conversations?.channel === "whatsapp") && externalFlat) {
+    return externalFlat;
+  }
 
   const external = normalizeWhatsAppPhone(lead?.conversations?.external_user_id);
   if (lead?.conversations?.channel === "whatsapp" && external) return external;
 
-  return null;
+  const fromPhone = normalizeWhatsAppPhone(lead?.phone);
+  if (!fromPhone) return null;
+  if (fromPhone.startsWith("34") || fromPhone.startsWith("1")) return fromPhone;
+  if (fromPhone.length === 9) return `34${fromPhone}`;
+  return fromPhone;
+}
+
+function buildQuoteFileName(lead, quote) {
+  const safeTitle =
+    `${String(quote?.title || "propuesta")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "") || "propuesta"}-${String(lead?.id || "lead").slice(0, 8)}`;
+  return `${safeTitle}.pdf`;
 }
 
 function getWhatsAppTextFromMessage(message) {
@@ -1412,10 +1428,7 @@ app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
       logoUrl: getLogoDataUrl(),
     });
     const pdfBuffer = await renderHtmlToPdfBuffer(html);
-    const fileName = `${String(quote?.title || "propuesta")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/gi, "-")
-      .replace(/^-+|-+$/g, "") || "propuesta"}-${String(lead?.id || "lead").slice(0, 8)}.pdf`;
+    const fileName = buildQuoteFileName(lead, quote);
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -1470,20 +1483,34 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Canal de envío no válido" });
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const previewUrl = `${baseUrl}/crm/quotes/${lead.id}/preview`;
+      const baseUrl = `${req.protocol}://${req.get("host")}`;
+      const previewUrl = `${baseUrl}/crm/quotes/${lead.id}/preview`;
 
-    if (via === "email") {
-      if (!lead.email) {
-        return res.status(400).json({ ok: false, error: "Este lead no tiene email" });
+      if (via === "email") {
+        if (!lead.email) {
+          return res.status(400).json({ ok: false, error: "Este lead no tiene email" });
+        }
+
+        const logoPath = path.join(crmPublicDir, "assets", "tmedia-global-logo.png");
+        const attachmentBuffer = await renderQuotePdfBuffer({
+          lead,
+          quote,
+          logoPath,
+        });
+
+        await sendQuoteEmailToLead({
+          lead,
+          quote,
+          previewUrl,
+          attachments: [
+            {
+              filename: buildQuoteFileName(lead, quote),
+              content: attachmentBuffer,
+              contentType: "application/pdf",
+            },
+          ],
+        });
       }
-
-      await sendQuoteEmailToLead({
-        lead,
-        quote,
-        previewUrl,
-      });
-    }
 
     if (via === "whatsapp") {
       const phone = normalizeLeadPhoneForWhatsApp(lead);
