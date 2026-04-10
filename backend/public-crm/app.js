@@ -54,7 +54,21 @@ function toDatetimeLocal(value) {
 
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, options);
-  const data = await res.json();
+  const contentType = res.headers.get("content-type") || "";
+  const raw = await res.text();
+
+  if (!contentType.includes("application/json")) {
+    const preview = raw.trim().slice(0, 120);
+    throw new Error(`La API no devolvio JSON. Respuesta: ${preview || `HTTP ${res.status}`}`);
+  }
+
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch (_error) {
+    throw new Error("La API devolvio un JSON invalido");
+  }
+
   if (!res.ok || !data?.ok) {
     throw new Error(data?.error || `HTTP ${res.status}`);
   }
@@ -131,7 +145,7 @@ function renderLeadTable() {
 
   if (!state.filteredLeads.length) {
     el.leadTableBody.innerHTML =
-      '<tr><td colspan="7" class="empty">No hay leads para esos filtros.</td></tr>';
+      '<tr><td colspan="8" class="empty">No hay leads para esos filtros.</td></tr>';
     el.leadTableInfo.textContent = "0 resultados";
     el.leadPaginationInfo.textContent = "Pagina 1 de 1";
     el.leadPrevBtn.disabled = true;
@@ -147,15 +161,20 @@ function renderLeadTable() {
     const row = document.createElement("tr");
     row.className = `lead-row${state.selectedLead?.id === lead.id ? " active" : ""}`;
     row.innerHTML = `
-      <td><span class="lead-name">${getLeadDisplayName(lead)}</span></td>
+      <td><button type="button" class="lead-name-btn">${getLeadDisplayName(lead)}</button></td>
       <td>${lead.interest_service || "-"}</td>
       <td>${lead.budget_range || "-"}</td>
       <td>${lead.channel || "web"}</td>
       <td>${lead.phone || "-"}</td>
       <td>${lead.email || "-"}</td>
+      <td>${fmtDate(lead.last_message?.created_at || lead.created_at)}</td>
       <td><span class="status-pill">${lead.crm_status || "nuevo"}</span></td>
     `;
     row.addEventListener("click", () => selectLead(lead.id));
+    row.querySelector(".lead-name-btn")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      selectLead(lead.id);
+    });
     el.leadTableBody.appendChild(row);
   }
 
@@ -384,5 +403,5 @@ el.quoteAutofillBtn.addEventListener("click", autofillQuote);
 el.quoteSaveBtn.addEventListener("click", saveQuote);
 
 loadLeads().catch((error) => {
-  el.leadTableBody.innerHTML = `<tr><td colspan="7" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
+  el.leadTableBody.innerHTML = `<tr><td colspan="8" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
 });

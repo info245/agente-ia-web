@@ -190,6 +190,22 @@ textarea {
   background: rgba(184, 150, 255, 0.14);
 }
 
+.lead-name-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lead-name-btn:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .lead-name {
   font-weight: 700;
 }
