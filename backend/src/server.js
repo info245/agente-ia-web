@@ -1345,7 +1345,12 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
     }
 
     const quote = await getLatestQuoteByLeadId(req.params.leadId);
-    const html = renderQuotePreviewHtml({ lead, quote });
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const html = renderQuotePreviewHtml({
+      lead,
+      quote,
+      logoUrl: `${baseUrl}/crm/assets/tmedia-global-logo.png`,
+    });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(html);
   } catch (error) {

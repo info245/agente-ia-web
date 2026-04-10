@@ -15,7 +15,7 @@ function formatMoney(value, currency = "EUR") {
   }).format(amount);
 }
 
-export function renderQuotePreviewHtml({ lead = {}, quote = {} } = {}) {
+export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } = {}) {
   const content = quote?.content_json || {};
   const items = Array.isArray(content.items) ? content.items : [];
   const currency = quote?.currency || "EUR";
@@ -61,8 +61,11 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {} } = {}) {
       --line: #d9cfbf;
       --text: #221d18;
       --muted: #756b61;
-      --accent: #20594e;
-      --accent-soft: #e9f2ef;
+      --accent: #ff5d6d;
+      --accent-2: #cb4ea1;
+      --accent-3: #7f54ff;
+      --accent-soft: #f5edff;
+      --ink-soft: rgba(255,255,255,0.85);
     }
     * { box-sizing: border-box; }
     body {
@@ -70,8 +73,9 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {} } = {}) {
       font-family: Georgia, "Times New Roman", serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top left, #faf5eb, transparent 30%),
-        linear-gradient(135deg, #f6eedf, #f2e8d7);
+        radial-gradient(circle at top left, rgba(255,93,109,0.14), transparent 24%),
+        radial-gradient(circle at top right, rgba(127,84,255,0.16), transparent 26%),
+        linear-gradient(135deg, #f7efe1, #f2e8d7);
       padding: 32px;
     }
     .sheet {
@@ -85,9 +89,10 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {} } = {}) {
     }
     .hero {
       padding: 34px 38px 28px;
+      color: #fff;
       background:
-        linear-gradient(130deg, rgba(32,89,78,0.08), transparent 40%),
-        linear-gradient(180deg, #fffdf9, #f7f0e2);
+        radial-gradient(circle at top left, rgba(255,255,255,0.08), transparent 26%),
+        linear-gradient(120deg, var(--accent), var(--accent-2) 54%, var(--accent-3));
       border-bottom: 1px solid var(--line);
     }
     .brand {
@@ -101,22 +106,31 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {} } = {}) {
       font-size: 2rem;
     }
     .eyebrow {
-      color: var(--accent);
+      color: rgba(255,255,255,0.8);
       text-transform: uppercase;
       letter-spacing: 0.08em;
       font-size: 0.82rem;
       margin-bottom: 8px;
       font-weight: 700;
     }
+    .brand-logo {
+      width: 150px;
+      max-width: 100%;
+      display: block;
+      margin-bottom: 18px;
+      border-radius: 16px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+    }
     .brand-box {
-      max-width: 58%;
+      max-width: 64%;
     }
     .status {
       display: inline-flex;
       padding: 8px 14px;
       border-radius: 999px;
-      background: var(--accent-soft);
-      color: var(--accent);
+      background: rgba(255,255,255,0.16);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.22);
       font-size: 0.9rem;
       font-weight: 700;
     }
@@ -130,11 +144,14 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {} } = {}) {
       border: 1px solid var(--line);
       border-radius: 18px;
       padding: 14px 16px;
-      background: rgba(255,255,255,0.75);
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.16);
+      color: #fff;
     }
     .hero-card strong {
       display: block;
       margin-bottom: 6px;
+      color: rgba(255,255,255,0.78);
     }
     .section {
       padding: 26px 38px;
@@ -162,7 +179,7 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {} } = {}) {
       vertical-align: top;
     }
     th {
-      background: #f4ecff;
+      background: linear-gradient(180deg, #f3e7ff, #ead8ff);
     }
     .num {
       text-align: right;
@@ -187,11 +204,11 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {} } = {}) {
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 12px 14px;
-      background: rgba(255,255,255,0.8);
+      background: rgba(255,255,255,0.86);
     }
     .grand {
-      border: 2px solid #c9b0ff;
-      background: #f4ecff;
+      border: 2px solid #cba8ff;
+      background: linear-gradient(180deg, #f3e7ff, #ecdfff);
       font-size: 1.06rem;
     }
     .footer {
@@ -218,6 +235,7 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {} } = {}) {
     <header class="hero">
       <div class="brand">
         <div class="brand-box">
+          ${logoUrl ? `<img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="TMedia Global" />` : ""}
           <div class="eyebrow">TMedia Global</div>
           <h1>${escapeHtml(quote?.title || "Propuesta comercial")}</h1>
           <div class="copy">${escapeHtml(content.summary || "Propuesta personalizada preparada a partir de la informacion recogida en el CRM.")}</div>
