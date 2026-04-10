@@ -1,16 +1,25 @@
 const state = {
   leads: [],
+  filteredLeads: [],
   selectedLead: null,
   selectedQuote: null,
-  messages: [],
-  messagePage: 0,
+  leadPage: 0,
 };
 
+const LEAD_PAGE_SIZE = 15;
+
 const el = {
-  leadList: document.getElementById("leadList"),
+  refreshBtn: document.getElementById("refreshBtn"),
+  dateFilter: document.getElementById("dateFilter"),
+  sourceFilter: document.getElementById("sourceFilter"),
   leadTitle: document.getElementById("leadTitle"),
   leadChannel: document.getElementById("leadChannel"),
   leadMeta: document.getElementById("leadMeta"),
+  leadTableBody: document.getElementById("leadTableBody"),
+  leadTableInfo: document.getElementById("leadTableInfo"),
+  leadPrevBtn: document.getElementById("leadPrevBtn"),
+  leadNextBtn: document.getElementById("leadNextBtn"),
+  leadPaginationInfo: document.getElementById("leadPaginationInfo"),
   messageList: document.getElementById("messageList"),
   leadForm: document.getElementById("leadForm"),
   crmStatus: document.getElementById("crmStatus"),
@@ -19,7 +28,6 @@ const el = {
   nextAction: document.getElementById("nextAction"),
   followUpAt: document.getElementById("followUpAt"),
   internalNotes: document.getElementById("internalNotes"),
-  refreshBtn: document.getElementById("refreshBtn"),
   quoteTitle: document.getElementById("quoteTitle"),
   quoteTotal: document.getElementById("quoteTotal"),
   quoteSummary: document.getElementById("quoteSummary"),
@@ -28,13 +36,7 @@ const el = {
   quoteAssumptions: document.getElementById("quoteAssumptions"),
   quoteAutofillBtn: document.getElementById("quoteAutofillBtn"),
   quoteSaveBtn: document.getElementById("quoteSaveBtn"),
-  historyTableBody: document.getElementById("historyTableBody"),
-  historyCount: document.getElementById("historyCount"),
-  historyPrevBtn: document.getElementById("historyPrevBtn"),
-  historyNextBtn: document.getElementById("historyNextBtn"),
 };
-
-const HISTORY_PAGE_SIZE = 15;
 
 function fmtDate(value) {
   if (!value) return "-";
@@ -65,47 +67,102 @@ function looksGenericName(value) {
   if (/\d{6,}/.test(text)) return true;
 
   const normalized = text.toLowerCase();
-  const blocked = new Set([
+  return [
     "hola",
     "buenas",
     "buenas tardes",
     "buenos dias",
     "buenos días",
     "lead sin nombre",
-  ]);
-
-  return blocked.has(normalized) || text.length > 30;
+  ].includes(normalized) || text.length > 30;
 }
 
 function getLeadDisplayName(lead) {
-  if (lead?.name && !looksGenericName(lead.name)) {
-    return lead.name;
-  }
+  if (lead?.name && !looksGenericName(lead.name)) return lead.name;
   if (lead?.phone) return lead.phone;
   if (lead?.email) return lead.email;
   return "Lead sin nombre";
 }
 
-function renderLeadList() {
-  el.leadList.innerHTML = "";
+function applyLeadFilters() {
+  const source = el.sourceFilter.value;
+  const dateRange = el.dateFilter.value;
+  const now = Date.now();
 
-  if (!state.leads.length) {
-    el.leadList.innerHTML = '<div class="empty">No hay leads todavia.</div>';
+  state.filteredLeads = state.leads.filter((lead) => {
+    const channelOk = source === "all" || (lead.channel || "web") === source;
+
+    let dateOk = true;
+    if (dateRange !== "all") {
+      const value = lead.last_message?.created_at || lead.created_at;
+      const time = new Date(value).getTime();
+      if (Number.isNaN(time)) {
+        dateOk = false;
+      } else if (dateRange === "today") {
+        const today = new Date();
+        const sample = new Date(time);
+        dateOk =
+          today.getFullYear() === sample.getFullYear() &&
+          today.getMonth() === sample.getMonth() &&
+          today.getDate() === sample.getDate();
+      } else if (dateRange === "7d") {
+        dateOk = now - time <= 7 * 24 * 60 * 60 * 1000;
+      } else if (dateRange === "30d") {
+        dateOk = now - time <= 30 * 24 * 60 * 60 * 1000;
+      }
+    }
+
+    return channelOk && dateOk;
+  });
+
+  if (!state.filteredLeads.find((lead) => lead.id === state.selectedLead?.id)) {
+    state.selectedLead = state.filteredLeads[0] || null;
+  }
+
+  const totalPages = Math.max(1, Math.ceil(state.filteredLeads.length / LEAD_PAGE_SIZE));
+  if (state.leadPage > totalPages - 1) {
+    state.leadPage = totalPages - 1;
+  }
+}
+
+function renderLeadTable() {
+  applyLeadFilters();
+  el.leadTableBody.innerHTML = "";
+
+  if (!state.filteredLeads.length) {
+    el.leadTableBody.innerHTML =
+      '<tr><td colspan="7" class="empty">No hay leads para esos filtros.</td></tr>';
+    el.leadTableInfo.textContent = "0 resultados";
+    el.leadPaginationInfo.textContent = "Pagina 1 de 1";
+    el.leadPrevBtn.disabled = true;
+    el.leadNextBtn.disabled = true;
     return;
   }
 
-  for (const lead of state.leads) {
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = `lead-item${state.selectedLead?.id === lead.id ? " active" : ""}`;
-    item.innerHTML = `
-      <h3>${getLeadDisplayName(lead)}</h3>
-      <p>${lead.interest_service || "Sin servicio"} · ${lead.crm_status || "nuevo"}</p>
-      <small>${lead.channel || "web"} · ${fmtDate(lead.last_message?.created_at || lead.created_at)}</small>
+  const totalPages = Math.max(1, Math.ceil(state.filteredLeads.length / LEAD_PAGE_SIZE));
+  const start = state.leadPage * LEAD_PAGE_SIZE;
+  const pageItems = state.filteredLeads.slice(start, start + LEAD_PAGE_SIZE);
+
+  for (const lead of pageItems) {
+    const row = document.createElement("tr");
+    row.className = `lead-row${state.selectedLead?.id === lead.id ? " active" : ""}`;
+    row.innerHTML = `
+      <td><span class="lead-name">${getLeadDisplayName(lead)}</span></td>
+      <td>${lead.interest_service || "-"}</td>
+      <td>${lead.budget_range || "-"}</td>
+      <td>${lead.channel || "web"}</td>
+      <td>${lead.phone || "-"}</td>
+      <td>${lead.email || "-"}</td>
+      <td><span class="status-pill">${lead.crm_status || "nuevo"}</span></td>
     `;
-    item.addEventListener("click", () => selectLead(lead.id));
-    el.leadList.appendChild(item);
+    row.addEventListener("click", () => selectLead(lead.id));
+    el.leadTableBody.appendChild(row);
   }
+
+  el.leadTableInfo.textContent = `${state.filteredLeads.length} resultados`;
+  el.leadPaginationInfo.textContent = `Pagina ${state.leadPage + 1} de ${totalPages}`;
+  el.leadPrevBtn.disabled = state.leadPage === 0;
+  el.leadNextBtn.disabled = state.leadPage >= totalPages - 1;
 }
 
 function renderLeadDetail() {
@@ -116,7 +173,6 @@ function renderLeadDetail() {
     el.leadChannel.textContent = "-";
     el.leadMeta.innerHTML = "";
     el.messageList.innerHTML = '<div class="empty">Selecciona una conversacion.</div>';
-    renderHistoryTable([]);
     renderQuote(null);
     return;
   }
@@ -140,18 +196,6 @@ function renderLeadDetail() {
   el.internalNotes.value = lead.internal_notes || "";
 }
 
-function renderQuote(quote) {
-  state.selectedQuote = quote || null;
-  const content = quote?.content_json || {};
-
-  el.quoteTitle.value = quote?.title || "";
-  el.quoteTotal.value = quote?.total ?? "";
-  el.quoteSummary.value = content.summary || "";
-  el.quoteScope.value = content.scope || "";
-  el.quoteBody.value = content.body || "";
-  el.quoteAssumptions.value = content.assumptions || "";
-}
-
 function renderMessages(messages = []) {
   el.messageList.innerHTML = "";
 
@@ -172,41 +216,15 @@ function renderMessages(messages = []) {
   }
 }
 
-function renderHistoryTable(messages = state.messages) {
-  state.messages = messages || [];
-
-  if (!state.messages.length) {
-    state.messagePage = 0;
-    el.historyTableBody.innerHTML = '<tr><td colspan="3" class="empty">No hay mensajes en esta conversacion.</td></tr>';
-    el.historyCount.textContent = "0 mensajes";
-    el.historyPrevBtn.disabled = true;
-    el.historyNextBtn.disabled = true;
-    return;
-  }
-
-  const totalPages = Math.max(1, Math.ceil(state.messages.length / HISTORY_PAGE_SIZE));
-  if (state.messagePage > totalPages - 1) {
-    state.messagePage = totalPages - 1;
-  }
-
-  const start = state.messagePage * HISTORY_PAGE_SIZE;
-  const pageItems = state.messages.slice(start, start + HISTORY_PAGE_SIZE);
-
-  el.historyTableBody.innerHTML = pageItems
-    .map(
-      (msg) => `
-        <tr>
-          <td>${fmtDate(msg.created_at)}</td>
-          <td><span class="history-role">${msg.role || "-"}</span></td>
-          <td>${msg.content || ""}</td>
-        </tr>
-      `
-    )
-    .join("");
-
-  el.historyCount.textContent = `${state.messages.length} mensajes · Página ${state.messagePage + 1} de ${totalPages}`;
-  el.historyPrevBtn.disabled = state.messagePage === 0;
-  el.historyNextBtn.disabled = state.messagePage >= totalPages - 1;
+function renderQuote(quote) {
+  state.selectedQuote = quote || null;
+  const content = quote?.content_json || {};
+  el.quoteTitle.value = quote?.title || "";
+  el.quoteTotal.value = quote?.total ?? "";
+  el.quoteSummary.value = content.summary || "";
+  el.quoteScope.value = content.scope || "";
+  el.quoteBody.value = content.body || "";
+  el.quoteAssumptions.value = content.assumptions || "";
 }
 
 async function loadLeads() {
@@ -220,23 +238,25 @@ async function loadLeads() {
       state.leads.find((lead) => lead.id === state.selectedLead.id) || state.leads[0] || null;
   }
 
-  renderLeadList();
+  renderLeadTable();
   renderLeadDetail();
 
   if (state.selectedLead?.conversation_id) {
     await loadMessages(state.selectedLead.conversation_id);
+  } else {
+    renderMessages([]);
   }
 
   if (state.selectedLead?.id) {
     await loadQuote(state.selectedLead.id);
+  } else {
+    renderQuote(null);
   }
 }
 
 async function loadMessages(conversationId) {
   const data = await fetchJson(`/api/crm/conversations/${conversationId}/messages`);
-  state.messagePage = 0;
   renderMessages(data.messages || []);
-  renderHistoryTable(data.messages || []);
 }
 
 async function loadQuote(leadId) {
@@ -246,14 +266,13 @@ async function loadQuote(leadId) {
 
 async function selectLead(leadId) {
   state.selectedLead = state.leads.find((lead) => lead.id === leadId) || null;
-  renderLeadList();
+  renderLeadTable();
   renderLeadDetail();
 
   if (state.selectedLead?.conversation_id) {
     await loadMessages(state.selectedLead.conversation_id);
   } else {
     renderMessages([]);
-    renderHistoryTable([]);
   }
 
   if (state.selectedLead?.id) {
@@ -336,25 +355,34 @@ async function saveQuote() {
   });
 
   renderQuote(data.quote || null);
-  await loadLeads();
 }
 
 el.leadForm.addEventListener("submit", saveLead);
 el.refreshBtn.addEventListener("click", loadLeads);
+el.dateFilter.addEventListener("change", () => {
+  state.leadPage = 0;
+  renderLeadTable();
+  renderLeadDetail();
+});
+el.sourceFilter.addEventListener("change", () => {
+  state.leadPage = 0;
+  renderLeadTable();
+  renderLeadDetail();
+});
+el.leadPrevBtn.addEventListener("click", () => {
+  if (state.leadPage <= 0) return;
+  state.leadPage -= 1;
+  renderLeadTable();
+});
+el.leadNextBtn.addEventListener("click", () => {
+  const totalPages = Math.max(1, Math.ceil(state.filteredLeads.length / LEAD_PAGE_SIZE));
+  if (state.leadPage >= totalPages - 1) return;
+  state.leadPage += 1;
+  renderLeadTable();
+});
 el.quoteAutofillBtn.addEventListener("click", autofillQuote);
 el.quoteSaveBtn.addEventListener("click", saveQuote);
-el.historyPrevBtn.addEventListener("click", () => {
-  if (state.messagePage <= 0) return;
-  state.messagePage -= 1;
-  renderHistoryTable();
-});
-el.historyNextBtn.addEventListener("click", () => {
-  const totalPages = Math.max(1, Math.ceil(state.messages.length / HISTORY_PAGE_SIZE));
-  if (state.messagePage >= totalPages - 1) return;
-  state.messagePage += 1;
-  renderHistoryTable();
-});
 
 loadLeads().catch((error) => {
-  el.leadList.innerHTML = `<div class="empty">Error cargando CRM: ${error.message}</div>`;
+  el.leadTableBody.innerHTML = `<tr><td colspan="7" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
 });
