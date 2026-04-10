@@ -67,6 +67,10 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${escapeHtml(quote?.title || "Propuesta comercial")}</title>
   <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
     :root {
       --bg: #f7f1e4;
       --paper: #fffdfa;

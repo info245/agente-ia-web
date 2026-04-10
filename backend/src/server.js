@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import crypto from "crypto";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -36,7 +37,7 @@ import {
   buildLeadMemoryContext,
 } from "./lib/memoryUtils.js";
 import { renderQuotePreviewHtml } from "./lib/quoteTemplate.js";
-import { renderQuotePdfBuffer } from "./lib/quotePdf.js";
+import { renderHtmlToPdfBuffer } from "./lib/htmlPdf.js";
 
 const app = express();
 const crmPublicDir = fileURLToPath(new URL("../public-crm", import.meta.url));
@@ -94,6 +95,18 @@ function hasProcessedWhatsAppMessage(messageId) {
 
 function norm(v) {
   return String(v || "").trim();
+}
+
+function getLogoDataUrl() {
+  try {
+    const logoPath = path.join(crmPublicDir, "assets", "tmedia-global-logo.png");
+    const ext = path.extname(logoPath).toLowerCase();
+    const mime = ext === ".png" ? "image/png" : "image/jpeg";
+    const base64 = fs.readFileSync(logoPath).toString("base64");
+    return `data:${mime};base64,${base64}`;
+  } catch (_error) {
+    return "";
+  }
 }
 
 function normalizeText(value) {
@@ -1380,12 +1393,12 @@ app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
     }
 
     const quote = await getLatestQuoteByLeadId(req.params.leadId);
-    const logoPath = path.join(crmPublicDir, "assets", "tmedia-global-logo.png");
-    const pdfBuffer = await renderQuotePdfBuffer({
+    const html = renderQuotePreviewHtml({
       lead,
       quote,
-      logoPath,
+      logoUrl: getLogoDataUrl(),
     });
+    const pdfBuffer = await renderHtmlToPdfBuffer(html);
     const fileName = `${String(quote?.title || "propuesta")
       .toLowerCase()
       .replace(/[^a-z0-9]+/gi, "-")
