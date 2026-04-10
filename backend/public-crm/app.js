@@ -328,14 +328,34 @@ async function saveLead() {
       internal_notes: el.internalNotes.value,
     };
 
-    await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}`, {
+    const response = await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    await loadLeads();
+    if (response?.lead) {
+      state.selectedLead = {
+        ...state.selectedLead,
+        ...response.lead,
+        channel: state.selectedLead.channel,
+        external_user_id: state.selectedLead.external_user_id,
+        conversation_created_at: state.selectedLead.conversation_created_at,
+        last_message: state.selectedLead.last_message,
+      };
+      state.leads = state.leads.map((lead) =>
+        lead.id === state.selectedLead.id ? { ...lead, ...state.selectedLead } : lead
+      );
+      renderLeadTable();
+      renderLeadDetail();
+    }
+
     setStatus(el.leadSaveStatus, "Cambios guardados.", "ok");
+
+    loadLeads().catch((error) => {
+      console.warn("CRM reload after save failed", error);
+      setStatus(el.leadSaveStatus, "Cambios guardados. La recarga automatica ha fallado, pero el lead esta actualizado.", "ok");
+    });
   } catch (error) {
     setStatus(el.leadSaveStatus, `No se pudo guardar: ${error.message}`, "error");
   } finally {
