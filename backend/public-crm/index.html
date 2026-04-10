@@ -25,6 +25,30 @@
         <div id="leadMeta" class="lead-meta"></div>
       </section>
 
+      <section class="crm-card">
+        <div class="crm-card-header">
+          <h3>Historial</h3>
+          <div class="crm-actions">
+            <span id="historyCount" class="table-count">0 mensajes</span>
+            <button id="historyPrevBtn" type="button">Anterior</button>
+            <button id="historyNextBtn" type="button">Siguiente</button>
+          </div>
+        </div>
+
+        <div class="history-table-wrap">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Rol</th>
+                <th>Mensaje</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
       <section class="crm-grid">
         <section class="crm-card">
           <div class="crm-card-header">
@@ -86,6 +110,50 @@
           </div>
           <div id="messageList" class="message-list"></div>
         </section>
+      </section>
+
+      <section class="crm-card">
+        <div class="crm-card-header">
+          <h3>Presupuesto</h3>
+          <div class="crm-actions">
+            <button id="quoteAutofillBtn" type="button">Autorrellenar</button>
+            <button id="quoteSaveBtn" type="button">Guardar borrador</button>
+          </div>
+        </div>
+
+        <form id="quoteForm" class="quote-form">
+          <div class="quote-grid">
+            <label>
+              Titulo
+              <input id="quoteTitle" name="title" type="text" />
+            </label>
+
+            <label>
+              Total
+              <input id="quoteTotal" name="total" type="number" min="0" step="0.01" />
+            </label>
+
+            <label class="quote-grid-full">
+              Resumen
+              <input id="quoteSummary" name="summary" type="text" />
+            </label>
+
+            <label class="quote-grid-full">
+              Alcance
+              <textarea id="quoteScope" name="scope" rows="4"></textarea>
+            </label>
+
+            <label class="quote-grid-full">
+              Mensaje del presupuesto
+              <textarea id="quoteBody" name="body" rows="8"></textarea>
+            </label>
+
+            <label class="quote-grid-full">
+              Supuestos y notas
+              <textarea id="quoteAssumptions" name="assumptions" rows="4"></textarea>
+            </label>
+          </div>
+        </form>
       </section>
     </main>
   </div>
