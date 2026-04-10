@@ -679,7 +679,7 @@ el.quotePreviewBtn.addEventListener("click", () => {
 });
 el.quotePdfBtn.addEventListener("click", () => {
   if (!state.selectedLead?.id) return;
-  window.location.href = `/crm/quotes/${state.selectedLead.id}/pdf`;
+  window.open(`/crm/quotes/${state.selectedLead.id}/preview?print=1`, "_blank", "noopener,noreferrer");
 });
 el.quoteAddItemBtn.addEventListener("click", () => {
   state.quoteItems.push(createEmptyQuoteItem());

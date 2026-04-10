@@ -15,7 +15,7 @@ function formatMoney(value, currency = "EUR") {
   }).format(amount);
 }
 
-export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } = {}) {
+export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", autoPrint = false } = {}) {
   const content = quote?.content_json || {};
   const items = Array.isArray(content.items) ? content.items : [];
   const currency = quote?.currency || "EUR";
@@ -254,10 +254,32 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
       font-size: 0.92rem;
       line-height: 1.7;
     }
+    .print-bar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 18px 32px 0;
+    }
+    .print-button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      background: #1f5eff;
+      color: #fff;
+      font: 700 14px/1 Arial, sans-serif;
+      cursor: pointer;
+      box-shadow: 0 10px 24px rgba(31, 94, 255, 0.22);
+    }
     @media print {
       body {
         background: #fff;
         padding: 0;
+      }
+      .print-bar {
+        display: none;
       }
       .sheet {
         max-width: none;
@@ -282,6 +304,9 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
   </style>
 </head>
 <body>
+  <div class="print-bar">
+    <button class="print-button" type="button" onclick="window.print()">Guardar como PDF</button>
+  </div>
   <article class="sheet">
     <header class="hero">
       <div class="brand">
@@ -366,6 +391,12 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "" } =
       Esta propuesta ha sido generada desde el CRM interno de TMedia Global y puede editarse antes de su envio definitivo por email o WhatsApp.
     </section>
   </article>
+  ${autoPrint ? `
+  <script>
+    window.addEventListener("load", () => {
+      setTimeout(() => window.print(), 250);
+    });
+  </script>` : ""}
 </body>
 </html>`;
 }

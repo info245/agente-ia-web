@@ -1374,6 +1374,7 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
       lead,
       quote,
       logoUrl: `${baseUrl}/crm/assets/tmedia-global-logo.png`,
+      autoPrint: req.query.print === "1",
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(html);
