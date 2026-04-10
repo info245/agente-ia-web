@@ -36,6 +36,7 @@ import {
   buildLeadMemoryContext,
 } from "./lib/memoryUtils.js";
 import { renderQuotePreviewHtml } from "./lib/quoteTemplate.js";
+import { renderQuotePdfBuffer } from "./lib/quotePdf.js";
 
 const app = express();
 const crmPublicDir = fileURLToPath(new URL("../public-crm", import.meta.url));
@@ -1363,6 +1364,36 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(html);
+  } catch (error) {
+    return res.status(500).send(error.message);
+  }
+});
+
+app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
+  try {
+    const leads = await listCrmLeads(500);
+    const lead =
+      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+
+    if (!lead) {
+      return res.status(404).send("Lead no encontrado");
+    }
+
+    const quote = await getLatestQuoteByLeadId(req.params.leadId);
+    const logoPath = path.join(crmPublicDir, "assets", "tmedia-global-logo.png");
+    const pdfBuffer = await renderQuotePdfBuffer({
+      lead,
+      quote,
+      logoPath,
+    });
+    const fileName = `${String(quote?.title || "propuesta")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "") || "propuesta"}-${String(lead?.id || "lead").slice(0, 8)}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+    return res.status(200).send(pdfBuffer);
   } catch (error) {
     return res.status(500).send(error.message);
   }

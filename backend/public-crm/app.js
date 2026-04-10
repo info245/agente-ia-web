@@ -42,6 +42,7 @@ const el = {
   quoteBody: document.getElementById("quoteBody"),
   quoteAssumptions: document.getElementById("quoteAssumptions"),
   quotePreviewBtn: document.getElementById("quotePreviewBtn"),
+  quotePdfBtn: document.getElementById("quotePdfBtn"),
   quoteAutofillBtn: document.getElementById("quoteAutofillBtn"),
   quoteSaveBtn: document.getElementById("quoteSaveBtn"),
   quoteAddItemBtn: document.getElementById("quoteAddItemBtn"),
@@ -675,6 +676,10 @@ el.quoteSaveBtn.addEventListener("click", saveQuote);
 el.quotePreviewBtn.addEventListener("click", () => {
   if (!state.selectedLead?.id) return;
   window.open(`/crm/quotes/${state.selectedLead.id}/preview`, "_blank", "noopener,noreferrer");
+});
+el.quotePdfBtn.addEventListener("click", () => {
+  if (!state.selectedLead?.id) return;
+  window.open(`/crm/quotes/${state.selectedLead.id}/pdf`, "_blank", "noopener,noreferrer");
 });
 el.quoteAddItemBtn.addEventListener("click", () => {
   state.quoteItems.push(createEmptyQuoteItem());
