@@ -27,6 +27,32 @@ function nl2br(str = "") {
   return escapeHtml(str).replace(/\n/g, "<br>");
 }
 
+function buildClientFriendlySummary(lead = {}) {
+  const parts = [];
+
+  if (lead?.interest_service) {
+    parts.push(`Servicio solicitado: ${lead.interest_service}.`);
+  }
+
+  if (lead?.budget_range) {
+    parts.push(`Presupuesto indicado: ${lead.budget_range}.`);
+  }
+
+  if (lead?.urgency) {
+    parts.push(`Prioridad indicada: ${lead.urgency}.`);
+  }
+
+  if (lead?.main_goal) {
+    parts.push(`Objetivo principal: ${lead.main_goal}.`);
+  }
+
+  if (!parts.length) {
+    return "Hemos recibido correctamente tu solicitud y revisaremos la informacion para poder ayudarte.";
+  }
+
+  return parts.join(" ");
+}
+
 let transporter = null;
 
 function getTransporter() {
@@ -133,7 +159,7 @@ export async function sendClientConfirmationEmail({ lead, conversation_id }) {
   if (!clientFrom) throw new Error("LEADS_CLIENT_EMAIL_FROM está vacío");
 
   const subject = "Hemos recibido tu solicitud - TMedia Global";
-  const summaryText = lead?.summary || "Hemos recibido tu solicitud correctamente.";
+  const summaryText = buildClientFriendlySummary(lead);
 
   const html = `
   <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111;">
