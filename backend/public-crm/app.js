@@ -22,6 +22,8 @@ const el = {
   leadPaginationInfo: document.getElementById("leadPaginationInfo"),
   messageList: document.getElementById("messageList"),
   leadForm: document.getElementById("leadForm"),
+  saveBtn: document.getElementById("saveBtn"),
+  leadSaveStatus: document.getElementById("leadSaveStatus"),
   crmStatus: document.getElementById("crmStatus"),
   quoteStatus: document.getElementById("quoteStatus"),
   assignedTo: document.getElementById("assignedTo"),
@@ -36,6 +38,7 @@ const el = {
   quoteAssumptions: document.getElementById("quoteAssumptions"),
   quoteAutofillBtn: document.getElementById("quoteAutofillBtn"),
   quoteSaveBtn: document.getElementById("quoteSaveBtn"),
+  quoteSaveStatus: document.getElementById("quoteSaveStatus"),
 };
 
 function fmtDate(value) {
@@ -246,6 +249,12 @@ function renderQuote(quote) {
   el.quoteAssumptions.value = content.assumptions || "";
 }
 
+function setStatus(target, message = "", kind = "") {
+  if (!target) return;
+  target.textContent = message;
+  target.className = `save-status${kind ? ` ${kind}` : ""}`;
+}
+
 async function loadLeads() {
   const data = await fetchJson("/api/crm/leads");
   state.leads = data.leads || [];
@@ -305,22 +314,34 @@ async function saveLead(event) {
   event.preventDefault();
   if (!state.selectedLead) return;
 
-  const payload = {
-    crm_status: el.crmStatus.value,
-    quote_status: el.quoteStatus.value,
-    assigned_to: el.assignedTo.value,
-    next_action: el.nextAction.value,
-    follow_up_at: el.followUpAt.value ? new Date(el.followUpAt.value).toISOString() : null,
-    internal_notes: el.internalNotes.value,
-  };
+  el.saveBtn.disabled = true;
+  el.saveBtn.classList.add("is-busy");
+  setStatus(el.leadSaveStatus, "Guardando...");
 
-  await fetchJson(`/api/crm/leads/${state.selectedLead.id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const payload = {
+      crm_status: el.crmStatus.value,
+      quote_status: el.quoteStatus.value,
+      assigned_to: el.assignedTo.value,
+      next_action: el.nextAction.value,
+      follow_up_at: el.followUpAt.value ? new Date(el.followUpAt.value).toISOString() : null,
+      internal_notes: el.internalNotes.value,
+    };
 
-  await loadLeads();
+    await fetchJson(`/api/crm/leads/${state.selectedLead.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    await loadLeads();
+    setStatus(el.leadSaveStatus, "Cambios guardados.", "ok");
+  } catch (error) {
+    setStatus(el.leadSaveStatus, `No se pudo guardar: ${error.message}`, "error");
+  } finally {
+    el.saveBtn.disabled = false;
+    el.saveBtn.classList.remove("is-busy");
+  }
 }
 
 function buildQuoteSuggestion(lead) {
@@ -356,24 +377,36 @@ function autofillQuote() {
 async function saveQuote() {
   if (!state.selectedLead) return;
 
-  const payload = {
-    title: el.quoteTitle.value,
-    total: el.quoteTotal.value,
-    summary: el.quoteSummary.value,
-    scope: el.quoteScope.value,
-    body: el.quoteBody.value,
-    assumptions: el.quoteAssumptions.value,
-    status: "draft",
-    currency: "EUR",
-  };
+  el.quoteSaveBtn.disabled = true;
+  el.quoteSaveBtn.classList.add("is-busy");
+  setStatus(el.quoteSaveStatus, "Guardando borrador...");
 
-  const data = await fetchJson(`/api/crm/leads/${state.selectedLead.id}/quote`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  try {
+    const payload = {
+      title: el.quoteTitle.value,
+      total: el.quoteTotal.value,
+      summary: el.quoteSummary.value,
+      scope: el.quoteScope.value,
+      body: el.quoteBody.value,
+      assumptions: el.quoteAssumptions.value,
+      status: "draft",
+      currency: "EUR",
+    };
 
-  renderQuote(data.quote || null);
+    const data = await fetchJson(`/api/crm/leads/${state.selectedLead.id}/quote`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    renderQuote(data.quote || null);
+    setStatus(el.quoteSaveStatus, "Borrador guardado.", "ok");
+  } catch (error) {
+    setStatus(el.quoteSaveStatus, `No se pudo guardar: ${error.message}`, "error");
+  } finally {
+    el.quoteSaveBtn.disabled = false;
+    el.quoteSaveBtn.classList.remove("is-busy");
+  }
 }
 
 el.leadForm.addEventListener("submit", saveLead);

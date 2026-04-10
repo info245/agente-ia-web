@@ -101,6 +101,11 @@ textarea {
   cursor: pointer;
 }
 
+#saveBtn.is-busy,
+#quoteSaveBtn.is-busy {
+  opacity: 0.7;
+}
+
 #refreshBtn:disabled,
 #saveBtn:disabled,
 #quoteAutofillBtn:disabled,
@@ -293,6 +298,20 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.save-status {
+  min-height: 22px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.save-status.ok {
+  color: var(--accent);
+}
+
+.save-status.error {
+  color: #9b2c2c;
 }
 
 .quote-grid-full {
