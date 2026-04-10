@@ -519,8 +519,69 @@ textarea {
     min-width: 100%;
   }
 
+  .lead-table-wrap {
+    overflow: visible;
+  }
+
   .lead-table {
-    min-width: 980px;
+    min-width: 0;
+    border-collapse: separate;
+    border-spacing: 0 12px;
+    table-layout: auto;
+    margin-top: 0;
+  }
+
+  .lead-table thead {
+    display: none;
+  }
+
+  .lead-table tbody,
+  .lead-table tr,
+  .lead-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .lead-row {
+    border: 1px solid var(--accent-line);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(64, 45, 20, 0.06);
+    overflow: hidden;
+  }
+
+  .lead-row.active {
+    background: #fff;
+    border-color: var(--accent);
+  }
+
+  .lead-row td,
+  .lead-row.active td {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(184, 150, 255, 0.28);
+    padding: 10px 14px;
+    white-space: normal !important;
+    width: 100% !important;
+  }
+
+  .lead-row td:last-child {
+    border-bottom: 0;
+  }
+
+  .lead-row td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .lead-name-btn {
+    font-size: 1.05rem;
   }
 
   .message-list {
@@ -542,5 +603,15 @@ textarea {
   #leadNextBtn {
     width: 100%;
     justify-content: center;
+  }
+
+  .table-pagination {
+    justify-content: stretch;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #leadPaginationInfo {
+    text-align: center;
   }
 }

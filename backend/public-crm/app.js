@@ -186,14 +186,14 @@ function renderLeadTable() {
     const row = document.createElement("tr");
     row.className = `lead-row${state.selectedLead?.id === lead.id ? " active" : ""}`;
     row.innerHTML = `
-      <td><button type="button" class="lead-name-btn">${getLeadDisplayName(lead)}</button></td>
-      <td>${lead.interest_service || "-"}</td>
-      <td>${lead.budget_range || "-"}</td>
-      <td>${lead.channel || "web"}</td>
-      <td>${lead.phone || "-"}</td>
-      <td>${lead.email || "-"}</td>
-      <td>${fmtDate(lead.last_message?.created_at || lead.created_at)}</td>
-      <td><span class="status-pill">${lead.crm_status || "nuevo"}</span></td>
+      <td data-label="Nombre de lead"><button type="button" class="lead-name-btn">${getLeadDisplayName(lead)}</button></td>
+      <td data-label="Servicio">${lead.interest_service || "-"}</td>
+      <td data-label="Presupuesto">${lead.budget_range || "-"}</td>
+      <td data-label="Canal">${lead.channel || "web"}</td>
+      <td data-label="Telefono">${lead.phone || "-"}</td>
+      <td data-label="Email">${lead.email || "-"}</td>
+      <td data-label="Fecha">${fmtDate(lead.last_message?.created_at || lead.created_at)}</td>
+      <td data-label="Status"><span class="status-pill">${lead.crm_status || "nuevo"}</span></td>
     `;
     row.addEventListener("click", () => selectLead(lead.id));
     row.querySelector(".lead-name-btn")?.addEventListener("click", (event) => {
