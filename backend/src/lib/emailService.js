@@ -211,3 +211,38 @@ Referencia de conversación: ${conversation_id || lead?.conversation_id || ""}
 
   return { ok: true, messageId: info.messageId };
 }
+
+export async function sendQuoteEmailToLead({ lead, quote, previewUrl }) {
+  if (!clientEnabled) return { skipped: true, reason: "client-disabled" };
+  if (!lead?.email) return { skipped: true, reason: "no-email" };
+  if (!clientFrom) throw new Error("LEADS_CLIENT_EMAIL_FROM está vacío");
+
+  const subject = quote?.title
+    ? `${quote.title} - TMedia Global`
+    : "Tu propuesta - TMedia Global";
+
+  const html = `
+  <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
+    <h2>Hola${lead?.name ? ", " + escapeHtml(lead.name) : ""}</h2>
+    <p>Te compartimos tu propuesta preparada por TMedia Global.</p>
+    <p><b>Servicio:</b> ${escapeHtml(lead?.interest_service || "No indicado")}</p>
+    <p><b>Importe total:</b> ${escapeHtml(quote?.total != null ? String(quote.total) + " " + (quote?.currency || "EUR") : "No indicado")}</p>
+    <p>Puedes revisarla aquí:</p>
+    <p><a href="${escapeHtml(previewUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#1f5eff;color:#fff;text-decoration:none;font-weight:bold;">Abrir propuesta</a></p>
+    <p>Si quieres, podemos comentarla contigo y ajustarla antes de cerrarla.</p>
+  </div>`;
+
+  const text = `Hola${lead?.name ? ", " + lead.name : ""}\n\nTe compartimos tu propuesta preparada por TMedia Global.\n\nServicio: ${lead?.interest_service || "No indicado"}\nImporte total: ${quote?.total != null ? String(quote.total) + " " + (quote?.currency || "EUR") : "No indicado"}\n\nAbrir propuesta:\n${previewUrl}\n\nSi quieres, podemos comentarla contigo y ajustarla antes de cerrarla.`;
+
+  const t = getTransporter();
+  const info = await t.sendMail({
+    from: clientFrom,
+    to: lead.email,
+    subject,
+    text,
+    html,
+    replyTo: process.env.LEADS_EMAIL_REPLY_TO || process.env.SMTP_USER,
+  });
+
+  return { ok: true, messageId: info.messageId };
+}

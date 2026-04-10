@@ -18,6 +18,7 @@ import {
   updateLeadCrmFields,
   getLatestQuoteByLeadId,
   upsertLatestQuoteForLead,
+  markLatestQuoteAsSent,
 } from "./lib/chatStore.js";
 
 import { mergeLeadData } from "./lib/leadMerge.js";
@@ -30,6 +31,7 @@ import { getServiceFacts } from "./lib/websiteFacts.js";
 import {
   sendLeadEmail,
   sendClientConfirmationEmail,
+  sendQuoteEmailToLead,
 } from "./lib/emailService.js";
 
 import {
@@ -702,6 +704,16 @@ async function sendWhatsAppText(to, bodyText) {
   }
 
   return data;
+}
+
+function normalizeLeadPhoneForWhatsApp(lead = {}) {
+  const fromPhone = normalizeWhatsAppPhone(lead?.phone);
+  if (fromPhone) return fromPhone;
+
+  const external = normalizeWhatsAppPhone(lead?.conversations?.external_user_id);
+  if (lead?.conversations?.channel === "whatsapp" && external) return external;
+
+  return null;
 }
 
 function getWhatsAppTextFromMessage(message) {
@@ -1437,6 +1449,67 @@ async function handleCrmQuoteUpsert(req, res) {
 
 app.put("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
 app.post("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
+
+app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
+  try {
+    const leads = await listCrmLeads(500);
+    const lead =
+      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+
+    if (!lead) {
+      return res.status(404).json({ ok: false, error: "Lead no encontrado" });
+    }
+
+    const quote = await getLatestQuoteByLeadId(req.params.leadId);
+    if (!quote) {
+      return res.status(400).json({ ok: false, error: "No hay presupuesto guardado para este lead" });
+    }
+
+    const via = String(req.body?.via || "").trim().toLowerCase();
+    if (!["email", "whatsapp"].includes(via)) {
+      return res.status(400).json({ ok: false, error: "Canal de envío no válido" });
+    }
+
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const previewUrl = `${baseUrl}/crm/quotes/${lead.id}/preview`;
+
+    if (via === "email") {
+      if (!lead.email) {
+        return res.status(400).json({ ok: false, error: "Este lead no tiene email" });
+      }
+
+      await sendQuoteEmailToLead({
+        lead,
+        quote,
+        previewUrl,
+      });
+    }
+
+    if (via === "whatsapp") {
+      const phone = normalizeLeadPhoneForWhatsApp(lead);
+      if (!phone) {
+        return res.status(400).json({ ok: false, error: "Este lead no tiene teléfono válido para WhatsApp" });
+      }
+
+      const message = [
+        `Hola${lead?.name ? ` ${lead.name}` : ""}, te compartimos tu propuesta de ${lead?.interest_service || "TMedia Global"}.`,
+        quote?.title ? `Propuesta: ${quote.title}` : null,
+        `Puedes revisarla aquí: ${previewUrl}`,
+        "Si quieres, la comentamos contigo y la ajustamos antes de cerrarla.",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      await sendWhatsAppText(phone, message);
+    }
+
+    const updatedQuote = await markLatestQuoteAsSent(lead.id, via);
+    return res.json({ ok: true, quote: updatedQuote, via });
+  } catch (error) {
+    console.log("crm quote send error", error);
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
 
 app.post("/messages", async (req, res) => {
   try {

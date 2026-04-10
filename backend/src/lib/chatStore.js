@@ -342,6 +342,43 @@ export async function upsertLatestQuoteForLead(lead = {}, quote = {}) {
   return data;
 }
 
+export async function markLatestQuoteAsSent(leadId, sentVia) {
+  const safeLeadId = clean(leadId);
+  const safeSentVia = clean(sentVia);
+
+  if (!safeLeadId) {
+    throw new Error("markLatestQuoteAsSent: leadId es obligatorio");
+  }
+
+  const current = await getLatestQuoteByLeadId(safeLeadId);
+  if (!current) {
+    throw new Error("No hay presupuesto guardado para este lead");
+  }
+
+  const sentAt = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("quotes")
+    .update({
+      status: "sent",
+      sent_via: safeSentVia,
+      sent_at: sentAt,
+      updated_at: sentAt,
+    })
+    .eq("id", current.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  await supabase
+    .from("leads")
+    .update({ quote_status: "sent" })
+    .eq("id", safeLeadId);
+
+  return data;
+}
+
 export async function upsertLeadFromConversation(lead = {}) {
   const safeConversationId = clean(lead.conversation_id);
   if (!safeConversationId) {

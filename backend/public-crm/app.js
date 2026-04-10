@@ -43,6 +43,8 @@ const el = {
   quoteAssumptions: document.getElementById("quoteAssumptions"),
   quotePreviewBtn: document.getElementById("quotePreviewBtn"),
   quotePdfBtn: document.getElementById("quotePdfBtn"),
+  quoteSendEmailBtn: document.getElementById("quoteSendEmailBtn"),
+  quoteSendWhatsappBtn: document.getElementById("quoteSendWhatsappBtn"),
   quoteAutofillBtn: document.getElementById("quoteAutofillBtn"),
   quoteSaveBtn: document.getElementById("quoteSaveBtn"),
   quoteAddItemBtn: document.getElementById("quoteAddItemBtn"),
@@ -648,6 +650,46 @@ async function saveQuote() {
   }
 }
 
+async function sendQuote(via) {
+  if (!state.selectedLead) return;
+
+  const button =
+    via === "email" ? el.quoteSendEmailBtn : el.quoteSendWhatsappBtn;
+  const label = via === "email" ? "email" : "WhatsApp";
+
+  button.disabled = true;
+  button.classList.add("is-busy");
+  setStatus(el.quoteSaveStatus, `Enviando por ${label}...`);
+
+  try {
+    const data = await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}/quote/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ via }),
+    });
+
+    if (data?.quote) {
+      renderQuote(data.quote);
+      state.selectedLead = {
+        ...state.selectedLead,
+        quote_status: "sent",
+      };
+      state.leads = state.leads.map((lead) =>
+        lead.id === state.selectedLead.id ? { ...lead, quote_status: "sent" } : lead
+      );
+      renderLeadTable();
+      renderLeadDetail();
+    }
+
+    setStatus(el.quoteSaveStatus, `Propuesta enviada por ${label}.`, "ok");
+  } catch (error) {
+    setStatus(el.quoteSaveStatus, `No se pudo enviar por ${label}: ${error.message}`, "error");
+  } finally {
+    button.disabled = false;
+    button.classList.remove("is-busy");
+  }
+}
+
 el.saveBtn.addEventListener("click", saveLead);
 el.refreshBtn.addEventListener("click", loadLeads);
 el.dateFilter.addEventListener("change", () => {
@@ -681,6 +723,8 @@ el.quotePdfBtn.addEventListener("click", () => {
   if (!state.selectedLead?.id) return;
   window.open(`/crm/quotes/${state.selectedLead.id}/preview?print=1`, "_blank", "noopener,noreferrer");
 });
+el.quoteSendEmailBtn.addEventListener("click", () => sendQuote("email"));
+el.quoteSendWhatsappBtn.addEventListener("click", () => sendQuote("whatsapp"));
 el.quoteAddItemBtn.addEventListener("click", () => {
   state.quoteItems.push(createEmptyQuoteItem());
   renderQuoteItems();
