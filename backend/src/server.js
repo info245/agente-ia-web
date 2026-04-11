@@ -199,6 +199,20 @@ function isUnknownResponse(text) {
   );
 }
 
+function isGreeting(text) {
+  const t = normalizeText(text);
+  return (
+    t === "hola" ||
+    t === "buenas" ||
+    t === "buenas tardes" ||
+    t === "buenos dias" ||
+    t === "buenos días" ||
+    t === "buenas noches" ||
+    t === "hey" ||
+    t === "hello"
+  );
+}
+
 function isLikelyValidName(value) {
   const raw = String(value || "").trim();
   const t = normalizeText(raw);
@@ -207,8 +221,15 @@ function isLikelyValidName(value) {
   if (raw.length < 2 || raw.length > 40) return false;
   if (/\d/.test(raw)) return false;
   if (/[?@]/.test(raw)) return false;
+  if (isGreeting(raw)) return false;
 
   const blockedPhrases = [
+    "hola",
+    "buenas",
+    "buenas tardes",
+    "buenos dias",
+    "buenos días",
+    "buenas noches",
     "quiero",
     "necesito",
     "google ads",
@@ -763,6 +784,7 @@ function buildStructuredCloseReply({
   lead,
   text,
   handoff,
+  analysisSnapshot,
 }) {
   if (channel !== "web") return null;
 
@@ -770,6 +792,13 @@ function buildStructuredCloseReply({
   const wantsEmail = prefersEmailChannel(text);
   const safeName = getSafeLeadName(lead);
   const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
+  const hasValueDelivered = hasAnalysisSnapshot(analysisSnapshot);
+  const hasExplicitCloseIntent =
+    detectStrongCommercialIntent(text) || wantsWhatsapp || wantsEmail;
+
+  if (!hasValueDelivered && !hasExplicitCloseIntent && !preferredChannel) {
+    return null;
+  }
 
   if ((wantsWhatsapp || preferredChannel.includes("whatsapp")) && !safeName) {
     return "Perfecto. Antes de seguir por WhatsApp, ¿cómo te llamas?";
@@ -1810,6 +1839,7 @@ ${ragContext}
       lead: leadAfter || {},
       text: userText,
       handoff: handoffCandidate,
+      analysisSnapshot,
     });
 
     if (structuredCloseReply) {
