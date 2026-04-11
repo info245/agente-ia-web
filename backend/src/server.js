@@ -769,6 +769,31 @@ function cleanReplyForWebHandoff(reply, { handoffAvailable = false, channel = "w
   return text;
 }
 
+function cleanReplyForChannelChoice(reply, { channel = "web", lead = null } = {}) {
+  let text = String(reply || "").trim();
+  if (!text) return text;
+  if (channel !== "web") return text;
+
+  const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
+  if (preferredChannel || hasContact(lead)) return text;
+
+  const asksForEmailDirectly =
+    /me facilitas un email/i.test(text) ||
+    /me dejas tu email/i.test(text) ||
+    /comparteme tu email/i.test(text) ||
+    /compárteme tu email/i.test(text) ||
+    /pasame tu email/i.test(text) ||
+    /pásame tu email/i.test(text) ||
+    /por email/i.test(text);
+
+  if (!asksForEmailDirectly) return text;
+
+  const safeName = getSafeLeadName(lead);
+  return safeName
+    ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
+    : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
+}
+
 function isShortAffirmativeResponse(text) {
   const t = normalizeText(text);
   return (
@@ -1834,6 +1859,7 @@ REGLAS IMPORTANTES
 18. NO SOBRESCRIBAS DATOS CONFIRMADOS CON SUPOSICIONES DÉBILES
 19. SI ESTÁS EN WEB, NO DIGAS "TE ESCRIBIRÉ POR WHATSAPP" NI PROMETAS UN CONTACTO SALIENTE MANUAL
 20. SI EL USUARIO QUIERE SEGUIR POR WHATSAPP DESDE WEB, PLANTÉALO COMO CONTINUACIÓN POR UN BOTÓN O ENLACE
+21. SI TODAVÍA NO SE HA ELEGIDO CANAL DE CONTACTO, NO PIDAS EMAIL DIRECTAMENTE: PRIMERO PREGUNTA SI PREFIERE WHATSAPP O EMAIL PARA RECIBIR LA PROPUESTA
 
 ${modeInstructions}
 
@@ -1882,6 +1908,10 @@ ${ragContext}
     }
 
     reply = cleanReply(reply);
+    reply = cleanReplyForChannelChoice(reply, {
+      channel: channel || "web",
+      lead: leadAfter || {},
+    });
     reply = cleanReplyForWebHandoff(reply, {
       handoffAvailable: !!handoffCandidate,
       channel: channel || "web",
