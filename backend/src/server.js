@@ -742,7 +742,6 @@ function shouldOfferWhatsAppTransition({
   if (channel !== "web") return false;
   if (!hasAnalysisSnapshot(snapshot)) return false;
   if (!hasName(lead)) return false;
-  if (!hasPhone(lead)) return false;
 
   const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
   return preferredChannel.includes("whatsapp");
@@ -761,6 +760,39 @@ function cleanReplyForWebHandoff(reply, { handoffAvailable = false, channel = "w
   }
 
   return text;
+}
+
+function isShortAffirmativeResponse(text) {
+  const t = normalizeText(text);
+  return (
+    t === "si" ||
+    t === "sí" ||
+    t === "si por favor" ||
+    t === "sí por favor" ||
+    t === "vale" ||
+    t === "ok" ||
+    t === "perfecto" ||
+    t === "genial"
+  );
+}
+
+function buildValueThenAskNameReply(analysisSnapshot) {
+  const focus = norm(analysisSnapshot?.recommended_focus);
+  const topPriority = Array.isArray(analysisSnapshot?.priorities)
+    ? norm(analysisSnapshot.priorities[0])
+    : "";
+  const summary = norm(analysisSnapshot?.summary);
+
+  const valueLine =
+    focus
+      ? `Perfecto. El siguiente paso con más impacto sería trabajar primero ${focus}.`
+      : topPriority
+      ? `Perfecto. La prioridad más clara ahora mismo sería ${topPriority}.`
+      : summary
+      ? `Perfecto. Viendo lo detectado, hay margen real para mejorar captación y conversión con unos ajustes bien enfocados.`
+      : `Perfecto. Con lo que ya he visto, sí tiene sentido profundizar un poco más antes de plantearte el siguiente paso.`;
+
+  return `${valueLine}\n\nAntes de seguir, ¿cómo te llamas?`;
 }
 
 function buildStructuredCloseReply({
@@ -786,6 +818,15 @@ function buildStructuredCloseReply({
   const readyToAdvance =
     shouldStartCloseSequence && (hasExplicitCloseIntent || (hasValueDelivered && allowCloseAdvance));
 
+  if (
+    hasValueDelivered &&
+    !safeName &&
+    !hasExplicitCloseIntent &&
+    isShortAffirmativeResponse(text)
+  ) {
+    return buildValueThenAskNameReply(analysisSnapshot);
+  }
+
   if (!readyToAdvance) {
     return null;
   }
@@ -798,16 +839,12 @@ function buildStructuredCloseReply({
     return `Perfecto, ${safeName}. ¿Prefieres que sigamos por email o por WhatsApp?`;
   }
 
-  if (preferredChannel.includes("whatsapp") && !hasPhone(lead)) {
-    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si prefieres seguir por WhatsApp, compárteme tu número y te dejo el paso preparado por ahí.`;
+  if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
+    return `Perfecto${safeName ? `, ${safeName}` : ""}. Te dejo aquí el botón para seguir por WhatsApp con el contexto de este análisis.`;
   }
 
   if (preferredChannel.includes("email") && !lead?.email) {
     return `Perfecto${safeName ? `, ${safeName}` : ""}. Si prefieres email, compárteme tu correo y te lo preparo por ahí.`;
-  }
-
-  if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
-    return `Perfecto${safeName ? `, ${safeName}` : ""}. Te dejo aquí el botón para seguir por WhatsApp con el contexto de este análisis.`;
   }
 
   if (preferredChannel.includes("email") && lead?.email) {
