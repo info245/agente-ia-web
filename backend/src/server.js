@@ -16,6 +16,7 @@ import {
   getLeadByConversationId,
   getLatestConversationEvent,
   findLatestWebLeadByContact,
+  findConversationEventByHandoffCode,
   listCrmLeads,
   updateLeadCrmFields,
   getLatestQuoteByLeadId,
@@ -75,12 +76,6 @@ const WHATSAPP_PUBLIC_NUMBER = process.env.WHATSAPP_PUBLIC_NUMBER || "";
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v25.0";
 const WHATSAPP_APP_SECRET =
   process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET || "";
-const HANDOFF_SECRET =
-  process.env.CHAT_HANDOFF_SECRET ||
-  WHATSAPP_APP_SECRET ||
-  WHATSAPP_VERIFY_TOKEN ||
-  "tmedia-handoff-dev";
-
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
 const processedWhatsAppMessages = new Map();
@@ -661,90 +656,38 @@ Foco recomendado: ${snapshot.recommended_focus || "N/D"}
 `.trim();
 }
 
-function toBase64Url(value) {
-  return Buffer.from(String(value || ""), "utf8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
-}
-
-function fromBase64Url(value) {
-  const normalized = String(value || "")
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-  const padded =
-    normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
-  return Buffer.from(padded, "base64").toString("utf8");
-}
-
-function signHandoffPayload(payloadText) {
-  return crypto
-    .createHmac("sha256", HANDOFF_SECRET)
-    .update(payloadText)
-    .digest("base64url");
-}
-
-function createHandoffToken(payload) {
-  const body = toBase64Url(JSON.stringify(payload));
-  const signature = signHandoffPayload(body);
-  return `${body}.${signature}`;
-}
-
-function parseHandoffToken(token) {
-  const raw = String(token || "").trim();
-  if (!raw || !raw.includes(".")) return null;
-
-  const [body, signature] = raw.split(".");
-  if (!body || !signature) return null;
-  if (signHandoffPayload(body) !== signature) return null;
-
-  try {
-    const payload = JSON.parse(fromBase64Url(body));
-    return payload || null;
-  } catch {
-    return null;
-  }
+function createHandoffCode() {
+  return `TM-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
 }
 
 function buildWhatsAppHandoff({
   conversationId,
   lead,
   analysisSnapshot,
+  handoffCode,
 }) {
   const publicNumber = String(WHATSAPP_PUBLIC_NUMBER || "").replace(/\D/g, "");
-  if (!publicNumber || !conversationId) return null;
+  if (!publicNumber || !conversationId || !handoffCode) return null;
 
-  const payload = {
-    v: 1,
-    source: "web",
-    conversation_id: conversationId,
-    analysis_url: analysisSnapshot?.url || null,
-    service: lead?.interest_service || null,
-    goal: lead?.main_goal || null,
-    ts: Date.now(),
-  };
-
-  const token = createHandoffToken(payload);
   const intro = "Hola, vengo desde el chat web y quiero seguir por aquí.";
-  const text = `TMCTX:${token}\n${intro}`;
+  const text = `${intro}\nRef: ${handoffCode}`;
   const whatsappUrl = `https://wa.me/${publicNumber}?text=${encodeURIComponent(text)}`;
 
   return {
     channel: "whatsapp",
     whatsapp_url: whatsappUrl,
-    handoff_token: token,
+    handoff_code: handoffCode,
     prefill_text: intro,
+    label: "Continuar en WhatsApp",
   };
 }
 
 function extractHandoffContext(text) {
   const raw = String(text || "").trim();
-  const match = raw.match(/TMCTX:([A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)/);
+  const match = raw.match(/\bref(?:erencia)?[: ]+([A-Z0-9-]{4,20})\b/i);
   if (!match) return { sanitizedText: raw, handoff: null };
 
-  const token = match[1];
-  const payload = parseHandoffToken(token);
+  const code = String(match[1] || "").toUpperCase();
   const sanitizedText = raw
     .replace(match[0], "")
     .replace(/\n{2,}/g, "\n")
@@ -752,10 +695,9 @@ function extractHandoffContext(text) {
 
   return {
     sanitizedText,
-    handoff: payload
+    handoff: code
       ? {
-          token,
-          payload,
+          code,
         }
       : null,
   };
@@ -1454,10 +1396,17 @@ async function processIncomingMessage({
 
   if (channel === "whatsapp") {
     try {
-      if (handoffContext?.payload?.conversation_id) {
-        relatedWebLead = await getLeadByConversationId(
-          handoffContext.payload.conversation_id
+      if (handoffContext?.code) {
+        const handoffEvent = await findConversationEventByHandoffCode(
+          handoffContext.code
         );
+
+        if (handoffEvent?.conversation_id) {
+          relatedWebLead = await getLeadByConversationId(
+            handoffEvent.conversation_id
+          );
+          handoffContext.payload = handoffEvent.payload || null;
+        }
       }
 
       if (!relatedWebLead) {
@@ -1474,7 +1423,7 @@ async function processIncomingMessage({
         );
       }
 
-      if (handoffContext?.payload?.conversation_id && relatedWebLead?.conversation_id) {
+      if (handoffContext?.code && relatedWebLead?.conversation_id) {
         await trackConversationEvent({
           conversation_id: currentConversationId,
           event_type: "channel_handoff",
@@ -1483,7 +1432,7 @@ async function processIncomingMessage({
           payload: {
             source_channel: "web",
             source_conversation_id: relatedWebLead.conversation_id,
-            handoff_token_present: true,
+            handoff_code: handoffContext.code,
           },
         });
       }
@@ -1620,11 +1569,15 @@ async function processIncomingMessage({
       lead: leadAfter || {},
       text: userText,
     })
-      ? buildWhatsAppHandoff({
-          conversationId: currentConversationId,
-          lead: leadAfter || {},
-          analysisSnapshot,
-        })
+      ? (() => {
+          const handoffCode = createHandoffCode();
+          return buildWhatsAppHandoff({
+            conversationId: currentConversationId,
+            lead: leadAfter || {},
+            analysisSnapshot,
+            handoffCode,
+          });
+        })()
       : null;
   const conversationPhase = getConversationPhase({
     mode: conversationMode,
@@ -1876,6 +1829,22 @@ ${ragContext}
     }
   } catch (e) {
     console.log("client email error", e.message);
+  }
+
+  if (handoffCandidate?.handoff_code) {
+    await trackConversationEvent({
+      conversation_id: currentConversationId,
+      event_type: "channel_handoff_offer",
+      channel: channel || "web",
+      external_user_id: external_user_id || null,
+      payload: {
+        handoff_code: handoffCandidate.handoff_code,
+        target_channel: "whatsapp",
+        analysis_url: analysisSnapshot?.url || null,
+        service: leadAfter?.interest_service || null,
+        goal: leadAfter?.main_goal || null,
+      },
+    });
   }
 
   const handoff = handoffCandidate;

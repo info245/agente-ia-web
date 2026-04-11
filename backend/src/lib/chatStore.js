@@ -219,6 +219,38 @@ export async function getLatestConversationEvent(
   return data || null;
 }
 
+export async function findConversationEventByHandoffCode(
+  handoffCode,
+  limit = 500
+) {
+  const safeCode = clean(handoffCode)?.toUpperCase() || null;
+  if (!safeCode) return null;
+
+  const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 500;
+
+  const { data, error } = await supabase
+    .from("conversation_events")
+    .select("*")
+    .eq("event_type", "channel_handoff_offer")
+    .order("created_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (error) {
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("conversation_events") || message.includes("does not exist")) {
+      return null;
+    }
+    throw error;
+  }
+
+  const events = data || [];
+  const matched = events.find(
+    (event) => String(event?.payload?.handoff_code || "").toUpperCase() === safeCode
+  );
+
+  return matched || null;
+}
+
 function normalizePhone(value) {
   const digits = String(value || "").replace(/\D/g, "");
   if (!digits) return null;

@@ -382,7 +382,7 @@
     updateMini();
 
     if (el.messages.childElementCount === 0) {
-      append("assistant", "Hola, soy tu agente IA. ¿En qué puedo ayudarte?");
+      append("assistant", "Hola, soy el asistente de TMedia Global. ¿Cómo te puedo ayudar?");
     }
 
     setTimeout(() => el.input.focus(), 50);
