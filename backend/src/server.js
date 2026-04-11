@@ -224,6 +224,10 @@ function isLikelyValidName(value) {
   if (isGreeting(raw)) return false;
 
   const blockedPhrases = [
+    "si",
+    "sí",
+    "si si",
+    "sí sí",
     "si por favor",
     "sí por favor",
     "por favor",
@@ -777,8 +781,10 @@ function buildStructuredCloseReply({
   const hasValueDelivered = hasAnalysisSnapshot(analysisSnapshot);
   const hasExplicitCloseIntent =
     detectStrongCommercialIntent(text) || wantsWhatsapp || wantsEmail;
+  const shouldStartCloseSequence =
+    hasExplicitCloseIntent || !!preferredChannel || hasContact(lead);
   const readyToAdvance =
-    hasExplicitCloseIntent || (hasValueDelivered && allowCloseAdvance);
+    shouldStartCloseSequence && (hasExplicitCloseIntent || (hasValueDelivered && allowCloseAdvance));
 
   if (!readyToAdvance) {
     return null;
@@ -889,12 +895,12 @@ function getConversationPhase({ mode, lead, analysisSnapshot, text }) {
     return "discover";
   }
 
-  if (hasSnapshot && !hasName(lead)) {
-    return "close";
+  if (hasSnapshot && !detectStrongCommercialIntent(text) && !hasContact(lead)) {
+    return "deepen";
   }
 
   if (hasSnapshot && hasName(lead) && !hasContact(lead)) {
-    return "close";
+    return detectStrongCommercialIntent(text) ? "close" : "deepen";
   }
 
   if (hasSnapshot || hasAnyLeadSignal) {
