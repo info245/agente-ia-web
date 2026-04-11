@@ -274,7 +274,7 @@
     card.className = "handoff-card";
     card.innerHTML = `
       <strong>Seguir por WhatsApp</strong>
-      <span>Te llevo con el contexto de este análisis para continuar sin empezar de cero.</span>
+      <span>Si te va bien, abre WhatsApp y seguimos por ahí con el contexto de este análisis.</span>
       <a class="handoff-link" href="${handoff.whatsapp_url}" target="_blank" rel="noopener noreferrer">Continuar en WhatsApp</a>
     `;
 

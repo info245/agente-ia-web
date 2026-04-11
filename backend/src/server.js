@@ -753,10 +753,10 @@ function cleanReplyForWebHandoff(reply, { handoffAvailable = false, channel = "w
 
   if (channel === "web" && handoffAvailable) {
     text = text
-      .replace(/te escribir[eé]\s+por whatsapp[^.]*\./gi, "Si te va mejor, seguimos por WhatsApp desde el botón que te dejo abajo.")
-      .replace(/te contactar[eé]\s+por whatsapp[^.]*\./gi, "Si prefieres WhatsApp, puedes pasar directamente desde el botón que te dejo abajo.")
-      .replace(/te enviar[eé]\s+[^.]*por whatsapp[^.]*\./gi, "Si quieres verlo por WhatsApp, te dejo el acceso directo aquí debajo.")
-      .replace(/mientras tanto,\s*preparo la propuesta y te la envío pronto\./gi, "Si quieres, seguimos ya por WhatsApp y te lo explico ahí con el contexto de esta conversación.");
+      .replace(/te escribir[eé]\s+por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.")
+      .replace(/te contactar[eé]\s+por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.")
+      .replace(/te enviar[eé]\s+[^.]*por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.")
+      .replace(/mientras tanto,\s*preparo la propuesta y te la envío pronto\./gi, "Cuando me escribas por WhatsApp, continúo desde este punto sin empezar de cero.");
   }
 
   return text;
@@ -840,7 +840,7 @@ function buildStructuredCloseReply({
   }
 
   if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
-    return `Perfecto${safeName ? `, ${safeName}` : ""}. Te dejo aquí el botón para seguir por WhatsApp con el contexto de este análisis.`;
+    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.\n\nCuando me escribas por WhatsApp, continúo desde este punto sin empezar de cero.`;
   }
 
   if (preferredChannel.includes("email") && !lead?.email) {
