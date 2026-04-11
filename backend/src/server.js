@@ -711,6 +711,7 @@ function shouldOfferWhatsAppTransition({
 }) {
   if (channel !== "web") return false;
   if (!hasName(lead)) return false;
+  if (!hasPhone(lead)) return false;
 
   const t = normalizeText(text);
   const explicitlyAskedForWhatsapp =
@@ -719,18 +720,26 @@ function shouldOfferWhatsAppTransition({
     t.includes("por wasap") ||
     t.includes("por whassap");
 
-  if (explicitlyAskedForWhatsapp) return true;
+  if (
+    explicitlyAskedForWhatsapp &&
+    normalizeText(lead?.preferred_contact_channel || "").includes("whatsapp")
+  ) {
+    return true;
+  }
   if (!hasAnalysisSnapshot(snapshot)) return false;
 
   return (
-    t.includes("quiero") ||
-    t.includes("me interesa") ||
-    t.includes("explic") ||
-    t.includes("profund") ||
-    t.includes("presupuesto") ||
-    t.includes("precio") ||
-    t.includes("analisis") ||
-    t.includes("análisis")
+    normalizeText(lead?.preferred_contact_channel || "").includes("whatsapp") &&
+    (
+      t.includes("quiero") ||
+      t.includes("me interesa") ||
+      t.includes("explic") ||
+      t.includes("profund") ||
+      t.includes("presupuesto") ||
+      t.includes("precio") ||
+      t.includes("analisis") ||
+      t.includes("análisis")
+    )
   );
 }
 
@@ -749,6 +758,46 @@ function cleanReplyForWebHandoff(reply, { handoffAvailable = false, channel = "w
   return text;
 }
 
+function buildStructuredCloseReply({
+  channel,
+  lead,
+  text,
+  handoff,
+}) {
+  if (channel !== "web") return null;
+
+  const wantsWhatsapp = prefersWhatsAppChannel(text);
+  const wantsEmail = prefersEmailChannel(text);
+  const safeName = getSafeLeadName(lead);
+  const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
+
+  if ((wantsWhatsapp || preferredChannel.includes("whatsapp")) && !safeName) {
+    return "Perfecto. Antes de seguir por WhatsApp, ¿cómo te llamas?";
+  }
+
+  if ((wantsEmail || preferredChannel.includes("email")) && !safeName) {
+    return "Perfecto. Antes de preparártelo por email, ¿cómo te llamas?";
+  }
+
+  if ((wantsWhatsapp || preferredChannel.includes("whatsapp")) && !hasPhone(lead)) {
+    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si prefieres seguir por WhatsApp, compárteme tu número y te dejo el paso preparado por ahí.`;
+  }
+
+  if ((wantsEmail || preferredChannel.includes("email")) && !lead?.email) {
+    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si prefieres email, compárteme tu correo y te lo preparo por ahí.`;
+  }
+
+  if (!lead?.preferred_contact_channel && safeName && !hasContact(lead)) {
+    return `Perfecto, ${safeName}. ¿Prefieres que sigamos por email o por WhatsApp?`;
+  }
+
+  if (handoff?.whatsapp_url) {
+    return `Perfecto${safeName ? `, ${safeName}` : ""}. Te dejo aquí el botón para seguir por WhatsApp con el contexto de este análisis.`;
+  }
+
+  return null;
+}
+
 function detectStrongCommercialIntent(text) {
   const t = normalizeText(text);
   return (
@@ -763,6 +812,32 @@ function detectStrongCommercialIntent(text) {
     t.includes("contactar") ||
     t.includes("whatsapp")
   );
+}
+
+function prefersWhatsAppChannel(text) {
+  const t = normalizeText(text);
+  return (
+    t.includes("whatsapp") ||
+    t.includes("wasap") ||
+    t.includes("whats") ||
+    t.includes("por whatsapp") ||
+    t.includes("mejor por whatsapp")
+  );
+}
+
+function prefersEmailChannel(text) {
+  const t = normalizeText(text);
+  return (
+    t.includes("email") ||
+    t.includes("correo") ||
+    t.includes("mail") ||
+    t.includes("por email") ||
+    t.includes("por correo")
+  );
+}
+
+function hasPhone(lead) {
+  return norm(lead?.phone).length >= 6;
 }
 
 function getConversationMode({
@@ -868,6 +943,22 @@ function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
         break;
       case "email_or_phone":
         if (!hasContact(lead)) {
+          const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
+          if (!preferredChannel) {
+            return hasName(lead)
+              ? `Perfecto, ${getSafeLeadName(lead) || ""}. ¿Prefieres que sigamos por email o por WhatsApp?`
+              : "Antes de seguir por un canal externo, dime tu nombre y te guío con el siguiente paso.";
+          }
+          if (preferredChannel.includes("whatsapp")) {
+            return hasName(lead)
+              ? `Perfecto, ${getSafeLeadName(lead) || ""}. Compárteme tu número de WhatsApp y te dejo el paso preparado por ahí.`
+              : "Si prefieres WhatsApp, antes dime tu nombre y luego tu número.";
+          }
+          if (preferredChannel.includes("email")) {
+            return hasName(lead)
+              ? `Perfecto, ${getSafeLeadName(lead) || ""}. Compárteme tu email y te lo preparo por ahí.`
+              : "Si prefieres email, antes dime tu nombre y seguimos.";
+          }
           return hasName(lead)
             ? `Perfecto, ${getSafeLeadName(lead) || ""}. Si quieres que te deje esto preparado o seguir por un canal más cómodo, compárteme email o WhatsApp y seguimos por ahí.`
             : "Si quieres que te deje esto preparado o seguir por un canal más cómodo, antes dime tu nombre y seguimos.";
@@ -1106,10 +1197,14 @@ function applyFlowPatch(lead, text) {
   const detectedBusinessType = detectBusinessType(text);
   const detectedBusinessActivity = detectBusinessActivity(text);
   const detectedGoal = detectMainGoal(text);
+  const prefersWhatsapp = prefersWhatsAppChannel(text);
+  const prefersEmail = prefersEmailChannel(text);
 
   if (detectedEmail && !lead?.email) patch.email = detectedEmail;
   if (detectedPhone && !lead?.phone) patch.phone = detectedPhone;
   if (detectedService && !lead?.interest_service) patch.interest_service = detectedService;
+  if (prefersWhatsapp) patch.preferred_contact_channel = "whatsapp";
+  if (!prefersWhatsapp && prefersEmail) patch.preferred_contact_channel = "email";
   if (detectedBusinessType && !lead?.business_type) patch.business_type = detectedBusinessType;
   if (detectedBusinessActivity && !lead?.business_activity) {
     patch.business_activity = detectedBusinessActivity;
@@ -1708,6 +1803,17 @@ ${ragContext}
         conversationPhase === "discover"
           ? "Puedo ayudarte a revisar tu web, SEO, Google Ads o captación. Si quieres, pásame tu URL o dime qué te preocupa más y te doy una primera orientación."
           : "Si quieres, sigo contigo sobre ese punto y te digo cuál sería la prioridad más sensata.";
+    }
+
+    const structuredCloseReply = buildStructuredCloseReply({
+      channel: channel || "web",
+      lead: leadAfter || {},
+      text: userText,
+      handoff: handoffCandidate,
+    });
+
+    if (structuredCloseReply) {
+      reply = structuredCloseReply;
     }
 
     reply = cleanReply(reply);

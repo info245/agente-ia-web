@@ -111,6 +111,37 @@ export function mergeLeadData({ currentLead, extractedLead, lastUserMessage }) {
     merged.budget_range = normalizeText(extractedLead.budget_range);
   }
 
+  if (!normalizeText(currentLead?.business_type) && isMeaningful(extractedLead?.business_type)) {
+    merged.business_type = normalizeText(extractedLead.business_type);
+  }
+
+  if (!normalizeText(currentLead?.business_activity) && isMeaningful(extractedLead?.business_activity)) {
+    merged.business_activity = normalizeText(extractedLead.business_activity);
+  }
+
+  if (!normalizeText(currentLead?.main_goal) && isMeaningful(extractedLead?.main_goal)) {
+    merged.main_goal = normalizeText(extractedLead.main_goal);
+  }
+
+  if (!normalizeText(currentLead?.current_situation) && isMeaningful(extractedLead?.current_situation)) {
+    merged.current_situation = normalizeText(extractedLead.current_situation);
+  }
+
+  if (!normalizeText(currentLead?.pain_points) && isMeaningful(extractedLead?.pain_points)) {
+    merged.pain_points = normalizeText(extractedLead.pain_points);
+  }
+
+  if (
+    !normalizeText(currentLead?.preferred_contact_channel) &&
+    isMeaningful(extractedLead?.preferred_contact_channel)
+  ) {
+    merged.preferred_contact_channel = normalizeText(extractedLead.preferred_contact_channel);
+  }
+
+  if (!normalizeText(currentLead?.last_intent) && isMeaningful(extractedLead?.last_intent)) {
+    merged.last_intent = normalizeText(extractedLead.last_intent);
+  }
+
   if (typeof currentLead?.consent !== "boolean") {
     merged.consent = !!extractedLead?.consent;
   } else {
