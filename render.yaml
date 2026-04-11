@@ -24,6 +24,8 @@ services:
         sync: false
       - key: WHATSAPP_PHONE_NUMBER_ID
         sync: false
+      - key: WHATSAPP_PUBLIC_NUMBER
+        sync: false
       - key: WHATSAPP_BUSINESS_ACCOUNT_ID
         sync: false
       - key: WHATSAPP_VERIFY_TOKEN
@@ -31,6 +33,8 @@ services:
       - key: WHATSAPP_API_VERSION
         value: v25.0
       - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: CHAT_HANDOFF_SECRET
         sync: false
       - key: SMTP_HOST
         sync: false

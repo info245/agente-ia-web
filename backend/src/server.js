@@ -14,6 +14,8 @@ import {
   upsertLeadFromConversation,
   getConversationMessages,
   getLeadByConversationId,
+  getLatestConversationEvent,
+  findLatestWebLeadByContact,
   listCrmLeads,
   updateLeadCrmFields,
   getLatestQuoteByLeadId,
@@ -40,6 +42,10 @@ import {
 } from "./lib/memoryUtils.js";
 import { renderQuotePreviewHtml } from "./lib/quoteTemplate.js";
 import { renderHtmlToPdfBuffer } from "./lib/htmlPdf.js";
+import {
+  extractFirstUrlFromText,
+  runLightSiteAnalysis,
+} from "./lib/lightSiteAnalyzer.js";
 
 const app = express();
 const crmPublicDir = fileURLToPath(new URL("../public-crm", import.meta.url));
@@ -60,14 +66,20 @@ app.get("/crm", (_req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "memory-v13-inline-slot-flow-no-loop-safe";
+const BUILD_TAG = "memory-v14-channel-funnel-router";
 
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const WHATSAPP_PUBLIC_NUMBER = process.env.WHATSAPP_PUBLIC_NUMBER || "";
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v25.0";
 const WHATSAPP_APP_SECRET =
   process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET || "";
+const HANDOFF_SECRET =
+  process.env.CHAT_HANDOFF_SECRET ||
+  WHATSAPP_APP_SECRET ||
+  WHATSAPP_VERIFY_TOKEN ||
+  "tmedia-handoff-dev";
 
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -614,6 +626,359 @@ function buildLeadSignature(lead) {
   });
 }
 
+function hasAnalysisSnapshot(snapshot) {
+  return !!(
+    snapshot?.url &&
+    (snapshot?.summary ||
+      (Array.isArray(snapshot?.findings) && snapshot.findings.length) ||
+      (Array.isArray(snapshot?.priorities) && snapshot.priorities.length))
+  );
+}
+
+function summarizeAnalysisSnapshot(snapshot) {
+  if (!hasAnalysisSnapshot(snapshot)) return "";
+
+  const findings = Array.isArray(snapshot?.findings)
+    ? snapshot.findings.slice(0, 3).map((x) => `- ${x}`).join("\n")
+    : "";
+  const priorities = Array.isArray(snapshot?.priorities)
+    ? snapshot.priorities.slice(0, 3).map((x) => `- ${x}`).join("\n")
+    : "";
+
+  return `
+SNAPSHOT DEL ANÁLISIS
+URL: ${snapshot.url}
+Title: ${snapshot.title || "N/D"}
+Meta description: ${snapshot.meta_description || "N/D"}
+H1: ${snapshot.h1 || "N/D"}
+Hero: ${snapshot.hero_text || "N/D"}
+Resumen: ${snapshot.summary || "N/D"}
+Hallazgos:
+${findings || "- N/D"}
+Prioridades:
+${priorities || "- N/D"}
+Foco recomendado: ${snapshot.recommended_focus || "N/D"}
+`.trim();
+}
+
+function toBase64Url(value) {
+  return Buffer.from(String(value || ""), "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function fromBase64Url(value) {
+  const normalized = String(value || "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const padded =
+    normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
+  return Buffer.from(padded, "base64").toString("utf8");
+}
+
+function signHandoffPayload(payloadText) {
+  return crypto
+    .createHmac("sha256", HANDOFF_SECRET)
+    .update(payloadText)
+    .digest("base64url");
+}
+
+function createHandoffToken(payload) {
+  const body = toBase64Url(JSON.stringify(payload));
+  const signature = signHandoffPayload(body);
+  return `${body}.${signature}`;
+}
+
+function parseHandoffToken(token) {
+  const raw = String(token || "").trim();
+  if (!raw || !raw.includes(".")) return null;
+
+  const [body, signature] = raw.split(".");
+  if (!body || !signature) return null;
+  if (signHandoffPayload(body) !== signature) return null;
+
+  try {
+    const payload = JSON.parse(fromBase64Url(body));
+    return payload || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildWhatsAppHandoff({
+  conversationId,
+  lead,
+  analysisSnapshot,
+}) {
+  const publicNumber = String(WHATSAPP_PUBLIC_NUMBER || "").replace(/\D/g, "");
+  if (!publicNumber || !conversationId) return null;
+
+  const payload = {
+    v: 1,
+    source: "web",
+    conversation_id: conversationId,
+    analysis_url: analysisSnapshot?.url || null,
+    service: lead?.interest_service || null,
+    goal: lead?.main_goal || null,
+    ts: Date.now(),
+  };
+
+  const token = createHandoffToken(payload);
+  const intro = "Hola, vengo desde el chat web y quiero seguir por aquí.";
+  const text = `TMCTX:${token}\n${intro}`;
+  const whatsappUrl = `https://wa.me/${publicNumber}?text=${encodeURIComponent(text)}`;
+
+  return {
+    channel: "whatsapp",
+    whatsapp_url: whatsappUrl,
+    handoff_token: token,
+    prefill_text: intro,
+  };
+}
+
+function extractHandoffContext(text) {
+  const raw = String(text || "").trim();
+  const match = raw.match(/TMCTX:([A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+)/);
+  if (!match) return { sanitizedText: raw, handoff: null };
+
+  const token = match[1];
+  const payload = parseHandoffToken(token);
+  const sanitizedText = raw
+    .replace(match[0], "")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+
+  return {
+    sanitizedText,
+    handoff: payload
+      ? {
+          token,
+          payload,
+        }
+      : null,
+  };
+}
+
+function shouldOfferWhatsAppTransition({
+  channel,
+  snapshot,
+  lead,
+  text,
+}) {
+  if (channel !== "web") return false;
+  if (!hasAnalysisSnapshot(snapshot)) return false;
+  if (lead?.phone || lead?.email) return false;
+
+  const t = normalizeText(text);
+  return (
+    t.includes("quiero") ||
+    t.includes("me interesa") ||
+    t.includes("explic") ||
+    t.includes("profund") ||
+    t.includes("presupuesto") ||
+    t.includes("precio") ||
+    t.includes("analisis") ||
+    t.includes("análisis")
+  );
+}
+
+function detectStrongCommercialIntent(text) {
+  const t = normalizeText(text);
+  return (
+    t.includes("precio") ||
+    t.includes("presupuesto") ||
+    t.includes("cuanto cuesta") ||
+    t.includes("cuánto cuesta") ||
+    t.includes("trabajar contigo") ||
+    t.includes("trabajar con vosotros") ||
+    t.includes("empezar") ||
+    t.includes("llamada") ||
+    t.includes("contactar") ||
+    t.includes("whatsapp")
+  );
+}
+
+function getConversationMode({
+  channel,
+  currentAnalysis,
+  relatedWebLead,
+  relatedWebAnalysis,
+}) {
+  if (channel === "web") return "diagnostic_web";
+  if (
+    channel === "whatsapp" &&
+    (hasAnalysisSnapshot(currentAnalysis) ||
+      !!relatedWebLead ||
+      hasAnalysisSnapshot(relatedWebAnalysis))
+  ) {
+    return "closer_whatsapp";
+  }
+  return "hybrid_whatsapp";
+}
+
+function getConversationPhase({ mode, lead, analysisSnapshot, text }) {
+  const hasSnapshot = hasAnalysisSnapshot(analysisSnapshot);
+  const hasAnyLeadSignal =
+    hasService(lead) ||
+    hasBudget(lead) ||
+    hasMainGoal(lead) ||
+    hasContact(lead) ||
+    hasBusinessActivity(lead);
+
+  if (mode === "closer_whatsapp") {
+    if (hasContact(lead) && (hasService(lead) || hasSnapshot)) return "close";
+    return "deepen";
+  }
+
+  if (!hasSnapshot && !extractFirstUrlFromText(text) && !hasAnyLeadSignal) {
+    return "discover";
+  }
+
+  if (hasSnapshot && !hasContact(lead) && !detectStrongCommercialIntent(text)) {
+    return "diagnose";
+  }
+
+  if (hasSnapshot || hasAnyLeadSignal) {
+    return detectStrongCommercialIntent(text) || hasContact(lead)
+      ? "close"
+      : "deepen";
+  }
+
+  return "discover";
+}
+
+function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
+  const sequence = lateOnly
+    ? ["interest_service", "main_goal", "budget_range", "urgency", "email_or_phone", "name"]
+    : ["name", "business_type", "business_activity", "interest_service", "main_goal", "budget_range", "urgency", "email_or_phone"];
+
+  for (const item of sequence) {
+    switch (item) {
+      case "name":
+        if (!hasName(lead)) return "Si te encaja, ¿cómo te llamas?";
+        break;
+      case "business_type":
+        if (!hasBusinessType(lead)) {
+          return "¿Esto es para una empresa en marcha, un negocio local o un proyecto que estás arrancando?";
+        }
+        break;
+      case "business_activity":
+        if (!hasBusinessActivity(lead)) {
+          return "¿A qué os dedicáis exactamente?";
+        }
+        break;
+      case "interest_service":
+        if (!hasService(lead)) {
+          return "¿Qué quieres revisar primero: web, SEO, Google Ads o captación?";
+        }
+        break;
+      case "main_goal":
+        if (!hasMainGoal(lead)) {
+          return "¿Qué te preocupa más ahora mismo: captar más contactos, vender más o mejorar la conversión?";
+        }
+        break;
+      case "budget_range":
+        if (!hasBudget(lead)) {
+          return "Si quieres, te oriento mejor si me dices con qué presupuesto aproximado te gustaría moverte.";
+        }
+        break;
+      case "urgency":
+        if (!hasUrgency(lead)) {
+          return "¿Esto te corre ahora o es algo que quieres mover más adelante?";
+        }
+        break;
+      case "email_or_phone":
+        if (!hasContact(lead)) {
+          return "Si quieres que te deje esto preparado o te lo envíe, compárteme email o WhatsApp y seguimos por ahí.";
+        }
+        break;
+    }
+  }
+
+  return null;
+}
+
+function buildModeInstructions({ mode, phase, lead, analysisSnapshot, channel, text }) {
+  const analysisBlock = summarizeAnalysisSnapshot(analysisSnapshot);
+  const missingLeadQuestion =
+    phase === "deepen" || phase === "close"
+      ? getMissingLeadQuestion(lead, { lateOnly: true })
+      : null;
+  const suggestWhatsApp = shouldOfferWhatsAppTransition({
+    channel,
+    snapshot: analysisSnapshot,
+    lead,
+    text,
+  });
+
+  const modeGuidance = {
+    diagnostic_web: `
+MODO: diagnostic_web
+- Este chat web debe reducir fricción.
+- Empieza ayudando, no interrogando.
+- Ofrece caminos claros: revisar web, SEO, Google Ads o captación.
+- Si hay URL o análisis, entrega un mini diagnóstico útil y breve.
+- Solo pide un dato de lead si el usuario ya recibió valor o quiere seguir.
+${suggestWhatsApp ? "- Si encaja, propone seguir por WhatsApp como continuación cómoda del análisis." : ""}
+`,
+    closer_whatsapp: `
+MODO: closer_whatsapp
+- Esto es una continuación natural de un contexto previo, normalmente desde web.
+- No reinicies la conversación ni repitas preguntas ya resueltas.
+- Usa el análisis previo como punto de partida.
+- Resuelve dudas, profundiza solo lo necesario y orienta a cierre o siguiente paso.
+- Si falta un dato clave para avanzar, pide solo uno.
+`,
+    hybrid_whatsapp: `
+MODO: hybrid_whatsapp
+- Este usuario ha llegado directo a WhatsApp o no hay contexto previo fiable.
+- WhatsApp debe descubrir y diagnosticar con tono cercano.
+- Puedes ofrecer opciones guiadas, pedir URL o problema y dar un mini diagnóstico si hay material.
+- No dependas del chat web para ayudarle.
+`,
+  };
+
+  const phaseGuidance = {
+    discover: `
+FASE: descubrimiento
+- Tu prioridad es captar atención y orientar.
+- No pidas nombre, empresa, urgencia ni contacto al inicio.
+- Si aún no hay URL ni problema claro, guía con opciones muy concretas.
+- Haz como máximo una pregunta clara al final.
+`,
+    diagnose: `
+FASE: diagnóstico ligero
+- Resume qué has detectado.
+- Explica por qué puede afectar a captación, conversión o visibilidad.
+- Señala 2 o 3 prioridades.
+- Invita a profundizar o a seguir por un canal cómodo.
+- No inventes datos ni exageres.
+`,
+    deepen: `
+FASE: profundización
+- Ya puedes afinar el problema y recoger información comercial de forma progresiva.
+- Pide solo el dato que más desbloquee el siguiente paso.
+- No conviertas el mensaje en un formulario.
+${missingLeadQuestion ? `- Si necesitas pedir un dato, la mejor pregunta ahora es: "${missingLeadQuestion}"` : ""}
+`,
+    close: `
+FASE: cierre o transición
+- Orienta a siguiente paso claro: WhatsApp, email, llamada o propuesta.
+- Si faltan datos mínimos para avanzar, pide solo uno.
+- En WhatsApp, cierra por ahí si el usuario ya viene con intención.
+${missingLeadQuestion ? `- Si necesitas pedir un dato, la mejor pregunta ahora es: "${missingLeadQuestion}"` : ""}
+`,
+  };
+
+  return `
+${modeGuidance[mode] || ""}
+${phaseGuidance[phase] || ""}
+${analysisBlock ? `${analysisBlock}\n` : ""}
+`.trim();
+}
+
 async function trackConversationEvent(params) {
   try {
     await saveConversationEvent(params);
@@ -763,6 +1128,44 @@ function applyFlowPatch(lead, text) {
   if (detectedEmail && !lead?.email) patch.email = detectedEmail;
   if (detectedPhone && !lead?.phone) patch.phone = detectedPhone;
   if (detectedService && !lead?.interest_service) patch.interest_service = detectedService;
+  if (detectedBusinessType && !lead?.business_type) patch.business_type = detectedBusinessType;
+  if (detectedBusinessActivity && !lead?.business_activity) {
+    patch.business_activity = detectedBusinessActivity;
+  }
+  if (detectedGoal && !lead?.main_goal) patch.main_goal = detectedGoal;
+  if (detectedBudget && !lead?.budget_range) patch.budget_range = detectedBudget;
+
+  if (
+    !lead?.urgency &&
+    (
+      normalizeText(text).includes("urgente") ||
+      normalizeText(text).includes("cuanto antes") ||
+      normalizeText(text).includes("cuánto antes") ||
+      normalizeText(text).includes("ya") ||
+      normalizeText(text).includes("esta semana")
+    )
+  ) {
+    patch.urgency = "alta";
+  } else if (
+    !lead?.urgency &&
+    (
+      normalizeText(text).includes("este mes") ||
+      normalizeText(text).includes("en breve") ||
+      normalizeText(text).includes("pronto")
+    )
+  ) {
+    patch.urgency = "media";
+  } else if (
+    !lead?.urgency &&
+    (
+      normalizeText(text).includes("sin prisa") ||
+      normalizeText(text).includes("mas adelante") ||
+      normalizeText(text).includes("más adelante") ||
+      isUnknownResponse(text)
+    )
+  ) {
+    patch.urgency = "baja";
+  }
 
   switch (step) {
     case "ask_name":
@@ -872,6 +1275,14 @@ async function processIncomingMessage({
     throw new Error("El campo 'text' es obligatorio y debe ser texto.");
   }
 
+  const handoffExtraction =
+    channel === "whatsapp"
+      ? extractHandoffContext(text)
+      : { sanitizedText: text, handoff: null };
+  const userText =
+    String(handoffExtraction?.sanitizedText || "").trim() || String(text).trim();
+  const handoffContext = handoffExtraction?.handoff || null;
+
   let currentConversationId = conversation_id;
   let createdConversation = false;
 
@@ -891,7 +1302,7 @@ async function processIncomingMessage({
       channel: channel || "web",
       external_user_id: external_user_id || null,
       payload: {
-        first_message: String(text || "").slice(0, 500),
+        first_message: String(userText || "").slice(0, 500),
       },
     });
   }
@@ -899,7 +1310,7 @@ async function processIncomingMessage({
   await saveMessage({
     conversation_id: currentConversationId,
     role: "user",
-    content: text,
+    content: userText,
   });
 
   await trackConversationEvent({
@@ -909,7 +1320,8 @@ async function processIncomingMessage({
     external_user_id: external_user_id || null,
     payload: {
       role: "user",
-      text: String(text || "").slice(0, 500),
+      text: String(userText || "").slice(0, 500),
+      handoff_source: handoffContext?.payload?.source || null,
     },
   });
 
@@ -921,7 +1333,7 @@ async function processIncomingMessage({
       ? normalizeWhatsAppPhone(external_user_id)
       : null;
 
-  const extracted = extractLeadDataFromText(text, leadBefore);
+  const extracted = extractLeadDataFromText(userText, leadBefore);
 
   const incoming = {
     conversation_id: currentConversationId,
@@ -950,7 +1362,7 @@ async function processIncomingMessage({
   };
 
   if (!incoming.budget_range) {
-    const detectedBudget = normalizeBudget(text);
+    const detectedBudget = normalizeBudget(userText);
     if (detectedBudget) {
       incoming.budget_range = detectedBudget;
     }
@@ -959,11 +1371,11 @@ async function processIncomingMessage({
   const mergedLeadBase = mergeLeadData({
     currentLead: leadBefore || {},
     extractedLead: incoming,
-    lastUserMessage: text,
+    lastUserMessage: userText,
   });
 
   const memoryPatch = buildMemoryPatch({
-    text,
+    text: userText,
     leadBefore,
     extracted,
     mergedLead: mergedLeadBase,
@@ -972,7 +1384,7 @@ async function processIncomingMessage({
   const mergedLead = mergeLeadData({
     currentLead: mergedLeadBase,
     extractedLead: memoryPatch || {},
-    lastUserMessage: text,
+    lastUserMessage: userText,
   });
 
   await upsertLeadFromConversation({
@@ -997,7 +1409,118 @@ async function processIncomingMessage({
     leadAfter = await getLeadByConversationId(currentConversationId);
   }
 
-  const flow = applyFlowPatch(leadAfter || {}, text);
+  let relatedWebLead = null;
+  let relatedWebAnalysis = null;
+
+  if (channel === "whatsapp") {
+    try {
+      if (handoffContext?.payload?.conversation_id) {
+        relatedWebLead = await getLeadByConversationId(
+          handoffContext.payload.conversation_id
+        );
+      }
+
+      if (!relatedWebLead) {
+        relatedWebLead = await findLatestWebLeadByContact({
+          email: leadAfter?.email,
+          phone: whatsappPhone || leadAfter?.phone,
+        });
+      }
+
+      if (relatedWebLead?.conversation_id) {
+        relatedWebAnalysis = await getLatestConversationEvent(
+          relatedWebLead.conversation_id,
+          "analysis_snapshot"
+        );
+      }
+
+      if (handoffContext?.payload?.conversation_id && relatedWebLead?.conversation_id) {
+        await trackConversationEvent({
+          conversation_id: currentConversationId,
+          event_type: "channel_handoff",
+          channel: channel || "whatsapp",
+          external_user_id: external_user_id || null,
+          payload: {
+            source_channel: "web",
+            source_conversation_id: relatedWebLead.conversation_id,
+            handoff_token_present: true,
+          },
+        });
+      }
+    } catch (e) {
+      console.log("related web context error", e.message);
+    }
+  }
+
+  if (channel === "whatsapp" && relatedWebLead) {
+    const hydratedLead = mergeLeadData({
+      currentLead: {
+        ...relatedWebLead,
+        ...leadAfter,
+      },
+      extractedLead: {
+        name: leadAfter?.name,
+        email: leadAfter?.email,
+        phone: leadAfter?.phone || whatsappPhone,
+        interest_service:
+          leadAfter?.interest_service || relatedWebLead?.interest_service,
+        urgency: leadAfter?.urgency || relatedWebLead?.urgency,
+        budget_range: leadAfter?.budget_range || relatedWebLead?.budget_range,
+      },
+      lastUserMessage: userText,
+    });
+
+    await upsertLeadFromConversation({
+      ...hydratedLead,
+      conversation_id: currentConversationId,
+      business_type: leadAfter?.business_type || relatedWebLead?.business_type,
+      business_activity:
+        leadAfter?.business_activity || relatedWebLead?.business_activity,
+      main_goal: leadAfter?.main_goal || relatedWebLead?.main_goal,
+      current_situation:
+        leadAfter?.current_situation || relatedWebLead?.current_situation,
+      pain_points: leadAfter?.pain_points || relatedWebLead?.pain_points,
+      current_step: leadAfter?.current_step ?? relatedWebLead?.current_step ?? null,
+      last_question: leadAfter?.last_question ?? relatedWebLead?.last_question ?? null,
+    });
+
+    leadAfter = await getLeadByConversationId(currentConversationId);
+  }
+
+  const currentAnalysisEvent =
+    (await getLatestConversationEvent(currentConversationId, "analysis_snapshot").catch(
+      () => null
+    )) || null;
+  let analysisSnapshot = currentAnalysisEvent?.payload || null;
+
+  const detectedUrl = extractFirstUrlFromText(userText);
+  const snapshotUrl = analysisSnapshot?.url || relatedWebAnalysis?.payload?.url || null;
+  const shouldRunAnalysis =
+    !!detectedUrl &&
+    (!snapshotUrl ||
+      normalizeText(snapshotUrl) !== normalizeText(detectedUrl));
+
+  if (shouldRunAnalysis) {
+    try {
+      const newSnapshot = await runLightSiteAnalysis(detectedUrl);
+      if (newSnapshot) {
+        analysisSnapshot = newSnapshot;
+        await trackConversationEvent({
+          conversation_id: currentConversationId,
+          event_type: "analysis_snapshot",
+          channel: channel || "web",
+          external_user_id: external_user_id || null,
+          payload: newSnapshot,
+        });
+      }
+    } catch (e) {
+      console.log("light site analysis error", e.message);
+    }
+  } else if (!analysisSnapshot && relatedWebAnalysis?.payload) {
+    analysisSnapshot = relatedWebAnalysis.payload;
+  }
+
+  const flow = applyFlowPatch(leadAfter || {}, userText);
 
   if (Object.keys(flow.patch || {}).length > 0) {
     const updatedLead = {
@@ -1031,7 +1554,7 @@ async function processIncomingMessage({
   }
 
   console.log("---- LEAD DEBUG ----");
-  console.log("text:", text);
+  console.log("text:", userText);
   console.log("leadBefore:", leadBefore);
   console.log("extracted:", extracted);
   console.log("incoming:", incoming);
@@ -1039,15 +1562,25 @@ async function processIncomingMessage({
   console.log("mergedLead:", mergedLead);
   console.log("flowPatch:", flow.patch);
   console.log("flowNextStep:", flow.nextStep);
+  console.log("analysisSnapshot:", analysisSnapshot);
   console.log("leadAfter:", leadAfter);
   console.log("--------------------");
 
   let reply = null;
-  const nextStep = getCurrentStep(leadAfter || {});
+  const conversationMode = getConversationMode({
+    channel: channel || "web",
+    currentAnalysis: analysisSnapshot,
+    relatedWebLead,
+    relatedWebAnalysis: relatedWebAnalysis?.payload || null,
+  });
+  const conversationPhase = getConversationPhase({
+    mode: conversationMode,
+    lead: leadAfter || {},
+    analysisSnapshot,
+    text: userText,
+  });
 
-  if (nextStep !== "ready_for_ai") {
-    reply = getQuestionForStep(nextStep, leadAfter || {});
-  } else {
+  {
     const serviceFacts = getServiceFacts(leadAfter.interest_service);
 
     let factsBlock = "";
@@ -1070,32 +1603,47 @@ ${serviceFacts.notes}
 
     let ragContext = "";
 
-    try {
-      const docs = await retrieveWebsiteContext(
-        `
+    if (
+      conversationPhase !== "discover" &&
+      (leadAfter.interest_service ||
+        hasAnalysisSnapshot(analysisSnapshot) ||
+        detectStrongCommercialIntent(userText))
+    ) {
+      try {
+        const docs = await retrieveWebsiteContext(
+          `
 Servicio: ${leadAfter.interest_service || ""}
-Pregunta usuario: ${text}
+Pregunta usuario: ${userText}
 Presupuesto: ${leadAfter.budget_range || ""}
 Objetivo: ${leadAfter.main_goal || ""}
 Negocio: ${leadAfter.business_type || ""}
 Actividad: ${leadAfter.business_activity || ""}
 `
-      );
+        );
 
-      ragContext = docs
-        .map(
-          (d) => `
+        ragContext = docs
+          .map(
+            (d) => `
 Fuente: ${d.url}
 
 ${d.chunk}
 `
-        )
-        .join("\n");
-    } catch (e) {
-      console.log("RAG error", e.message);
+          )
+          .join("\n");
+      } catch (e) {
+        console.log("RAG error", e.message);
+      }
     }
 
     const memoryContext = buildLeadMemoryContext(leadAfter);
+    const modeInstructions = buildModeInstructions({
+      mode: conversationMode,
+      phase: conversationPhase,
+      lead: leadAfter || {},
+      analysisSnapshot,
+      channel: channel || "web",
+      text: userText,
+    });
 
     const systemPrompt = `
 ${getAgentSystemPrompt()}
@@ -1103,7 +1651,7 @@ ${getAgentSystemPrompt()}
 REGLAS IMPORTANTES
 
 1. RESPONDE SIEMPRE LA PREGUNTA DEL USUARIO
-2. USA INFORMACIÓN DE LA WEB SI ESTÁ DISPONIBLE
+2. USA INFORMACIÓN DE LA WEB Y DEL SNAPSHOT SI ESTÁ DISPONIBLE
 3. LOS PRECIOS SIEMPRE DEBEN INCLUIR "+ IVA"
 4. NO INVENTES PRECIOS
 5. USA LA MEMORIA DEL LEAD PARA DAR CONTINUIDAD
@@ -1113,7 +1661,15 @@ REGLAS IMPORTANTES
 9. NO DES RANGOS DE PRECIOS SI NO ESTÁN EXPLÍCITAMENTE EN LA INFORMACIÓN VERIFICADA
 10. RESPUESTAS BREVES: MÁXIMO 2 PÁRRAFOS CORTOS
 11. NO HAGAS VARIAS PREGUNTAS SEGUIDAS EN EL MISMO MENSAJE
-12. EL LEAD YA HA PASADO EL FLUJO DE CAPTACIÓN, ASÍ QUE NO VUELVAS A PEDIR NOMBRE, ACTIVIDAD, SERVICIO, PRESUPUESTO, URGENCIA O CONTACTO SI YA EXISTEN
+12. NO EMPIECES COMO FORMULARIO
+13. DA VALOR ANTES DE PEDIR DATOS
+14. SI EL CANAL ES WEB, PRIORIZA DIAGNÓSTICO Y REDUCCIÓN DE FRICCIÓN
+15. SI EL CANAL ES WHATSAPP CON CONTEXTO PREVIO, CONTINÚA SIN REINICIAR
+16. SI EL CANAL ES WHATSAPP SIN CONTEXTO, COMBINA DESCUBRIMIENTO Y DIAGNÓSTICO
+17. NO PREGUNTES NOMBRE, EMPRESA, URGENCIA O CONTACTO AL PRINCIPIO SI TODAVÍA NO HAS APORTADO VALOR
+18. NO SOBRESCRIBAS DATOS CONFIRMADOS CON SUPOSICIONES DÉBILES
+
+${modeInstructions}
 
 ${memoryContext}
 
@@ -1140,7 +1696,10 @@ ${ragContext}
     }
 
     if (!reply) {
-      reply = "Cuéntame un poco más sobre tu proyecto para poder orientarte mejor.";
+      reply =
+        conversationPhase === "discover"
+          ? "Puedo ayudarte a revisar tu web, SEO, Google Ads o captación. Si quieres, pásame tu URL o dime qué te preocupa más y te doy una primera orientación."
+          : "Si quieres, sigo contigo sobre ese punto y te digo cuál sería la prioridad más sensata.";
     }
 
     reply = cleanReply(reply);
@@ -1260,6 +1819,20 @@ ${ragContext}
     console.log("client email error", e.message);
   }
 
+  const handoff =
+    shouldOfferWhatsAppTransition({
+      channel: channel || "web",
+      snapshot: analysisSnapshot,
+      lead: leadAfter || {},
+      text: userText,
+    })
+      ? buildWhatsAppHandoff({
+          conversationId: currentConversationId,
+          lead: leadAfter || {},
+          analysisSnapshot,
+        })
+      : null;
+
   return {
     ok: true,
     build: BUILD_TAG,
@@ -1267,6 +1840,9 @@ ${ragContext}
     reply,
     lead: leadAfter || null,
     chat_completed: chatCompleted,
+    mode: conversationMode,
+    phase: conversationPhase,
+    handoff,
   };
 }
 

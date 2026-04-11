@@ -183,6 +183,49 @@ export async function saveConversationEvent({
   return data;
 }
 
+export async function getLatestConversationEvent(
+  conversation_id,
+  event_type = null
+) {
+  const safeConversationId = clean(conversation_id);
+  if (!safeConversationId) {
+    throw new Error(
+      "getLatestConversationEvent: conversation_id es obligatorio"
+    );
+  }
+
+  let query = supabase
+    .from("conversation_events")
+    .select("*")
+    .eq("conversation_id", safeConversationId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const safeEventType = clean(event_type);
+  if (safeEventType) {
+    query = query.eq("event_type", safeEventType);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("conversation_events") || message.includes("does not exist")) {
+      return null;
+    }
+    throw error;
+  }
+
+  return data || null;
+}
+
+function normalizePhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.length === 9) return `34${digits}`;
+  return digits;
+}
+
 export async function getConversationMessages(conversation_id, limit = 30) {
   const safeConversationId = clean(conversation_id);
   if (!safeConversationId) {
@@ -240,6 +283,49 @@ export async function listCrmLeads(limit = 200) {
 
   if (error) throw error;
   return data || [];
+}
+
+export async function findLatestWebLeadByContact({
+  email = null,
+  phone = null,
+  limit = 200,
+} = {}) {
+  const safeEmail = clean(email)?.toLowerCase() || null;
+  const safePhone = normalizePhone(phone);
+  if (!safeEmail && !safePhone) return null;
+
+  const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 200;
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select(
+      `
+      *,
+      conversations!inner (
+        id,
+        channel,
+        external_user_id,
+        created_at
+      )
+    `
+    )
+    .eq("conversations.channel", "web")
+    .order("created_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (error) throw error;
+
+  const leads = data || [];
+  const matched = leads.find((lead) => {
+    const leadEmail = clean(lead?.email)?.toLowerCase() || null;
+    const leadPhone = normalizePhone(lead?.phone);
+    return (
+      (safeEmail && leadEmail && leadEmail === safeEmail) ||
+      (safePhone && leadPhone && leadPhone === safePhone)
+    );
+  });
+
+  return matched || null;
 }
 
 export async function updateLeadCrmFields(leadId, patch = {}) {

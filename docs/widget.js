@@ -9,7 +9,7 @@
 
   const CONFIG = {
     backendBaseUrl:
-      backendFromAttr || "https://agente-ia-web-backend.onrender.com",
+      backendFromAttr || "https://tmedia-global-ai.onrender.com",
     channel: "web",
     brandName: brandFromAttr || "Agente IA",
     position: posFromAttr === "left" ? "left" : "right",
@@ -258,6 +258,17 @@
     .assistant .bubble-msg{background:#eef2ff;border-color:#dfe5ff;color:#111827;}
     .user .bubble-msg{background:#111827;border-color:#0f172a;color:#fff;}
     .system .bubble-msg{background:#fff7ed;border-color:#fed7aa;color:#9a3412;text-align:center;max-width:92%;}
+    .handoff-card{
+      width:min(100%, 290px); background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46;
+      border-radius:14px; padding:12px; display:grid; gap:8px;
+      box-shadow:0 8px 24px rgba(16,185,129,.12);
+    }
+    .handoff-card strong{font-size:13px;}
+    .handoff-card span{font-size:12px; color:#065f46;}
+    .handoff-link{
+      display:inline-flex; align-items:center; justify-content:center; text-decoration:none;
+      border-radius:999px; padding:10px 12px; background:#10b981; color:#fff; font-weight:600;
+    }
     .footer{border-top:1px solid #e5e7eb;padding:10px;background:#fff;display:grid;gap:8px;}
     .input{width:100%;resize:none;min-height:44px;max-height:110px;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;font:inherit;outline:none;}
     .input:focus{border-color:#c7d2fe;box-shadow:0 0 0 4px rgba(99,102,241,.10);}
@@ -331,6 +342,25 @@
     bubble.textContent = text;
 
     row.appendChild(bubble);
+    el.messages.appendChild(row);
+    el.messages.scrollTop = el.messages.scrollHeight;
+  }
+
+  function appendHandoffCard(handoff) {
+    if (!handoff?.whatsapp_url) return;
+
+    const row = document.createElement("div");
+    row.className = "row assistant";
+
+    const card = document.createElement("div");
+    card.className = "handoff-card";
+    card.innerHTML = `
+      <strong>Seguir por WhatsApp</strong>
+      <span>Te llevo con el contexto de este análisis para continuar sin empezar de cero.</span>
+      <a class="handoff-link" href="${handoff.whatsapp_url}" target="_blank" rel="noopener noreferrer">Continuar en WhatsApp</a>
+    `;
+
+    row.appendChild(card);
     el.messages.appendChild(row);
     el.messages.scrollTop = el.messages.scrollHeight;
   }
@@ -415,6 +445,9 @@
       }
 
       append("assistant", data?.reply || "Sin respuesta del backend.");
+      if (data?.handoff?.whatsapp_url) {
+        appendHandoffCard(data.handoff);
+      }
       updateMini();
       setStatus("OK");
     } catch (err) {
