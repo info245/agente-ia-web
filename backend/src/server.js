@@ -768,10 +768,18 @@ function shouldOfferWhatsAppTransition({
   text,
 }) {
   if (channel !== "web") return false;
-  if (!hasAnalysisSnapshot(snapshot)) return false;
-  if (lead?.phone || lead?.email) return false;
+  if (!hasName(lead)) return false;
 
   const t = normalizeText(text);
+  const explicitlyAskedForWhatsapp =
+    t.includes("whatsapp") ||
+    t.includes("por whatsapp") ||
+    t.includes("por wasap") ||
+    t.includes("por whassap");
+
+  if (explicitlyAskedForWhatsapp) return true;
+  if (!hasAnalysisSnapshot(snapshot)) return false;
+
   return (
     t.includes("quiero") ||
     t.includes("me interesa") ||
@@ -782,6 +790,21 @@ function shouldOfferWhatsAppTransition({
     t.includes("analisis") ||
     t.includes("análisis")
   );
+}
+
+function cleanReplyForWebHandoff(reply, { handoffAvailable = false, channel = "web" } = {}) {
+  let text = String(reply || "").trim();
+  if (!text) return text;
+
+  if (channel === "web" && handoffAvailable) {
+    text = text
+      .replace(/te escribir[eé]\s+por whatsapp[^.]*\./gi, "Si te va mejor, seguimos por WhatsApp desde el botón que te dejo abajo.")
+      .replace(/te contactar[eé]\s+por whatsapp[^.]*\./gi, "Si prefieres WhatsApp, puedes pasar directamente desde el botón que te dejo abajo.")
+      .replace(/te enviar[eé]\s+[^.]*por whatsapp[^.]*\./gi, "Si quieres verlo por WhatsApp, te dejo el acceso directo aquí debajo.")
+      .replace(/mientras tanto,\s*preparo la propuesta y te la envío pronto\./gi, "Si quieres, seguimos ya por WhatsApp y te lo explico ahí con el contexto de esta conversación.");
+  }
+
+  return text;
 }
 
 function detectStrongCommercialIntent(text) {
@@ -836,8 +859,20 @@ function getConversationPhase({ mode, lead, analysisSnapshot, text }) {
     return "discover";
   }
 
-  if (hasSnapshot && !hasContact(lead) && !detectStrongCommercialIntent(text)) {
+  if (
+    hasSnapshot &&
+    !hasName(lead) &&
+    !detectStrongCommercialIntent(text)
+  ) {
     return "diagnose";
+  }
+
+  if (
+    hasSnapshot &&
+    hasName(lead) &&
+    (!hasContact(lead) || !hasService(lead) || !hasMainGoal(lead))
+  ) {
+    return "deepen";
   }
 
   if (hasSnapshot || hasAnyLeadSignal) {
@@ -851,7 +886,7 @@ function getConversationPhase({ mode, lead, analysisSnapshot, text }) {
 
 function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
   const sequence = lateOnly
-    ? ["interest_service", "main_goal", "budget_range", "urgency", "email_or_phone", "name"]
+    ? ["name", "interest_service", "main_goal", "budget_range", "urgency", "email_or_phone"]
     : ["name", "business_type", "business_activity", "interest_service", "main_goal", "budget_range", "urgency", "email_or_phone"];
 
   for (const item of sequence) {
@@ -891,7 +926,9 @@ function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
         break;
       case "email_or_phone":
         if (!hasContact(lead)) {
-          return "Si quieres que te deje esto preparado o te lo envíe, compárteme email o WhatsApp y seguimos por ahí.";
+          return hasName(lead)
+            ? `Perfecto, ${getSafeLeadName(lead) || ""}. Si quieres que te deje esto preparado o seguir por un canal más cómodo, compárteme email o WhatsApp y seguimos por ahí.`
+            : "Si quieres que te deje esto preparado o seguir por un canal más cómodo, antes dime tu nombre y seguimos.";
         }
         break;
     }
@@ -961,6 +998,8 @@ FASE: profundización
 - Ya puedes afinar el problema y recoger información comercial de forma progresiva.
 - Pide solo el dato que más desbloquee el siguiente paso.
 - No conviertas el mensaje en un formulario.
+- No entregues análisis largos adicionales si ya has dado un primer diagnóstico útil.
+- Si todavía no tienes el nombre, pídelo antes de plantear contacto o continuidad formal.
 ${missingLeadQuestion ? `- Si necesitas pedir un dato, la mejor pregunta ahora es: "${missingLeadQuestion}"` : ""}
 `,
     close: `
@@ -968,6 +1007,7 @@ FASE: cierre o transición
 - Orienta a siguiente paso claro: WhatsApp, email, llamada o propuesta.
 - Si faltan datos mínimos para avanzar, pide solo uno.
 - En WhatsApp, cierra por ahí si el usuario ya viene con intención.
+- Antes de pedir contacto o proponer seguimiento, intenta tener al menos el nombre.
 ${missingLeadQuestion ? `- Si necesitas pedir un dato, la mejor pregunta ahora es: "${missingLeadQuestion}"` : ""}
 `,
   };
@@ -1573,6 +1613,19 @@ async function processIncomingMessage({
     relatedWebLead,
     relatedWebAnalysis: relatedWebAnalysis?.payload || null,
   });
+  const handoffCandidate =
+    shouldOfferWhatsAppTransition({
+      channel: channel || "web",
+      snapshot: analysisSnapshot,
+      lead: leadAfter || {},
+      text: userText,
+    })
+      ? buildWhatsAppHandoff({
+          conversationId: currentConversationId,
+          lead: leadAfter || {},
+          analysisSnapshot,
+        })
+      : null;
   const conversationPhase = getConversationPhase({
     mode: conversationMode,
     lead: leadAfter || {},
@@ -1668,6 +1721,8 @@ REGLAS IMPORTANTES
 16. SI EL CANAL ES WHATSAPP SIN CONTEXTO, COMBINA DESCUBRIMIENTO Y DIAGNÓSTICO
 17. NO PREGUNTES NOMBRE, EMPRESA, URGENCIA O CONTACTO AL PRINCIPIO SI TODAVÍA NO HAS APORTADO VALOR
 18. NO SOBRESCRIBAS DATOS CONFIRMADOS CON SUPOSICIONES DÉBILES
+19. SI ESTÁS EN WEB, NO DIGAS "TE ESCRIBIRÉ POR WHATSAPP" NI PROMETAS UN CONTACTO SALIENTE MANUAL
+20. SI EL USUARIO QUIERE SEGUIR POR WHATSAPP DESDE WEB, PLANTÉALO COMO CONTINUACIÓN POR UN BOTÓN O ENLACE
 
 ${modeInstructions}
 
@@ -1703,6 +1758,10 @@ ${ragContext}
     }
 
     reply = cleanReply(reply);
+    reply = cleanReplyForWebHandoff(reply, {
+      handoffAvailable: !!handoffCandidate,
+      channel: channel || "web",
+    });
   }
 
   await saveMessage({
@@ -1819,19 +1878,7 @@ ${ragContext}
     console.log("client email error", e.message);
   }
 
-  const handoff =
-    shouldOfferWhatsAppTransition({
-      channel: channel || "web",
-      snapshot: analysisSnapshot,
-      lead: leadAfter || {},
-      text: userText,
-    })
-      ? buildWhatsAppHandoff({
-          conversationId: currentConversationId,
-          lead: leadAfter || {},
-          analysisSnapshot,
-        })
-      : null;
+  const handoff = handoffCandidate;
 
   return {
     ok: true,
