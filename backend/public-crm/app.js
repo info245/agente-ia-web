@@ -18,6 +18,7 @@ const el = {
   leadChannel: document.getElementById("leadChannel"),
   leadMeta: document.getElementById("leadMeta"),
   leadTableBody: document.getElementById("leadTableBody"),
+  leadMobileList: document.getElementById("leadMobileList"),
   leadTableInfo: document.getElementById("leadTableInfo"),
   leadPrevBtn: document.getElementById("leadPrevBtn"),
   leadNextBtn: document.getElementById("leadNextBtn"),
@@ -167,10 +168,12 @@ function applyLeadFilters() {
 function renderLeadTable() {
   applyLeadFilters();
   el.leadTableBody.innerHTML = "";
+  el.leadMobileList.innerHTML = "";
 
   if (!state.filteredLeads.length) {
     el.leadTableBody.innerHTML =
       '<tr><td colspan="8" class="empty">No hay leads para esos filtros.</td></tr>';
+    el.leadMobileList.innerHTML = '<div class="empty">No hay leads para esos filtros.</div>';
     el.leadTableInfo.textContent = "0 resultados";
     el.leadPaginationInfo.textContent = "Pagina 1 de 1";
     el.leadPrevBtn.disabled = true;
@@ -201,6 +204,45 @@ function renderLeadTable() {
       selectLead(lead.id);
     });
     el.leadTableBody.appendChild(row);
+
+    const mobileCard = document.createElement("details");
+    mobileCard.className = `lead-mobile-card${state.selectedLead?.id === lead.id ? " active" : ""}`;
+    if (state.selectedLead?.id === lead.id) {
+      mobileCard.open = true;
+    }
+    mobileCard.innerHTML = `
+      <summary>
+        <div class="lead-mobile-summary">
+          <div class="lead-mobile-main">
+            <strong>${getLeadDisplayName(lead)}</strong>
+            <span>${lead.interest_service || "Sin servicio"}</span>
+          </div>
+          <div class="lead-mobile-meta-top">
+            <span class="status-pill">${lead.crm_status || "nuevo"}</span>
+            <time>${fmtDate(lead.last_message?.created_at || lead.created_at)}</time>
+          </div>
+        </div>
+      </summary>
+      <div class="lead-mobile-details">
+        <div><span>Canal</span><strong>${lead.channel || "web"}</strong></div>
+        <div><span>Presupuesto</span><strong>${lead.budget_range || "-"}</strong></div>
+        <div><span>Telefono</span><strong>${lead.phone || "-"}</strong></div>
+        <div><span>Email</span><strong>${lead.email || "-"}</strong></div>
+        <button type="button" class="lead-mobile-open-btn">Abrir lead</button>
+      </div>
+    `;
+    mobileCard.addEventListener("toggle", () => {
+      if (!mobileCard.open) return;
+      el.leadMobileList
+        .querySelectorAll(".lead-mobile-card")
+        .forEach((card) => {
+          if (card !== mobileCard) card.open = false;
+        });
+    });
+    mobileCard.querySelector(".lead-mobile-open-btn")?.addEventListener("click", () => {
+      selectLead(lead.id);
+    });
+    el.leadMobileList.appendChild(mobileCard);
   }
 
   el.leadTableInfo.textContent = `${state.filteredLeads.length} resultados`;
