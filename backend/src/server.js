@@ -731,37 +731,12 @@ function shouldOfferWhatsAppTransition({
   text,
 }) {
   if (channel !== "web") return false;
+  if (!hasAnalysisSnapshot(snapshot)) return false;
   if (!hasName(lead)) return false;
   if (!hasPhone(lead)) return false;
 
-  const t = normalizeText(text);
-  const explicitlyAskedForWhatsapp =
-    t.includes("whatsapp") ||
-    t.includes("por whatsapp") ||
-    t.includes("por wasap") ||
-    t.includes("por whassap");
-
-  if (
-    explicitlyAskedForWhatsapp &&
-    normalizeText(lead?.preferred_contact_channel || "").includes("whatsapp")
-  ) {
-    return true;
-  }
-  if (!hasAnalysisSnapshot(snapshot)) return false;
-
-  return (
-    normalizeText(lead?.preferred_contact_channel || "").includes("whatsapp") &&
-    (
-      t.includes("quiero") ||
-      t.includes("me interesa") ||
-      t.includes("explic") ||
-      t.includes("profund") ||
-      t.includes("presupuesto") ||
-      t.includes("precio") ||
-      t.includes("analisis") ||
-      t.includes("análisis")
-    )
-  );
+  const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
+  return preferredChannel.includes("whatsapp");
 }
 
 function cleanReplyForWebHandoff(reply, { handoffAvailable = false, channel = "web" } = {}) {
@@ -785,8 +760,10 @@ function buildStructuredCloseReply({
   text,
   handoff,
   analysisSnapshot,
+  allowCloseAdvance = true,
 }) {
   if (channel !== "web") return null;
+  if (isGreeting(text)) return null;
 
   const wantsWhatsapp = prefersWhatsAppChannel(text);
   const wantsEmail = prefersEmailChannel(text);
@@ -795,33 +772,35 @@ function buildStructuredCloseReply({
   const hasValueDelivered = hasAnalysisSnapshot(analysisSnapshot);
   const hasExplicitCloseIntent =
     detectStrongCommercialIntent(text) || wantsWhatsapp || wantsEmail;
+  const readyToAdvance =
+    hasExplicitCloseIntent || (hasValueDelivered && allowCloseAdvance);
 
-  if (!hasValueDelivered && !hasExplicitCloseIntent && !preferredChannel) {
+  if (!readyToAdvance) {
     return null;
   }
 
-  if ((wantsWhatsapp || preferredChannel.includes("whatsapp")) && !safeName) {
-    return "Perfecto. Antes de seguir por WhatsApp, ¿cómo te llamas?";
+  if (!safeName) {
+    return "Antes de seguir, ¿cómo te llamas?";
   }
 
-  if ((wantsEmail || preferredChannel.includes("email")) && !safeName) {
-    return "Perfecto. Antes de preparártelo por email, ¿cómo te llamas?";
-  }
-
-  if ((wantsWhatsapp || preferredChannel.includes("whatsapp")) && !hasPhone(lead)) {
-    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si prefieres seguir por WhatsApp, compárteme tu número y te dejo el paso preparado por ahí.`;
-  }
-
-  if ((wantsEmail || preferredChannel.includes("email")) && !lead?.email) {
-    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si prefieres email, compárteme tu correo y te lo preparo por ahí.`;
-  }
-
-  if (!lead?.preferred_contact_channel && safeName && !hasContact(lead)) {
+  if (!preferredChannel) {
     return `Perfecto, ${safeName}. ¿Prefieres que sigamos por email o por WhatsApp?`;
   }
 
-  if (handoff?.whatsapp_url) {
+  if (preferredChannel.includes("whatsapp") && !hasPhone(lead)) {
+    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si prefieres seguir por WhatsApp, compárteme tu número y te dejo el paso preparado por ahí.`;
+  }
+
+  if (preferredChannel.includes("email") && !lead?.email) {
+    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si prefieres email, compárteme tu correo y te lo preparo por ahí.`;
+  }
+
+  if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
     return `Perfecto${safeName ? `, ${safeName}` : ""}. Te dejo aquí el botón para seguir por WhatsApp con el contexto de este análisis.`;
+  }
+
+  if (preferredChannel.includes("email") && lead?.email) {
+    return `Perfecto, ${safeName}. Te lo preparo por email con lo que ya hemos revisado.`;
   }
 
   return null;
@@ -905,20 +884,12 @@ function getConversationPhase({ mode, lead, analysisSnapshot, text }) {
     return "discover";
   }
 
-  if (
-    hasSnapshot &&
-    !hasName(lead) &&
-    !detectStrongCommercialIntent(text)
-  ) {
-    return "diagnose";
+  if (hasSnapshot && !hasName(lead)) {
+    return "close";
   }
 
-  if (
-    hasSnapshot &&
-    hasName(lead) &&
-    (!hasContact(lead) || !hasService(lead) || !hasMainGoal(lead))
-  ) {
-    return "deepen";
+  if (hasSnapshot && hasName(lead) && !hasContact(lead)) {
+    return "close";
   }
 
   if (hasSnapshot || hasAnyLeadSignal) {
@@ -932,7 +903,7 @@ function getConversationPhase({ mode, lead, analysisSnapshot, text }) {
 
 function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
   const sequence = lateOnly
-    ? ["name", "interest_service", "main_goal", "budget_range", "urgency", "email_or_phone"]
+    ? ["name", "preferred_channel", "email_or_phone"]
     : ["name", "business_type", "business_activity", "interest_service", "main_goal", "budget_range", "urgency", "email_or_phone"];
 
   for (const item of sequence) {
@@ -953,6 +924,11 @@ function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
       case "interest_service":
         if (!hasService(lead)) {
           return "¿Qué quieres revisar primero: web, SEO, Google Ads o captación?";
+        }
+        break;
+      case "preferred_channel":
+        if (hasName(lead) && !normalizeText(lead?.preferred_contact_channel || "")) {
+          return `Perfecto, ${getSafeLeadName(lead) || ""}. ¿Prefieres que sigamos por email o por WhatsApp?`;
         }
         break;
       case "main_goal":
@@ -1605,6 +1581,9 @@ async function processIncomingMessage({
       () => null
     )) || null;
   let analysisSnapshot = currentAnalysisEvent?.payload || null;
+  const hadAnalysisSnapshotBeforeTurn =
+    hasAnalysisSnapshot(analysisSnapshot) ||
+    hasAnalysisSnapshot(relatedWebAnalysis?.payload || null);
 
   const detectedUrl = extractFirstUrlFromText(userText);
   const snapshotUrl = analysisSnapshot?.url || relatedWebAnalysis?.payload?.url || null;
@@ -1840,6 +1819,7 @@ ${ragContext}
       text: userText,
       handoff: handoffCandidate,
       analysisSnapshot,
+      allowCloseAdvance: hadAnalysisSnapshotBeforeTurn,
     });
 
     if (structuredCloseReply) {
