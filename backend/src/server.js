@@ -224,6 +224,11 @@ function isLikelyValidName(value) {
   if (isGreeting(raw)) return false;
 
   const blockedPhrases = [
+    "si por favor",
+    "sí por favor",
+    "por favor",
+    "si gracias",
+    "sí gracias",
     "hola",
     "buenas",
     "buenas tardes",

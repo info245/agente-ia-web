@@ -71,9 +71,13 @@ const SERVICE_ALIASES = [
 const GENERIC_SERVICES = new Set(["IA", "Automatización"]);
 
 const NAME_STOPWORDS = new Set([
+  "si",
+  "sí",
   "hola",
   "buenas",
   "gracias",
+  "favor",
+  "por",
   "vale",
   "ok",
   "perfecto",
@@ -199,6 +203,11 @@ export function looksLikeValidName(name = "") {
   if (isLikelyServiceIntent(value)) return false;
 
   const blockedPhrases = [
+    "si por favor",
+    "sí por favor",
+    "por favor",
+    "si gracias",
+    "sí gracias",
     "quiero",
     "necesito",
     "google ads",
