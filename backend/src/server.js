@@ -40,7 +40,6 @@ import {
 } from "./lib/memoryUtils.js";
 import { renderQuotePreviewHtml } from "./lib/quoteTemplate.js";
 import { renderHtmlToPdfBuffer } from "./lib/htmlPdf.js";
-import { renderQuotePdfBuffer } from "./lib/quotePdf.js";
 
 const app = express();
 const crmPublicDir = fileURLToPath(new URL("../public-crm", import.meta.url));
@@ -1483,37 +1482,30 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Canal de envío no válido" });
     }
 
-      const baseUrl = `${req.protocol}://${req.get("host")}`;
-      const previewUrl = `${baseUrl}/crm/quotes/${lead.id}/preview`;
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const previewUrl = `${baseUrl}/crm/quotes/${lead.id}/preview`;
 
-      if (via === "email") {
-        if (!lead.email) {
-          return res.status(400).json({ ok: false, error: "Este lead no tiene email" });
-        }
-
-        const logoPath = path.join(crmPublicDir, "assets", "tmedia-global-logo.png");
-        const attachmentBuffer = await renderQuotePdfBuffer({
-          lead,
-          quote,
-          logoPath,
-        });
-
-        await sendQuoteEmailToLead({
-          lead,
-          quote,
-          previewUrl,
-          attachments: [
-            {
-              filename: buildQuoteFileName(lead, quote),
-              content: attachmentBuffer,
-              contentType: "application/pdf",
-            },
-          ],
-        });
+    if (via === "email") {
+      if (!lead.email) {
+        return res.status(400).json({ ok: false, error: "Este lead no tiene email" });
       }
+
+      await sendQuoteEmailToLead({
+        lead,
+        quote,
+        previewUrl,
+      });
+    }
 
     if (via === "whatsapp") {
       const phone = normalizeLeadPhoneForWhatsApp(lead);
+      console.log("crm quote whatsapp target", {
+        leadId: lead.id,
+        phone,
+        leadPhone: lead?.phone || null,
+        externalUserId: lead?.conversations?.external_user_id || null,
+        channel: lead?.conversations?.channel || null,
+      });
       if (!phone) {
         return res.status(400).json({ ok: false, error: "Este lead no tiene teléfono válido para WhatsApp" });
       }

@@ -192,6 +192,10 @@ textarea {
   overflow: auto;
 }
 
+.lead-mobile-list {
+  display: none;
+}
+
 .lead-table {
   width: 100%;
   min-width: 1320px;
@@ -519,69 +523,106 @@ textarea {
     min-width: 100%;
   }
 
-  .lead-table-wrap {
-    overflow: visible;
-  }
-
+  .lead-table-wrap,
   .lead-table {
-    min-width: 0;
-    border-collapse: separate;
-    border-spacing: 0 12px;
-    table-layout: auto;
-    margin-top: 0;
-  }
-
-  .lead-table thead {
     display: none;
   }
 
-  .lead-table tbody,
-  .lead-table tr,
-  .lead-table td {
-    display: block;
-    width: 100%;
+  .lead-mobile-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 8px;
   }
 
-  .lead-row {
-    border: 1px solid var(--accent-line);
+  .lead-mobile-card {
+    border: 1px solid rgba(184, 150, 255, 0.45);
     border-radius: 18px;
     background: #fff;
     box-shadow: 0 8px 22px rgba(64, 45, 20, 0.06);
     overflow: hidden;
   }
 
-  .lead-row.active {
-    background: #fff;
+  .lead-mobile-card.active {
     border-color: var(--accent);
   }
 
-  .lead-row td,
-  .lead-row.active td {
-    background: transparent;
-    border: 0;
-    border-bottom: 1px solid rgba(184, 150, 255, 0.28);
-    padding: 10px 14px;
-    white-space: normal !important;
-    width: 100% !important;
+  .lead-mobile-card summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 14px;
   }
 
-  .lead-row td:last-child {
-    border-bottom: 0;
+  .lead-mobile-card summary::-webkit-details-marker {
+    display: none;
   }
 
-  .lead-row td::before {
-    content: attr(data-label);
-    display: block;
-    margin-bottom: 4px;
+  .lead-mobile-summary {
+    display: flex;
+    gap: 10px;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .lead-mobile-main {
+    display: grid;
+    gap: 4px;
+  }
+
+  .lead-mobile-main strong {
+    font-size: 1rem;
+    line-height: 1.2;
+  }
+
+  .lead-mobile-main span {
     color: var(--muted);
-    font-size: 0.82rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
+    font-size: 0.88rem;
   }
 
-  .lead-name-btn {
-    font-size: 1.05rem;
+  .lead-mobile-meta-top {
+    display: grid;
+    gap: 8px;
+    justify-items: end;
+    text-align: right;
+  }
+
+  .lead-mobile-meta-top time {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .lead-mobile-details {
+    border-top: 1px solid rgba(184, 150, 255, 0.25);
+    padding: 12px 14px 14px;
+    display: grid;
+    gap: 10px;
+  }
+
+  .lead-mobile-details div {
+    display: grid;
+    gap: 4px;
+  }
+
+  .lead-mobile-details span {
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: 700;
+  }
+
+  .lead-mobile-details strong {
+    font-size: 0.95rem;
+    word-break: break-word;
+  }
+
+  .lead-mobile-open-btn {
+    border: 0;
+    background: var(--accent);
+    color: #fff;
+    padding: 10px 14px;
+    border-radius: 999px;
+    font: inherit;
+    cursor: pointer;
   }
 
   .message-list {

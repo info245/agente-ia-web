@@ -212,7 +212,7 @@ Referencia de conversación: ${conversation_id || lead?.conversation_id || ""}
   return { ok: true, messageId: info.messageId };
 }
 
-export async function sendQuoteEmailToLead({ lead, quote, previewUrl, attachments = [] }) {
+export async function sendQuoteEmailToLead({ lead, quote, previewUrl }) {
   if (!clientEnabled) return { skipped: true, reason: "client-disabled" };
   if (!lead?.email) return { skipped: true, reason: "no-email" };
   if (!clientFrom) throw new Error("LEADS_CLIENT_EMAIL_FROM está vacío");
@@ -229,11 +229,10 @@ export async function sendQuoteEmailToLead({ lead, quote, previewUrl, attachment
     <p><b>Importe total:</b> ${escapeHtml(quote?.total != null ? String(quote.total) + " " + (quote?.currency || "EUR") : "No indicado")}</p>
     <p>Puedes revisarla aquí:</p>
     <p><a href="${escapeHtml(previewUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#1f5eff;color:#fff;text-decoration:none;font-weight:bold;">Abrir propuesta</a></p>
-    <p>También te la adjuntamos en PDF para que puedas revisarla con más comodidad.</p>
     <p>Si quieres, podemos comentarla contigo y ajustarla antes de cerrarla.</p>
   </div>`;
 
-  const text = `Hola${lead?.name ? ", " + lead.name : ""}\n\nTe compartimos tu propuesta preparada por TMedia Global.\n\nServicio: ${lead?.interest_service || "No indicado"}\nImporte total: ${quote?.total != null ? String(quote.total) + " " + (quote?.currency || "EUR") : "No indicado"}\n\nAbrir propuesta:\n${previewUrl}\n\nTambién te la adjuntamos en PDF para que puedas revisarla con más comodidad.\n\nSi quieres, podemos comentarla contigo y ajustarla antes de cerrarla.`;
+  const text = `Hola${lead?.name ? ", " + lead.name : ""}\n\nTe compartimos tu propuesta preparada por TMedia Global.\n\nServicio: ${lead?.interest_service || "No indicado"}\nImporte total: ${quote?.total != null ? String(quote.total) + " " + (quote?.currency || "EUR") : "No indicado"}\n\nAbrir propuesta:\n${previewUrl}\n\nSi quieres, podemos comentarla contigo y ajustarla antes de cerrarla.`;
 
   const t = getTransporter();
   const info = await t.sendMail({
@@ -242,7 +241,6 @@ export async function sendQuoteEmailToLead({ lead, quote, previewUrl, attachment
     subject,
     text,
     html,
-    attachments,
     replyTo: process.env.LEADS_EMAIL_REPLY_TO || process.env.SMTP_USER,
   });
 
