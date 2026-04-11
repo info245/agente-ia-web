@@ -541,7 +541,7 @@ export function extractLeadDataFromText(text, existingLead = null) {
 
   const email = extractEmail(safeText);
   const phone = extractPhone(safeText);
-  const name = extractNameFromPhrases(safeText) || extractStandaloneName(safeText);
+  const name = extractNameFromPhrases(safeText);
   const interest_service = pickService(safeText, existingLead?.interest_service || null);
   const urgency = extractUrgency(safeText);
   const budget_range = extractBudget(safeText);
