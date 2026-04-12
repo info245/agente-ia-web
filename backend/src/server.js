@@ -1697,18 +1697,28 @@ async function processIncomingMessage({
 
   if (channel === "whatsapp" && relatedWebLead) {
     const hydratedLead = mergeLeadData({
-      currentLead: {
-        ...relatedWebLead,
-        ...leadAfter,
-      },
+      currentLead: relatedWebLead,
       extractedLead: {
-        name: leadAfter?.name,
-        email: leadAfter?.email,
-        phone: leadAfter?.phone || whatsappPhone,
+        name: leadAfter?.name || relatedWebLead?.name,
+        email: leadAfter?.email || relatedWebLead?.email,
+        phone: leadAfter?.phone || whatsappPhone || relatedWebLead?.phone,
         interest_service:
           leadAfter?.interest_service || relatedWebLead?.interest_service,
         urgency: leadAfter?.urgency || relatedWebLead?.urgency,
         budget_range: leadAfter?.budget_range || relatedWebLead?.budget_range,
+        summary: leadAfter?.summary || relatedWebLead?.summary,
+        business_type: leadAfter?.business_type || relatedWebLead?.business_type,
+        business_activity:
+          leadAfter?.business_activity || relatedWebLead?.business_activity,
+        main_goal: leadAfter?.main_goal || relatedWebLead?.main_goal,
+        current_situation:
+          leadAfter?.current_situation || relatedWebLead?.current_situation,
+        pain_points: leadAfter?.pain_points || relatedWebLead?.pain_points,
+        preferred_contact_channel:
+          leadAfter?.preferred_contact_channel ||
+          relatedWebLead?.preferred_contact_channel ||
+          "whatsapp",
+        last_intent: leadAfter?.last_intent || relatedWebLead?.last_intent,
       },
       lastUserMessage: userText,
     });
