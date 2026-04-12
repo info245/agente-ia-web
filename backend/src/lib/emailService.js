@@ -13,6 +13,7 @@ const internalTo = (process.env.LEADS_EMAIL_TO || "")
 
 const from = process.env.LEADS_EMAIL_FROM || process.env.SMTP_USER;
 const clientFrom = process.env.LEADS_CLIENT_EMAIL_FROM || from;
+const whatsappPublicNumber = String(process.env.WHATSAPP_PUBLIC_NUMBER || "").replace(/\D/g, "");
 
 function escapeHtml(str = "") {
   return String(str)
@@ -221,18 +222,38 @@ export async function sendQuoteEmailToLead({ lead, quote, previewUrl }) {
     ? `${quote.title} - TMedia Global`
     : "Tu propuesta - TMedia Global";
 
+  const whatsappText = [
+    `Hola${lead?.name ? `, soy ${lead.name}` : ""}.`,
+    `Vengo de la propuesta de ${lead?.interest_service || "TMedia Global"} y quiero resolver una duda antes de avanzar.`,
+  ].join(" ");
+  const whatsappUrl = whatsappPublicNumber
+    ? `https://wa.me/${whatsappPublicNumber}?text=${encodeURIComponent(whatsappText)}`
+    : null;
+  const totalText =
+    quote?.total != null
+      ? `${String(quote.total)} ${quote?.currency || "EUR"}`
+      : "No indicado";
+
   const html = `
   <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
     <h2>Hola${lead?.name ? ", " + escapeHtml(lead.name) : ""}</h2>
     <p>Te compartimos tu propuesta preparada por TMedia Global.</p>
     <p><b>Servicio:</b> ${escapeHtml(lead?.interest_service || "No indicado")}</p>
-    <p><b>Importe total:</b> ${escapeHtml(quote?.total != null ? String(quote.total) + " " + (quote?.currency || "EUR") : "No indicado")}</p>
+    <p><b>Importe total:</b> ${escapeHtml(totalText)}</p>
     <p>Puedes revisarla aquí:</p>
     <p><a href="${escapeHtml(previewUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#1f5eff;color:#fff;text-decoration:none;font-weight:bold;">Abrir propuesta</a></p>
+    ${
+      whatsappUrl
+        ? `<p style="margin-top:14px;">Si prefieres resolver cualquier duda por WhatsApp, también puedes seguir por aquí:</p>
+    <p><a href="${escapeHtml(whatsappUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#1faa59;color:#fff;text-decoration:none;font-weight:bold;">Resolver dudas por WhatsApp</a></p>`
+        : ""
+    }
     <p>Si quieres, podemos comentarla contigo y ajustarla antes de cerrarla.</p>
   </div>`;
 
-  const text = `Hola${lead?.name ? ", " + lead.name : ""}\n\nTe compartimos tu propuesta preparada por TMedia Global.\n\nServicio: ${lead?.interest_service || "No indicado"}\nImporte total: ${quote?.total != null ? String(quote.total) + " " + (quote?.currency || "EUR") : "No indicado"}\n\nAbrir propuesta:\n${previewUrl}\n\nSi quieres, podemos comentarla contigo y ajustarla antes de cerrarla.`;
+  const text = `Hola${lead?.name ? ", " + lead.name : ""}\n\nTe compartimos tu propuesta preparada por TMedia Global.\n\nServicio: ${lead?.interest_service || "No indicado"}\nImporte total: ${totalText}\n\nAbrir propuesta:\n${previewUrl}${
+    whatsappUrl ? `\n\nResolver dudas por WhatsApp:\n${whatsappUrl}` : ""
+  }\n\nSi quieres, podemos comentarla contigo y ajustarla antes de cerrarla.`;
 
   const t = getTransporter();
   const info = await t.sendMail({
