@@ -827,6 +827,48 @@ function buildValueThenAskNameReply(analysisSnapshot) {
   return `${valueLine}\n\nAntes de seguir, ¿cómo te llamas?`;
 }
 
+function buildWhatsAppContinuationReply({
+  lead,
+  analysisSnapshot,
+}) {
+  const safeName = getSafeLeadName(lead);
+  const service = norm(lead?.interest_service) || "nuestro servicio";
+  const summary =
+    norm(lead?.summary) ||
+    norm(analysisSnapshot?.summary) ||
+    "";
+  const topPriority = Array.isArray(analysisSnapshot?.priorities)
+    ? norm(analysisSnapshot.priorities[0])
+    : "";
+  const serviceFacts = getServiceFacts(service);
+  const serviceDescription = norm(serviceFacts?.description);
+  const feeText = norm(serviceFacts?.min_monthly_fee || serviceFacts?.min_project_fee);
+
+  const intro = safeName
+    ? `Hola ${safeName}, continúo por aquí con el contexto de lo que vimos en la web.`
+    : "Hola, continúo por aquí con el contexto de lo que vimos en la web.";
+
+  const summaryLine = summary
+    ? `He visto que te interesa ${service} y que tu caso va orientado a ${summary}.`
+    : `He visto que te interesa ${service} y ya tengo el contexto previo del análisis.`;
+
+  const serviceLine = serviceDescription
+    ? `Nuestro servicio de ${service} consiste en ${serviceDescription.charAt(0).toLowerCase()}${serviceDescription.slice(1)}`
+    : `Nuestro servicio de ${service} está orientado a mejorar visibilidad, captación y resultados de forma sostenida.`;
+
+  const priorityLine = topPriority
+    ? `La primera prioridad que trabajaría sería ${topPriority}.`
+    : null;
+
+  const budgetLine = feeText
+    ? `Para orientarte bien, solemos partir desde ${feeText}. ¿Con qué presupuesto te gustaría plantearlo?`
+    : "Para orientarte bien, ¿con qué presupuesto te gustaría plantearlo?";
+
+  return [intro, summaryLine, serviceLine, priorityLine, budgetLine]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function buildStructuredCloseReply({
   channel,
   lead,
@@ -1768,8 +1810,20 @@ async function processIncomingMessage({
     analysisSnapshot,
     text: userText,
   });
+  const isWhatsAppWebContinuation =
+    channel === "whatsapp" &&
+    !!relatedWebLead &&
+    !!handoffContext?.code &&
+    createdConversation;
 
-  {
+  if (isWhatsAppWebContinuation) {
+    reply = buildWhatsAppContinuationReply({
+      lead: leadAfter || relatedWebLead || {},
+      analysisSnapshot,
+    });
+  }
+
+  if (!reply) {
     const serviceFacts = getServiceFacts(leadAfter.interest_service);
 
     let factsBlock = "";
