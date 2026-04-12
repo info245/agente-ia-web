@@ -556,6 +556,11 @@ export async function upsertLeadFromConversation(lead = {}) {
     business_activity: clean(lead.business_activity),
     current_step: clean(lead.current_step),
     last_question: clean(lead.last_question),
+    source_platform: clean(lead.source_platform),
+    source_campaign: clean(lead.source_campaign),
+    source_form_name: clean(lead.source_form_name),
+    source_ad_name: clean(lead.source_ad_name),
+    source_adset_name: clean(lead.source_adset_name),
   };
 
   const { data, error } = await supabase

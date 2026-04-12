@@ -78,6 +78,7 @@ const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v25.0";
 const WHATSAPP_APP_SECRET =
   process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET || "";
 const TASK_SECRET = process.env.TASK_SECRET || "";
+const INTEGRATIONS_SECRET = process.env.INTEGRATIONS_SECRET || "";
 const WHATSAPP_FOLLOWUP_HOURS = Number(process.env.WHATSAPP_FOLLOWUP_HOURS || 10);
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -899,6 +900,41 @@ function isAuthorizedTaskRequest(req) {
     req.get("x-cron-secret") ||
     req.query?.secret;
   return String(headerSecret || "") === String(TASK_SECRET);
+}
+
+function isAuthorizedIntegrationRequest(req) {
+  if (!INTEGRATIONS_SECRET) return false;
+  const headerSecret =
+    req.get("x-integrations-secret") ||
+    req.get("x-integration-secret") ||
+    req.query?.secret;
+  return String(headerSecret || "") === String(INTEGRATIONS_SECRET);
+}
+
+function buildExternalLeadSummary(payload = {}) {
+  const parts = [];
+  if (payload?.interest_service) parts.push(`interesado en ${payload.interest_service}`);
+  if (payload?.business_activity) parts.push(`actividad: ${payload.business_activity}`);
+  if (payload?.main_goal) parts.push(`objetivo: ${payload.main_goal}`);
+  if (payload?.budget_range) parts.push(`presupuesto: ${payload.budget_range}`);
+  if (payload?.source_platform) parts.push(`origen: ${payload.source_platform}`);
+  return parts.length ? parts.join(" | ") : "Lead importado desde formulario externo.";
+}
+
+function buildExternalLeadIntroMessage(lead = {}) {
+  const safeName = getSafeLeadName(lead);
+  const service = norm(lead?.interest_service) || "nuestros servicios";
+  const goal = norm(lead?.main_goal);
+
+  return [
+    safeName
+      ? `Hola ${safeName}, hemos recibido tu solicitud en TMedia Global.`
+      : "Hola, hemos recibido tu solicitud en TMedia Global.",
+    goal
+      ? `Vemos que te interesa ${service} y que tu objetivo va orientado a ${goal}.`
+      : `Vemos que te interesa ${service}.`,
+    "Si quieres, seguimos por aquí y te doy una primera orientación para tu caso.",
+  ].join("\n\n");
 }
 
 function buildStructuredCloseReply({
@@ -2439,6 +2475,204 @@ app.post("/messages", async (req, res) => {
       ok: false,
       error: error.message,
     });
+  }
+});
+
+app.post("/api/integrations/external-lead", async (req, res) => {
+  try {
+    if (!isAuthorizedIntegrationRequest(req)) {
+      return res.status(401).json({ ok: false, error: "Unauthorized integration request" });
+    }
+
+    const payload = req.body || {};
+    const sourcePlatform = norm(payload.source_platform || payload.platform || "external_form");
+    const sourceCampaign = norm(payload.source_campaign || payload.campaign || "");
+    const sourceFormName = norm(payload.source_form_name || payload.form_name || "");
+    const sourceAdName = norm(payload.source_ad_name || payload.ad_name || "");
+    const sourceAdsetName = norm(payload.source_adset_name || payload.adset_name || "");
+    const preferredContactChannel = normalizeText(
+      payload.preferred_contact_channel || payload.contact_channel || ""
+    );
+
+    const conversation = await createConversation({
+      channel: "lead_form",
+      external_user_id: norm(payload.external_user_id || `${sourcePlatform}:${Date.now()}`),
+    });
+
+    const leadPayload = {
+      conversation_id: conversation.id,
+      name: norm(payload.name || ""),
+      email: norm(payload.email || ""),
+      phone: norm(payload.phone || ""),
+      interest_service: norm(payload.interest_service || payload.service || ""),
+      urgency: norm(payload.urgency || ""),
+      budget_range: norm(payload.budget_range || payload.budget || ""),
+      summary: norm(payload.summary || buildExternalLeadSummary(payload)),
+      lead_score: Number.isFinite(Number(payload.lead_score))
+        ? Number(payload.lead_score)
+        : 0,
+      consent:
+        typeof payload.consent === "boolean"
+          ? payload.consent
+          : normalizeText(payload.consent) === "true",
+      consent_at:
+        payload.consent_at ||
+        ((typeof payload.consent === "boolean" && payload.consent) ||
+        normalizeText(payload.consent) === "true"
+          ? new Date().toISOString()
+          : null),
+      business_type: norm(payload.business_type || ""),
+      business_activity: norm(payload.business_activity || ""),
+      company_name: norm(payload.company_name || ""),
+      main_goal: norm(payload.main_goal || ""),
+      current_situation: norm(payload.current_situation || ""),
+      pain_points: norm(payload.pain_points || ""),
+      preferred_contact_channel: preferredContactChannel || null,
+      last_intent: norm(payload.last_intent || "external_lead"),
+      crm_status: "nuevo",
+      quote_status: "sin_presupuesto",
+      source_platform: sourcePlatform,
+      source_campaign: sourceCampaign,
+      source_form_name: sourceFormName,
+      source_ad_name: sourceAdName,
+      source_adset_name: sourceAdsetName,
+    };
+
+    const lead = await upsertLeadFromConversation(leadPayload);
+    await updateLeadCrmFields(lead.id, {
+      crm_status: "nuevo",
+      quote_status: "sin_presupuesto",
+      assigned_to: null,
+      next_action: sourcePlatform === "google_ads" || sourcePlatform === "meta_ads"
+        ? "Revisar lead ads y primer contacto"
+        : "Revisar lead entrante",
+      follow_up_at: null,
+      internal_notes: [
+        `Lead importado desde ${sourcePlatform}`,
+        sourceCampaign ? `Campaña: ${sourceCampaign}` : null,
+        sourceFormName ? `Formulario: ${sourceFormName}` : null,
+      ].filter(Boolean).join(" | "),
+    }).catch((error) => {
+      console.log("external lead crm patch error", error.message);
+    });
+
+    await trackConversationEvent({
+      conversation_id: conversation.id,
+      event_type: "conversation_started",
+      channel: "lead_form",
+      external_user_id: conversation.external_user_id,
+      payload: {
+        source_platform: sourcePlatform,
+        source_campaign: sourceCampaign,
+        source_form_name: sourceFormName,
+      },
+    });
+
+    await trackConversationEvent({
+      conversation_id: conversation.id,
+      event_type: "external_lead_imported",
+      channel: "lead_form",
+      external_user_id: conversation.external_user_id,
+      payload: {
+        source_platform: sourcePlatform,
+        source_campaign: sourceCampaign,
+        source_form_name: sourceFormName,
+        source_ad_name: sourceAdName,
+        source_adset_name: sourceAdsetName,
+        preferred_contact_channel: preferredContactChannel || null,
+      },
+    });
+
+    await saveMessage({
+      conversation_id: conversation.id,
+      role: "tool",
+      content: `Lead importado desde ${sourcePlatform}${sourceCampaign ? ` | ${sourceCampaign}` : ""}. ${leadPayload.summary}`,
+    });
+
+    if (payload.notify_internal !== false) {
+      await sendLeadEmail({
+        lead: {
+          ...lead,
+          summary: leadPayload.summary,
+        },
+        conversation_id: conversation.id,
+        type: "new",
+      }).catch((error) => {
+        console.log("external lead internal email error", error.message);
+      });
+    }
+
+    const autoStart = normalizeText(payload.auto_start || payload.auto_contact || "");
+    const shouldAutoStart =
+      autoStart === "true" ||
+      autoStart === "1" ||
+      autoStart === "yes" ||
+      autoStart === "si" ||
+      autoStart === "sí";
+
+    let autoContact = null;
+
+    if (shouldAutoStart && preferredContactChannel.includes("whatsapp")) {
+      const phone = normalizeLeadPhoneForWhatsApp({
+        ...lead,
+        phone: lead.phone || payload.phone,
+      });
+
+      if (phone) {
+        const introMessage = buildExternalLeadIntroMessage({
+          ...lead,
+          ...leadPayload,
+        });
+        await sendWhatsAppText(phone, introMessage);
+        await saveMessage({
+          conversation_id: conversation.id,
+          role: "assistant",
+          content: introMessage,
+        });
+        await trackConversationEvent({
+          conversation_id: conversation.id,
+          event_type: "external_lead_autostart",
+          channel: "whatsapp",
+          external_user_id: phone,
+          payload: {
+            via: "whatsapp",
+            source_platform: sourcePlatform,
+          },
+        });
+        autoContact = "whatsapp";
+      }
+    } else if (shouldAutoStart && preferredContactChannel.includes("email")) {
+      await sendClientConfirmationEmail({
+        lead: {
+          ...lead,
+          ...leadPayload,
+        },
+        conversation_id: conversation.id,
+      }).catch((error) => {
+        console.log("external lead client email error", error.message);
+      });
+      await trackConversationEvent({
+        conversation_id: conversation.id,
+        event_type: "external_lead_autostart",
+        channel: "email",
+        external_user_id: lead.email || payload.email || null,
+        payload: {
+          via: "email",
+          source_platform: sourcePlatform,
+        },
+      });
+      autoContact = "email";
+    }
+
+    return res.json({
+      ok: true,
+      conversation_id: conversation.id,
+      lead_id: lead.id,
+      auto_contact: autoContact,
+    });
+  } catch (error) {
+    console.log("external lead intake error", error);
+    return res.status(500).json({ ok: false, error: error.message });
   }
 });
 

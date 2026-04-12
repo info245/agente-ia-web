@@ -40,6 +40,8 @@ services:
         sync: false
       - key: WHATSAPP_FOLLOWUP_HOURS
         value: 10
+      - key: INTEGRATIONS_SECRET
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

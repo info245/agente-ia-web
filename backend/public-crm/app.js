@@ -272,6 +272,8 @@ function renderLeadDetail() {
     <div class="meta-box"><strong>Email</strong>${lead.email || "-"}</div>
     <div class="meta-box"><strong>Telefono</strong>${lead.phone || "-"}</div>
     <div class="meta-box"><strong>Actividad</strong>${lead.business_activity || "-"}</div>
+    <div class="meta-box"><strong>Origen</strong>${lead.source_platform || "-"}</div>
+    <div class="meta-box"><strong>Campaña</strong>${lead.source_campaign || "-"}</div>
   `;
 
   el.crmStatus.value = lead.crm_status || "nuevo";
