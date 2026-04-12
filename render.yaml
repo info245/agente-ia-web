@@ -36,6 +36,10 @@ services:
         sync: false
       - key: CHAT_HANDOFF_SECRET
         sync: false
+      - key: TASK_SECRET
+        sync: false
+      - key: WHATSAPP_FOLLOWUP_HOURS
+        value: 10
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

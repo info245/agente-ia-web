@@ -317,6 +317,30 @@ export async function listCrmLeads(limit = 200) {
   return data || [];
 }
 
+export async function listWhatsAppLeadsForFollowUp(limit = 200) {
+  const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 200;
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select(
+      `
+      *,
+      conversations!inner (
+        id,
+        channel,
+        external_user_id,
+        created_at
+      )
+    `
+    )
+    .eq("conversations.channel", "whatsapp")
+    .order("created_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (error) throw error;
+  return data || [];
+}
+
 export async function findLatestWebLeadByContact({
   email = null,
   phone = null,

@@ -18,6 +18,7 @@ import {
   findLatestWebLeadByContact,
   findConversationEventByHandoffCode,
   listCrmLeads,
+  listWhatsAppLeadsForFollowUp,
   updateLeadCrmFields,
   getLatestQuoteByLeadId,
   upsertLatestQuoteForLead,
@@ -76,6 +77,8 @@ const WHATSAPP_PUBLIC_NUMBER = process.env.WHATSAPP_PUBLIC_NUMBER || "";
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v25.0";
 const WHATSAPP_APP_SECRET =
   process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET || "";
+const TASK_SECRET = process.env.TASK_SECRET || "";
+const WHATSAPP_FOLLOWUP_HOURS = Number(process.env.WHATSAPP_FOLLOWUP_HOURS || 10);
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
 const processedWhatsAppMessages = new Map();
@@ -867,6 +870,35 @@ function buildWhatsAppContinuationReply({
   return [intro, summaryLine, serviceLine, priorityLine, budgetLine]
     .filter(Boolean)
     .join("\n\n");
+}
+
+function buildWhatsAppReminderHook(lead = {}) {
+  const safeName = getSafeLeadName(lead);
+  const service = norm(lead?.interest_service) || "tu caso";
+  const summary = norm(lead?.summary);
+
+  const intro = safeName
+    ? `Hola ${safeName}, te escribo por aquí por si quieres retomar lo que dejamos pendiente.`
+    : "Hola, te escribo por aquí por si quieres retomar lo que dejamos pendiente.";
+
+  const contextLine = summary
+    ? `Por lo que vimos, tu interés principal va orientado a ${summary}.`
+    : `Teníamos pendiente avanzar con ${service}.`;
+
+  return [
+    intro,
+    contextLine,
+    `Si te va bien, te doy una recomendación concreta para avanzar con ${service} o ajustamos el siguiente paso según tu presupuesto.`,
+  ].join("\n\n");
+}
+
+function isAuthorizedTaskRequest(req) {
+  if (!TASK_SECRET) return false;
+  const headerSecret =
+    req.get("x-task-secret") ||
+    req.get("x-cron-secret") ||
+    req.query?.secret;
+  return String(headerSecret || "") === String(TASK_SECRET);
 }
 
 function buildStructuredCloseReply({
@@ -1684,6 +1716,7 @@ async function processIncomingMessage({
     await upsertLeadFromConversation({
       ...hydratedLead,
       conversation_id: currentConversationId,
+      summary: leadAfter?.summary || relatedWebLead?.summary || null,
       business_type: leadAfter?.business_type || relatedWebLead?.business_type,
       business_activity:
         leadAfter?.business_activity || relatedWebLead?.business_activity,
@@ -2396,6 +2429,83 @@ app.post("/messages", async (req, res) => {
       ok: false,
       error: error.message,
     });
+  }
+});
+
+app.post("/tasks/whatsapp-followups", async (req, res) => {
+  try {
+    if (!isAuthorizedTaskRequest(req)) {
+      return res.status(401).json({ ok: false, error: "Unauthorized task request" });
+    }
+
+    const candidates = await listWhatsAppLeadsForFollowUp(200);
+    const now = Date.now();
+    const followupMs = Math.max(1, WHATSAPP_FOLLOWUP_HOURS) * 60 * 60 * 1000;
+    const processed = [];
+
+    for (const lead of candidates) {
+      const conversationId = lead?.conversation_id;
+      if (!conversationId) continue;
+
+      const messages = await getConversationMessages(conversationId, 10);
+      const lastMessage = messages[messages.length - 1];
+      if (!lastMessage || lastMessage.role !== "assistant") continue;
+
+      const lastMessageAt = new Date(lastMessage.created_at).getTime();
+      if (!Number.isFinite(lastMessageAt)) continue;
+      if (now - lastMessageAt < followupMs) continue;
+
+      const latestFollowup = await getLatestConversationEvent(
+        conversationId,
+        "whatsapp_followup_sent"
+      ).catch(() => null);
+
+      const latestFollowupAt = latestFollowup?.created_at
+        ? new Date(latestFollowup.created_at).getTime()
+        : 0;
+
+      if (latestFollowupAt && latestFollowupAt >= lastMessageAt) continue;
+
+      const phone = normalizeLeadPhoneForWhatsApp(lead);
+      if (!phone) continue;
+
+      const reminderText = buildWhatsAppReminderHook(lead);
+      await sendWhatsAppText(phone, reminderText);
+
+      await trackConversationEvent({
+        conversation_id: conversationId,
+        event_type: "whatsapp_followup_sent",
+        channel: "whatsapp",
+        external_user_id: lead?.conversations?.external_user_id || phone,
+        payload: {
+          hours_since_last_assistant_message: Math.round((now - lastMessageAt) / 3600000),
+          phone,
+          text: reminderText.slice(0, 500),
+        },
+      });
+
+      await saveMessage({
+        conversation_id: conversationId,
+        role: "assistant",
+        content: reminderText,
+      });
+
+      processed.push({
+        lead_id: lead.id,
+        conversation_id: conversationId,
+        phone,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      hours_threshold: WHATSAPP_FOLLOWUP_HOURS,
+      processed_count: processed.length,
+      processed,
+    });
+  } catch (error) {
+    console.log("whatsapp followup task error", error);
+    return res.status(500).json({ ok: false, error: error.message });
   }
 });
 
