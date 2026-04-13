@@ -43,6 +43,7 @@
 
   function clearConversationId() {
     localStorage.removeItem(CONFIG.conversationIdStorageKey);
+    sessionStorage.removeItem("agente_ia_last_completed_signature");
   }
 
   function hasChatStarted() {
@@ -63,6 +64,44 @@
       conversation_id: getConversationId() || null,
       external_user_id: getOrCreateExternalUserId(),
       ...payload,
+    });
+  }
+
+  function buildCompletedSignature(payload) {
+    if (!payload) return null;
+
+    return JSON.stringify({
+      conversation_id: payload.conversation_id || "",
+      service: payload.interest_service || "",
+      budget: payload.budget_range || "",
+      phase: payload.phase || "",
+      mode: payload.mode || "",
+      completed: true,
+    });
+  }
+
+  function pushChatCompleted(payload = {}) {
+    const signature = buildCompletedSignature(payload);
+    const lastSignature = sessionStorage.getItem(
+      "agente_ia_last_completed_signature"
+    );
+
+    if (signature && signature === lastSignature) {
+      return;
+    }
+
+    if (signature) {
+      sessionStorage.setItem("agente_ia_last_completed_signature", signature);
+    }
+
+    pushDataLayer("chatbot_completed", {
+      chat_completed: true,
+      interest_service: payload.interest_service ?? null,
+      budget_range: payload.budget_range ?? null,
+      preferred_contact_channel: payload.preferred_contact_channel ?? null,
+      conversation_mode: payload.mode ?? null,
+      conversation_phase: payload.phase ?? null,
+      lead_score: payload.lead_score ?? null,
     });
   }
 
@@ -379,6 +418,21 @@
           interest_service: data?.interest_service ?? null,
           budget_range: data?.budget_range ?? null,
           inferred: true,
+        });
+      }
+
+      if (data?.chat_completed === true) {
+        pushChatCompleted({
+          conversation_id: data?.conversation_id || getConversationId() || null,
+          interest_service:
+            data?.lead?.interest_service ?? data?.interest_service ?? null,
+          budget_range:
+            data?.lead?.budget_range ?? data?.budget_range ?? null,
+          preferred_contact_channel:
+            data?.lead?.preferred_contact_channel ?? null,
+          lead_score: data?.lead?.lead_score ?? data?.lead_score ?? null,
+          mode: data?.mode ?? null,
+          phase: data?.phase ?? null,
         });
       }
     } catch (err) {
