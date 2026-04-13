@@ -229,11 +229,11 @@ textarea {
 }
 
 .lead-row.active {
-  background: rgba(184, 150, 255, 0.14);
+  background: #fff;
 }
 
 .lead-row.active td {
-  background: rgba(184, 150, 255, 0.1);
+  background: #fff;
 }
 
 .lead-name-btn {
