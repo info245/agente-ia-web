@@ -346,6 +346,43 @@
     el.messages.scrollTop = el.messages.scrollHeight;
   }
 
+  function pushChatCompletedEvent(payload = {}) {
+    const signature = JSON.stringify({
+      conversation_id: payload.conversation_id || "",
+      service: payload.interest_service || "",
+      budget: payload.budget_range || "",
+      phase: payload.phase || "",
+      mode: payload.mode || "",
+      completed: true,
+    });
+
+    const lastCompletedSignature = sessionStorage.getItem(
+      "agente_ia_last_completed_signature"
+    );
+
+    if (signature && signature === lastCompletedSignature) {
+      return;
+    }
+
+    sessionStorage.setItem("agente_ia_last_completed_signature", signature);
+
+    window.dataLayer = window.dataLayer || [];
+    const completedPayload = {
+      event: "chatbot_completed",
+      conversation_id: payload.conversation_id || getConversationId() || "",
+      interest_service: payload.interest_service || "",
+      budget_range: payload.budget_range || "",
+      preferred_contact_channel: payload.preferred_contact_channel || "",
+      conversation_mode: payload.mode || "",
+      conversation_phase: payload.phase || "",
+      lead_score: payload.lead_score || 0,
+      chat_completed: true,
+    };
+
+    window.dataLayer.push(completedPayload);
+    console.log("dataLayer chatbot_completed enviado:", completedPayload);
+  }
+
   function appendHandoffCard(handoff) {
     if (!handoff?.whatsapp_url) return;
 
@@ -440,6 +477,18 @@
           };
 
         pushChatCompletedToDataLayer(completedPayload);
+        pushChatCompletedEvent({
+          conversation_id: data?.conversation_id || getConversationId() || "",
+          interest_service:
+            data?.lead?.interest_service ?? data?.interest_service ?? "",
+          budget_range:
+            data?.lead?.budget_range ?? data?.budget_range ?? "",
+          preferred_contact_channel:
+            data?.lead?.preferred_contact_channel ?? "",
+          lead_score: data?.lead?.lead_score ?? data?.lead_score ?? 0,
+          mode: data?.mode ?? "",
+          phase: data?.phase ?? "",
+        });
       } else {
         console.log("chat_completed no detectado como true:", data?.chat_completed);
       }
