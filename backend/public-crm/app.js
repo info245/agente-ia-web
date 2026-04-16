@@ -55,6 +55,7 @@ const el = {
   configAddServiceBtn: document.getElementById("configAddServiceBtn"),
   dateFilter: document.getElementById("dateFilter"),
   sourceFilter: document.getElementById("sourceFilter"),
+  serviceFilter: document.getElementById("serviceFilter"),
   leadTitle: document.getElementById("leadTitle"),
   leadChannel: document.getElementById("leadChannel"),
   leadMeta: document.getElementById("leadMeta"),
@@ -219,6 +220,29 @@ function getDateFilterLabel(value) {
   return "Todas";
 }
 
+function populateServiceFilter(leads = []) {
+  if (!el.serviceFilter) return;
+
+  const currentValue = el.serviceFilter.value || "all";
+  const services = Array.from(
+    new Set(
+      (leads || [])
+        .map((lead) => String(lead?.interest_service || "").trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b, "es"));
+
+  el.serviceFilter.innerHTML = [
+    '<option value="all">Todos</option>',
+    ...services.map(
+      (service) =>
+        `<option value="${escapeHtml(service)}">${escapeHtml(service)}</option>`
+    ),
+  ].join("");
+
+  el.serviceFilter.value = services.includes(currentValue) ? currentValue : "all";
+}
+
 function toDatetimeLocal(value) {
   if (!value) return "";
   const date = new Date(value);
@@ -356,10 +380,14 @@ function collectServiceConfig() {
 function applyLeadFilters() {
   const source = el.sourceFilter.value;
   const dateRange = el.dateFilter.value;
+  const service = String(el.serviceFilter?.value || "all").trim();
   const now = Date.now();
 
   state.filteredLeads = state.leads.filter((lead) => {
     const channelOk = source === "all" || (lead.channel || "web") === source;
+    const serviceOk =
+      service === "all" ||
+      String(lead?.interest_service || "").trim() === service;
 
     let dateOk = true;
     if (dateRange !== "all") {
@@ -381,7 +409,7 @@ function applyLeadFilters() {
       }
     }
 
-    return channelOk && dateOk;
+    return channelOk && serviceOk && dateOk;
   });
 
   if (!state.filteredLeads.find((lead) => lead.id === state.selectedLead?.id)) {
@@ -719,6 +747,7 @@ async function getServiceFacts(serviceName) {
 async function loadLeads() {
   const data = await fetchJson(`${API_BASE}/leads`);
   state.leads = data.leads || [];
+  populateServiceFilter(state.leads);
 
   if (!state.selectedLead && state.leads.length) {
     state.selectedLead = state.leads[0];
@@ -761,6 +790,7 @@ async function loadAnalytics() {
   const params = new URLSearchParams({
     channel: el.sourceFilter.value || "all",
     date_range: el.dateFilter.value || "all",
+    service: el.serviceFilter?.value || "all",
   });
   const data = await fetchJson(`${API_BASE}/analytics?${params.toString()}`);
   state.analytics = data.analytics || null;
@@ -1290,6 +1320,14 @@ el.dateFilter.addEventListener("change", () => {
   });
 });
 el.sourceFilter.addEventListener("change", () => {
+  state.leadPage = 0;
+  renderLeadTable();
+  renderLeadDetail();
+  loadAnalytics().catch((error) => {
+    console.warn("CRM analytics reload failed", error);
+  });
+});
+el.serviceFilter.addEventListener("change", () => {
   state.leadPage = 0;
   renderLeadTable();
   renderLeadDetail();

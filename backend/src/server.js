@@ -2396,6 +2396,7 @@ app.get("/api/crm/analytics", async (req, res) => {
     const analytics = await getCrmAnalytics({
       channel: req.query.channel || "all",
       dateRange: req.query.date_range || "all",
+      service: req.query.service || "all",
       limit: 2000,
     });
 

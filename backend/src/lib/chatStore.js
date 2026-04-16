@@ -430,18 +430,22 @@ export async function findLatestWebLeadByContact({
 export async function getCrmAnalytics({
   channel = "all",
   dateRange = "all",
+  service = "all",
   limit = 1000,
 } = {}) {
   const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 1000;
   const safeChannel = normalizeTextValue(channel);
+  const safeService = normalizeTextValue(service);
   const startDate = getAnalyticsStartDate(dateRange);
 
   const leads = await listCrmLeads(safeLimit);
   const filteredLeads = (leads || []).filter((lead) => {
     const leadChannel = normalizeTextValue(lead?.conversations?.channel || "web");
     const channelOk = safeChannel === "all" || leadChannel === safeChannel;
+    const leadService = normalizeTextValue(lead?.interest_service);
+    const serviceOk = safeService === "all" || leadService === safeService;
     const dateOk = isOnOrAfter(lead?.created_at, startDate);
-    return channelOk && dateOk;
+    return channelOk && serviceOk && dateOk;
   });
 
   const leadIds = filteredLeads.map((lead) => lead.id).filter(Boolean);
@@ -639,6 +643,7 @@ export async function getCrmAnalytics({
     filters: {
       channel: safeChannel || "all",
       date_range: normalizeTextValue(dateRange) || "all",
+      service: safeService || "all",
     },
     totals: {
       leads_generated: filteredLeads.length,
