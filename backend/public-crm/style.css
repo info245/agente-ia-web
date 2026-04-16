@@ -541,6 +541,7 @@ textarea {
 .crm-config-card .quote-grid label select,
 .crm-config-card .quote-grid label textarea {
   min-height: 50px;
+  padding: 14px 18px;
   border-radius: 16px;
   border: 1px solid rgba(191, 208, 234, 0.86);
   background: linear-gradient(180deg, rgba(252,254,255,0.98), rgba(245,249,255,0.96));
