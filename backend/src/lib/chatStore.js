@@ -390,24 +390,42 @@ export async function updateLeadCrmFields(leadId, patch = {}) {
     throw new Error("updateLeadCrmFields: leadId es obligatorio");
   }
 
-  const payload = {
-    name: clean(patch.name),
-    email: clean(patch.email),
-    phone: clean(patch.phone),
-    company_name: clean(patch.company_name),
-    interest_service: clean(patch.interest_service),
-    budget_range: clean(patch.budget_range),
-    main_goal: clean(patch.main_goal),
-    current_situation: clean(patch.current_situation),
-    pain_points: clean(patch.pain_points),
-    preferred_contact_channel: clean(patch.preferred_contact_channel),
-    crm_status: clean(patch.crm_status),
-    assigned_to: clean(patch.assigned_to),
-    internal_notes: clean(patch.internal_notes),
-    next_action: clean(patch.next_action),
-    follow_up_at: patch.follow_up_at || null,
-    quote_status: clean(patch.quote_status),
+  const payload = {};
+  const has = (key) => Object.prototype.hasOwnProperty.call(patch, key);
+  const assignClean = (key) => {
+    if (has(key)) payload[key] = clean(patch[key]);
   };
+
+  assignClean("name");
+  assignClean("email");
+  assignClean("phone");
+  assignClean("company_name");
+  assignClean("interest_service");
+  assignClean("budget_range");
+  assignClean("main_goal");
+  assignClean("current_situation");
+  assignClean("pain_points");
+  assignClean("preferred_contact_channel");
+  assignClean("crm_status");
+  assignClean("assigned_to");
+  assignClean("internal_notes");
+  assignClean("next_action");
+  assignClean("quote_status");
+
+  if (has("follow_up_at")) {
+    payload.follow_up_at = patch.follow_up_at || null;
+  }
+
+  if (!Object.keys(payload).length) {
+    const { data, error } = await supabase
+      .from("leads")
+      .select("*")
+      .eq("id", safeLeadId)
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
 
   const { data, error } = await supabase
     .from("leads")
