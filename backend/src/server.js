@@ -54,6 +54,7 @@ import {
   sendClientConfirmationEmail,
   sendQuoteEmailToLead,
   sendTransactionalEmail,
+  verifyEmailTransport,
 } from "./lib/emailService.js";
 
 import {
@@ -1793,7 +1794,59 @@ function requireCrmAuth(role = null) {
   };
 }
 
-function validateIntegrationConfig(type, config = {}) {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 7000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function probeUrlReachability(url, { method = "GET", timeoutMs = 7000 } = {}) {
+  const safeUrl = String(url || "").trim();
+  if (!safeUrl) {
+    return { ok: false, status: 0, message: "URL vacia" };
+  }
+
+  try {
+    new URL(safeUrl);
+  } catch (_error) {
+    return { ok: false, status: 0, message: "URL no valida" };
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      safeUrl,
+      {
+        method,
+        redirect: "manual",
+      },
+      timeoutMs
+    );
+
+    return {
+      ok: response.status > 0 && response.status < 500,
+      status: response.status,
+      message: `HTTP ${response.status}`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      message:
+        error?.name === "AbortError"
+          ? "Timeout al validar la URL"
+          : error?.message || "No se pudo conectar",
+    };
+  }
+}
+
+async function validateIntegrationConfig(type, config = {}) {
   const checkedAt = new Date().toISOString();
   const integrations = config?.integrations || {};
 
@@ -1805,7 +1858,52 @@ function validateIntegrationConfig(type, config = {}) {
     if (!item.phone_number_id || !item.business_account_id) {
       return buildValidationResult("pending", "Faltan Phone Number ID o Business Account ID.", checkedAt);
     }
-    return buildValidationResult("connected", `WhatsApp listo con ${item.provider || "provider"}.`, checkedAt);
+    if (!WHATSAPP_TOKEN) {
+      return buildValidationResult("pending", "Falta WHATSAPP_TOKEN en el backend.", checkedAt);
+    }
+    if (
+      WHATSAPP_PHONE_NUMBER_ID &&
+      String(item.phone_number_id).trim() !== String(WHATSAPP_PHONE_NUMBER_ID).trim()
+    ) {
+      return buildValidationResult(
+        "warning",
+        "El Phone Number ID configurado no coincide con el activo en backend.",
+        checkedAt
+      );
+    }
+
+    try {
+      const response = await fetchWithTimeout(
+        `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${item.phone_number_id}?fields=id,display_phone_number,verified_name`,
+        {
+          headers: {
+            Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          },
+        },
+        7000
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        return buildValidationResult(
+          "warning",
+          data?.error?.message || `WhatsApp respondio con HTTP ${response.status}.`,
+          checkedAt
+        );
+      }
+
+      return buildValidationResult(
+        "connected",
+        `WhatsApp validado con ${data?.display_phone_number || item.phone_number_id}.`,
+        checkedAt
+      );
+    } catch (error) {
+      return buildValidationResult(
+        "warning",
+        error?.message || "No se pudo validar WhatsApp contra Meta.",
+        checkedAt
+      );
+    }
   }
 
   if (type === "lead_forms") {
@@ -1816,7 +1914,41 @@ function validateIntegrationConfig(type, config = {}) {
     if (!item.sheet_document && !item.webhook_url) {
       return buildValidationResult("pending", "Falta documento de Sheets o webhook principal.", checkedAt);
     }
-    return buildValidationResult("connected", "Lead forms configurados para entrada unificada.", checkedAt);
+
+    const messages = [];
+    let hasHardCheck = false;
+
+    if (item.sheet_document) {
+      messages.push(`Sheets configurado: ${item.sheet_document}`);
+    }
+
+    if (item.webhook_url) {
+      const probe = await probeUrlReachability(item.webhook_url, { method: "GET", timeoutMs: 5000 });
+      hasHardCheck = true;
+      if (probe.ok) {
+        messages.push(`Webhook accesible (${probe.message})`);
+      } else {
+        return buildValidationResult(
+          "warning",
+          `Webhook principal no accesible: ${probe.message}.`,
+          checkedAt
+        );
+      }
+    }
+
+    if (!hasHardCheck && !item.sheet_tabs) {
+      return buildValidationResult(
+        "warning",
+        "La integracion existe, pero falta validar hojas o webhook principal.",
+        checkedAt
+      );
+    }
+
+    return buildValidationResult(
+      "connected",
+      messages.join(" · ") || "Lead forms configurados para entrada unificada.",
+      checkedAt
+    );
   }
 
   if (type === "email") {
@@ -1824,7 +1956,20 @@ function validateIntegrationConfig(type, config = {}) {
     if (!item.from_email) {
       return buildValidationResult("pending", "Falta el email de salida.", checkedAt);
     }
-    return buildValidationResult("connected", `Email listo con proveedor ${item.provider || "smtp"}.`, checkedAt);
+    try {
+      await verifyEmailTransport();
+      return buildValidationResult(
+        "connected",
+        `Email validado con proveedor ${item.provider || "smtp"}.`,
+        checkedAt
+      );
+    } catch (error) {
+      return buildValidationResult(
+        "warning",
+        error?.message || "No se pudo validar el transporte SMTP.",
+        checkedAt
+      );
+    }
   }
 
   if (type === "automations") {
@@ -1832,7 +1977,32 @@ function validateIntegrationConfig(type, config = {}) {
     if (!item.workspace_url) {
       return buildValidationResult("pending", "Falta la URL del workspace de automatizacion.", checkedAt);
     }
-    return buildValidationResult("connected", `Automatizaciones listas en ${item.platform || "n8n"}.`, checkedAt);
+
+    const workspaceProbe = await probeUrlReachability(item.workspace_url, {
+      method: "GET",
+      timeoutMs: 5000,
+    });
+    if (!workspaceProbe.ok) {
+      return buildValidationResult(
+        "warning",
+        `Workspace no accesible: ${workspaceProbe.message}.`,
+        checkedAt
+      );
+    }
+
+    if (!TASK_SECRET) {
+      return buildValidationResult(
+        "warning",
+        "El workspace responde, pero falta TASK_SECRET para ejecutar tareas automáticas.",
+        checkedAt
+      );
+    }
+
+    return buildValidationResult(
+      "connected",
+      `Automatizaciones listas en ${item.platform || "n8n"} (${workspaceProbe.message}).`,
+      checkedAt
+    );
   }
 
   return buildValidationResult("pending", "Tipo de integracion no reconocido.", checkedAt);
@@ -3105,7 +3275,7 @@ app.post("/api/crm/integrations/validate", async (req, res) => {
     }
 
     const currentConfig = await getAppConfig({ accountId: account.id });
-    const validation = validateIntegrationConfig(type, currentConfig);
+    const validation = await validateIntegrationConfig(type, currentConfig);
 
     const nextConfig = {
       ...currentConfig,

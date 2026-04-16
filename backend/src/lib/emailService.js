@@ -80,6 +80,12 @@ function getTransporter() {
   return transporter;
 }
 
+export async function verifyEmailTransport() {
+  const t = getTransporter();
+  await t.verify();
+  return { ok: true };
+}
+
 export async function sendLeadEmail({
   lead,
   conversation_id,
