@@ -515,12 +515,15 @@ export async function getCrmAnalytics({
   );
 
   const whatsappLeadIds = new Set();
+  const whatsappPreferenceLeadIds = new Set();
+  const whatsappHandoffLeadIds = new Set();
   for (const lead of filteredLeads) {
     if (
       normalizeTextValue(lead?.preferred_contact_channel) === "whatsapp" ||
       normalizeTextValue(lead?.conversations?.channel) === "whatsapp"
     ) {
       whatsappLeadIds.add(lead.id);
+      whatsappPreferenceLeadIds.add(lead.id);
     }
   }
 
@@ -537,6 +540,7 @@ export async function getCrmAnalytics({
       (eventType === "external_lead_autostart" && via === "whatsapp")
     ) {
       whatsappLeadIds.add(leadId);
+      whatsappHandoffLeadIds.add(leadId);
     }
   }
 
@@ -599,6 +603,37 @@ export async function getCrmAnalytics({
     ? Math.round((proposalsAccepted / proposalsSent) * 100)
     : 0;
 
+  const timelineMap = new Map();
+  for (const lead of filteredLeads) {
+    const sampleDate = new Date(lead?.created_at);
+    if (Number.isNaN(sampleDate.getTime())) continue;
+
+    const key = sampleDate.toISOString().slice(0, 10);
+    if (!timelineMap.has(key)) {
+      timelineMap.set(key, {
+        date: key,
+        leads: 0,
+        quotes_sent: 0,
+        quotes_accepted: 0,
+      });
+    }
+
+    const bucket = timelineMap.get(key);
+    bucket.leads += 1;
+
+    const quote = quoteByLead.get(lead.id);
+    const quoteStatus = normalizeTextValue(quote?.status);
+    const wasSent =
+      !!quote?.sent_at || ["sent", "accepted", "rejected"].includes(quoteStatus);
+
+    if (wasSent) bucket.quotes_sent += 1;
+    if (quoteStatus === "accepted") bucket.quotes_accepted += 1;
+  }
+
+  const timeline = Array.from(timelineMap.values()).sort((a, b) =>
+    a.date.localeCompare(b.date)
+  );
+
   return {
     generated_at: new Date().toISOString(),
     filters: {
@@ -608,6 +643,8 @@ export async function getCrmAnalytics({
     totals: {
       leads_generated: filteredLeads.length,
       passed_to_whatsapp: whatsappLeadIds.size,
+      whatsapp_preference: whatsappPreferenceLeadIds.size,
+      whatsapp_handoff_real: whatsappHandoffLeadIds.size,
       quotes_sent: proposalsSent,
       quotes_accepted: proposalsAccepted,
       average_response_minutes: averageResponseMinutes,
@@ -618,6 +655,7 @@ export async function getCrmAnalytics({
       channel: channelBreakdown,
       source: sourceBreakdown,
     },
+    timeline,
   };
 }
 

@@ -78,14 +78,6 @@
       </aside>
 
       <div class="crm-main">
-        <section id="crm-summary" class="crm-card crm-summary">
-          <div class="crm-card-header">
-            <h2 id="leadTitle">Selecciona un lead</h2>
-            <span id="leadChannel" class="pill">-</span>
-          </div>
-          <div id="leadMeta" class="lead-meta"></div>
-        </section>
-
         <section id="crm-analytics" class="crm-card crm-analytics">
           <div class="crm-card-header">
             <div>
@@ -103,6 +95,7 @@
             <article class="analytics-card">
               <span>Pasan a WhatsApp</span>
               <strong id="analyticsPassedWhatsapp">-</strong>
+              <small id="analyticsWhatsappHint">-</small>
             </article>
             <article class="analytics-card">
               <span>Propuestas enviadas</span>
@@ -122,6 +115,13 @@
             </article>
           </div>
 
+          <div class="analytics-timeline-card">
+            <div class="analytics-breakdown-header">
+              <h4>Evolucion por dia</h4>
+            </div>
+            <div id="analyticsTimeline" class="analytics-timeline"></div>
+          </div>
+
           <div class="analytics-breakdowns">
             <section class="analytics-breakdown-card">
               <div class="analytics-breakdown-header">
@@ -137,6 +137,14 @@
               <div id="analyticsSourceBreakdown" class="analytics-breakdown-list"></div>
             </section>
           </div>
+        </section>
+
+        <section id="crm-summary" class="crm-card crm-summary">
+          <div class="crm-card-header">
+            <h2 id="leadTitle">Selecciona un lead</h2>
+            <span id="leadChannel" class="pill">-</span>
+          </div>
+          <div id="leadMeta" class="lead-meta"></div>
         </section>
 
         <section id="crm-leads" class="crm-card">

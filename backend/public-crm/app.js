@@ -21,12 +21,14 @@ const el = {
   analyticsRangeLabel: document.getElementById("analyticsRangeLabel"),
   analyticsLeadsGenerated: document.getElementById("analyticsLeadsGenerated"),
   analyticsPassedWhatsapp: document.getElementById("analyticsPassedWhatsapp"),
+  analyticsWhatsappHint: document.getElementById("analyticsWhatsappHint"),
   analyticsQuotesSent: document.getElementById("analyticsQuotesSent"),
   analyticsQuotesAccepted: document.getElementById("analyticsQuotesAccepted"),
   analyticsResponseTime: document.getElementById("analyticsResponseTime"),
   analyticsAcceptanceRate: document.getElementById("analyticsAcceptanceRate"),
   analyticsChannelBreakdown: document.getElementById("analyticsChannelBreakdown"),
   analyticsSourceBreakdown: document.getElementById("analyticsSourceBreakdown"),
+  analyticsTimeline: document.getElementById("analyticsTimeline"),
   leadTableBody: document.getElementById("leadTableBody"),
   leadMobileList: document.getElementById("leadMobileList"),
   leadTableInfo: document.getElementById("leadTableInfo"),
@@ -341,6 +343,51 @@ function renderBreakdown(target, rows = []) {
     .join("");
 }
 
+function renderTimeline(rows = []) {
+  if (!el.analyticsTimeline) return;
+
+  if (!rows.length) {
+    el.analyticsTimeline.innerHTML = '<div class="empty">Sin datos diarios todavia.</div>';
+    return;
+  }
+
+  const maxValue = Math.max(
+    ...rows.flatMap((row) => [row.leads || 0, row.quotes_sent || 0, row.quotes_accepted || 0]),
+    1
+  );
+
+  el.analyticsTimeline.innerHTML = rows
+    .map((row) => {
+      const leadPct = Math.max(8, Math.round(((row.leads || 0) / maxValue) * 100));
+      const sentPct = Math.max(8, Math.round(((row.quotes_sent || 0) / maxValue) * 100));
+      const acceptedPct = Math.max(8, Math.round(((row.quotes_accepted || 0) / maxValue) * 100));
+
+      return `
+        <article class="timeline-row">
+          <div class="timeline-date">${row.date}</div>
+          <div class="timeline-metrics">
+            <div class="timeline-bar-group">
+              <span>Leads</span>
+              <div class="timeline-bar"><i style="width:${leadPct}%"></i></div>
+              <strong>${row.leads || 0}</strong>
+            </div>
+            <div class="timeline-bar-group">
+              <span>Enviadas</span>
+              <div class="timeline-bar secondary"><i style="width:${sentPct}%"></i></div>
+              <strong>${row.quotes_sent || 0}</strong>
+            </div>
+            <div class="timeline-bar-group">
+              <span>Aceptadas</span>
+              <div class="timeline-bar success"><i style="width:${acceptedPct}%"></i></div>
+              <strong>${row.quotes_accepted || 0}</strong>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
 function renderAnalytics() {
   const analytics = state.analytics;
 
@@ -349,18 +396,21 @@ function renderAnalytics() {
   if (!analytics) {
     el.analyticsLeadsGenerated.textContent = "-";
     el.analyticsPassedWhatsapp.textContent = "-";
+    el.analyticsWhatsappHint.textContent = "-";
     el.analyticsQuotesSent.textContent = "-";
     el.analyticsQuotesAccepted.textContent = "-";
     el.analyticsResponseTime.textContent = "-";
     el.analyticsAcceptanceRate.textContent = "-";
     renderBreakdown(el.analyticsChannelBreakdown, []);
     renderBreakdown(el.analyticsSourceBreakdown, []);
+    renderTimeline([]);
     return;
   }
 
   const totals = analytics.totals || {};
   el.analyticsLeadsGenerated.textContent = totals.leads_generated ?? 0;
   el.analyticsPassedWhatsapp.textContent = totals.passed_to_whatsapp ?? 0;
+  el.analyticsWhatsappHint.textContent = `${totals.whatsapp_handoff_real ?? 0} reales · ${totals.whatsapp_preference ?? 0} por preferencia`;
   el.analyticsQuotesSent.textContent = totals.quotes_sent ?? 0;
   el.analyticsQuotesAccepted.textContent = totals.quotes_accepted ?? 0;
   el.analyticsResponseTime.textContent = totals.average_response_label || "-";
@@ -368,6 +418,7 @@ function renderAnalytics() {
 
   renderBreakdown(el.analyticsChannelBreakdown, analytics?.breakdowns?.channel || []);
   renderBreakdown(el.analyticsSourceBreakdown, analytics?.breakdowns?.source || []);
+  renderTimeline(analytics?.timeline || []);
 }
 
 function renderMessages(messages = []) {

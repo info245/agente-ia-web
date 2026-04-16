@@ -395,6 +395,94 @@ textarea {
   letter-spacing: -0.04em;
 }
 
+.analytics-card small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.analytics-timeline-card {
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.analytics-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.timeline-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f9fbff, #f1f5ff);
+  border: 1px solid var(--line);
+}
+
+.timeline-date {
+  color: var(--accent-dark);
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+
+.timeline-metrics {
+  display: grid;
+  gap: 8px;
+}
+
+.timeline-bar-group {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) 44px;
+  gap: 10px;
+  align-items: center;
+}
+
+.timeline-bar-group span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.timeline-bar-group strong {
+  text-align: right;
+  font-size: 0.88rem;
+}
+
+.timeline-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(109, 65, 243, 0.12);
+  overflow: hidden;
+}
+
+.timeline-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), #8d58ff);
+}
+
+.timeline-bar.secondary {
+  background: rgba(55, 106, 255, 0.12);
+}
+
+.timeline-bar.secondary i {
+  background: linear-gradient(135deg, #4476ff, #76a1ff);
+}
+
+.timeline-bar.success {
+  background: rgba(31, 143, 95, 0.14);
+}
+
+.timeline-bar.success i {
+  background: linear-gradient(135deg, #1f8f5f, #48bd89);
+}
+
 .analytics-breakdowns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -804,6 +892,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .timeline-row {
+    grid-template-columns: 1fr;
+  }
+
   .crm-panel {
     height: auto;
     max-height: none;
@@ -864,6 +956,14 @@ textarea {
   .crm-card-header h2,
   .crm-card-header h3 {
     font-size: 1.4rem;
+  }
+
+  .timeline-bar-group {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline-bar-group strong {
+    text-align: left;
   }
 
   .filter-box {
