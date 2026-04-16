@@ -17,8 +17,16 @@ const el = {
   configForm: document.getElementById("configForm"),
   configSaveBtn: document.getElementById("configSaveBtn"),
   configSaveStatus: document.getElementById("configSaveStatus"),
+  configTabGeneral: document.getElementById("configTabGeneral"),
+  configTabWebsite: document.getElementById("configTabWebsite"),
+  configPanelGeneral: document.getElementById("configPanelGeneral"),
+  configPanelWebsite: document.getElementById("configPanelWebsite"),
   configBrandName: document.getElementById("configBrandName"),
   configWebsiteUrl: document.getElementById("configWebsiteUrl"),
+  configBootstrapUrl: document.getElementById("configBootstrapUrl"),
+  configAnalyzeWebsiteBtn: document.getElementById("configAnalyzeWebsiteBtn"),
+  configAnalyzeStatus: document.getElementById("configAnalyzeStatus"),
+  configBootstrapSummary: document.getElementById("configBootstrapSummary"),
   configLogoUrl: document.getElementById("configLogoUrl"),
   configPublicWhatsappNumber: document.getElementById("configPublicWhatsappNumber"),
   configHumanWhatsappNumber: document.getElementById("configHumanWhatsappNumber"),
@@ -451,6 +459,7 @@ function renderConfig() {
 
   el.configBrandName.value = config?.brand?.name || "";
   el.configWebsiteUrl.value = config?.brand?.website_url || "";
+  el.configBootstrapUrl.value = config?.brand?.website_url || "";
   el.configLogoUrl.value = config?.brand?.logo_url || "";
   el.configPrimaryColor.value = config?.brand?.primary_color || "";
   el.configAccentColor.value = config?.brand?.accent_color || "";
@@ -465,6 +474,17 @@ function renderConfig() {
     config?.agent?.handoff_target_channel || "whatsapp";
   el.configPromptAdditions.value = config?.agent?.prompt_additions || "";
   el.configServicesJson.value = prettyJson(config?.services || {});
+  if (!el.configBootstrapSummary.value.trim()) {
+    el.configBootstrapSummary.value = "";
+  }
+}
+
+function setConfigTab(tabName) {
+  const isWebsite = tabName === "website";
+  el.configTabGeneral.classList.toggle("is-active", !isWebsite);
+  el.configTabWebsite.classList.toggle("is-active", isWebsite);
+  el.configPanelGeneral.classList.toggle("is-active", !isWebsite);
+  el.configPanelWebsite.classList.toggle("is-active", isWebsite);
 }
 
 function renderMessages(messages = []) {
@@ -652,6 +672,52 @@ async function saveConfig() {
   } finally {
     el.configSaveBtn.disabled = false;
     el.configSaveBtn.classList.remove("is-busy");
+  }
+}
+
+async function analyzeWebsiteConfig() {
+  const websiteUrl = (el.configBootstrapUrl.value || "").trim();
+  if (!websiteUrl) {
+    setStatus(el.configAnalyzeStatus, "Introduce una web para analizar.", "error");
+    return;
+  }
+
+  el.configAnalyzeWebsiteBtn.disabled = true;
+  el.configAnalyzeWebsiteBtn.classList.add("is-busy");
+  setStatus(el.configAnalyzeStatus, "Analizando web...");
+
+  try {
+    const data = await fetchJson(`${API_BASE}/config/bootstrap-site`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ website_url: websiteUrl }),
+    });
+
+    const suggested = data.suggested_config || {};
+    state.appConfig = suggested;
+    renderConfig();
+
+    const snapshot = data.snapshot || {};
+    el.configBootstrapSummary.value = [
+      `URL final: ${snapshot.final_url || snapshot.url || websiteUrl}`,
+      `Marca sugerida: ${suggested?.brand?.name || "-"}`,
+      `Title: ${snapshot.title || "-"}`,
+      `H1: ${snapshot.h1 || "-"}`,
+      `Resumen: ${snapshot.summary || "-"}`,
+      `Prioridad: ${(snapshot.priorities || [])[0] || "-"}`,
+    ].join("\n");
+
+    setStatus(
+      el.configAnalyzeStatus,
+      "Analisis completado. Revisa la pestaña General y guarda si te encaja.",
+      "ok"
+    );
+    setConfigTab("general");
+  } catch (error) {
+    setStatus(el.configAnalyzeStatus, `No se pudo analizar: ${error.message}`, "error");
+  } finally {
+    el.configAnalyzeWebsiteBtn.disabled = false;
+    el.configAnalyzeWebsiteBtn.classList.remove("is-busy");
   }
 }
 
@@ -1006,6 +1072,9 @@ async function sendQuote(via) {
 el.saveBtn.addEventListener("click", saveLead);
 el.refreshBtn.addEventListener("click", loadLeads);
 el.configSaveBtn.addEventListener("click", saveConfig);
+el.configAnalyzeWebsiteBtn.addEventListener("click", analyzeWebsiteConfig);
+el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
+el.configTabWebsite.addEventListener("click", () => setConfigTab("website"));
 el.dateFilter.addEventListener("change", () => {
   state.leadPage = 0;
   renderLeadTable();

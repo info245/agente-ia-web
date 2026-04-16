@@ -90,75 +90,102 @@
           </div>
 
           <form id="configForm" class="config-form">
-            <div class="quote-grid">
-              <label>
-                Marca
-                <input id="configBrandName" type="text" />
-              </label>
-
-              <label>
-                Web principal
-                <input id="configWebsiteUrl" type="url" />
-              </label>
-
-              <label>
-                URL de logo
-                <input id="configLogoUrl" type="text" />
-              </label>
-
-              <label>
-                WhatsApp publico
-                <input id="configPublicWhatsappNumber" type="text" />
-              </label>
-
-              <label>
-                WhatsApp agente humano
-                <input id="configHumanWhatsappNumber" type="text" />
-              </label>
-
-              <label>
-                Email soporte/comercial
-                <input id="configSupportEmail" type="email" />
-              </label>
-
-              <label>
-                Tono del agente
-                <input id="configAgentTone" type="text" />
-              </label>
-
-              <label>
-                CTA final
-                <input id="configFinalCtaLabel" type="text" />
-              </label>
-
-              <label>
-                Canal de handoff
-                <select id="configHandoffTargetChannel">
-                  <option value="whatsapp">whatsapp</option>
-                  <option value="email">email</option>
-                </select>
-              </label>
-
-              <label>
-                Color principal
-                <input id="configPrimaryColor" type="text" />
-              </label>
-
-              <label>
-                Color acento
-                <input id="configAccentColor" type="text" />
-              </label>
-
-              <label class="quote-grid-full">
-                Ajustes extra de prompt
-                <textarea id="configPromptAdditions" rows="5"></textarea>
-              </label>
-
-              <label class="quote-grid-full">
-                Servicios (JSON)
-                <textarea id="configServicesJson" rows="12"></textarea>
-              </label>
+            <div class="config-tabs">
+              <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">General</button>
+              <button id="configTabWebsite" type="button" class="config-tab" data-config-tab="website">Desde web</button>
             </div>
+
+            <section id="configPanelGeneral" class="config-panel is-active" data-config-panel="general">
+              <div class="quote-grid">
+                <label>
+                  Marca
+                  <input id="configBrandName" type="text" />
+                </label>
+
+                <label>
+                  Web principal
+                  <input id="configWebsiteUrl" type="url" />
+                </label>
+
+                <label>
+                  URL de logo
+                  <input id="configLogoUrl" type="text" />
+                </label>
+
+                <label>
+                  WhatsApp publico
+                  <input id="configPublicWhatsappNumber" type="text" />
+                </label>
+
+                <label>
+                  WhatsApp agente humano
+                  <input id="configHumanWhatsappNumber" type="text" />
+                </label>
+
+                <label>
+                  Email soporte/comercial
+                  <input id="configSupportEmail" type="email" />
+                </label>
+
+                <label>
+                  Tono del agente
+                  <input id="configAgentTone" type="text" />
+                </label>
+
+                <label>
+                  CTA final
+                  <input id="configFinalCtaLabel" type="text" />
+                </label>
+
+                <label>
+                  Canal de handoff
+                  <select id="configHandoffTargetChannel">
+                    <option value="whatsapp">whatsapp</option>
+                    <option value="email">email</option>
+                  </select>
+                </label>
+
+                <label>
+                  Color principal
+                  <input id="configPrimaryColor" type="text" />
+                </label>
+
+                <label>
+                  Color acento
+                  <input id="configAccentColor" type="text" />
+                </label>
+
+                <label class="quote-grid-full">
+                  Ajustes extra de prompt
+                  <textarea id="configPromptAdditions" rows="5"></textarea>
+                </label>
+
+                <label class="quote-grid-full">
+                  Servicios (JSON)
+                  <textarea id="configServicesJson" rows="12"></textarea>
+                </label>
+              </div>
+            </section>
+
+            <section id="configPanelWebsite" class="config-panel" data-config-panel="website">
+              <div class="quote-grid">
+                <label class="quote-grid-full">
+                  URL de la web a analizar
+                  <input id="configBootstrapUrl" type="url" placeholder="https://tuweb.com" />
+                </label>
+
+                <div class="config-website-actions quote-grid-full">
+                  <button id="configAnalyzeWebsiteBtn" type="button">Analizar web y proponer configuracion</button>
+                  <div id="configAnalyzeStatus" class="save-status" aria-live="polite"></div>
+                </div>
+
+                <label class="quote-grid-full">
+                  Resumen detectado
+                  <textarea id="configBootstrapSummary" rows="6" readonly></textarea>
+                </label>
+              </div>
+            </section>
+
             <div id="configSaveStatus" class="save-status" aria-live="polite"></div>
           </form>
         </section>

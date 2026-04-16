@@ -362,6 +362,77 @@ textarea {
   gap: 12px;
 }
 
+.config-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  width: fit-content;
+  background: rgba(226, 234, 252, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.config-tab {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 800;
+  padding: 11px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.config-tab:hover {
+  color: var(--text);
+}
+
+.config-tab.is-active {
+  background: linear-gradient(135deg, var(--accent-dark), var(--accent));
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(37, 45, 98, 0.18);
+}
+
+.config-panel {
+  display: none;
+  padding: 18px;
+  border: 1px solid rgba(191, 208, 234, 0.88);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 249, 255, 0.92));
+}
+
+.config-panel.is-active {
+  display: block;
+}
+
+.config-website-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.config-website-actions button {
+  border: 0;
+  background: linear-gradient(135deg, var(--accent), #8d58ff);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(109, 65, 243, 0.18);
+}
+
+.config-website-actions button.is-busy {
+  opacity: 0.7;
+}
+
+.config-website-actions .save-status {
+  min-height: 0;
+  font-weight: 600;
+}
+
 .config-form textarea {
   min-height: 160px;
 }
@@ -370,6 +441,11 @@ textarea {
   font-family: Consolas, "Courier New", monospace;
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+#configBootstrapSummary {
+  min-height: 180px;
+  background: linear-gradient(180deg, #f8fbff, #f0f5ff);
 }
 
 .crm-section-copy {

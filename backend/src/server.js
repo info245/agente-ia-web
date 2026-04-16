@@ -1421,6 +1421,60 @@ function buildQuoteResponseUrl({ baseUrl, leadId, action, token }) {
   return `${baseUrl}/crm/quotes/${leadId}/respond?${params.toString()}`;
 }
 
+function inferBrandNameFromSnapshot(snapshot = {}) {
+  const candidates = [snapshot?.title, snapshot?.h1]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const first = candidate.split(/[\|\-·]/)[0]?.trim();
+    if (first && first.length >= 3) return first;
+  }
+
+  return "";
+}
+
+function inferServicesFromSnapshot(snapshot = {}, appConfig = null) {
+  const defaultServices =
+    appConfig?.services && Object.keys(appConfig.services).length
+      ? appConfig.services
+      : {};
+
+  const blob = [
+    snapshot?.title,
+    snapshot?.h1,
+    snapshot?.summary,
+    snapshot?.hero_text,
+    ...(snapshot?.findings || []),
+    ...(snapshot?.priorities || []),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const selected = {};
+  const maybeAdd = (serviceName, patterns) => {
+    if (!defaultServices[serviceName]) return;
+    if (patterns.some((pattern) => blob.includes(pattern))) {
+      selected[serviceName] = defaultServices[serviceName];
+    }
+  };
+
+  maybeAdd("SEO", ["seo", "posicionamiento", "google organic", "buscadores"]);
+  maybeAdd("Google Ads", ["google ads", "sem", "ppc", "campanas de google", "campañas de google"]);
+  maybeAdd("Redes Sociales", [
+    "facebook ads",
+    "instagram ads",
+    "meta ads",
+    "redes sociales",
+    "instagram",
+    "facebook",
+  ]);
+  maybeAdd("Diseño Web", ["diseno web", "diseño web", "web corporativa", "landing page", "pagina web", "página web"]);
+  maybeAdd("Consultoría Digital", ["consultoria", "consultoría", "estrategia digital", "consultor"]);
+
+  return Object.keys(selected).length ? selected : defaultServices;
+}
+
 function getWhatsAppTextFromMessage(message) {
   if (!message) return null;
 
@@ -2356,6 +2410,47 @@ app.post("/api/crm/config", async (req, res) => {
   try {
     const config = await saveAppConfig(req.body || {});
     res.json({ ok: true, config });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/config/bootstrap-site", async (req, res) => {
+  try {
+    const websiteUrl = String(req.body?.website_url || "").trim();
+    if (!websiteUrl) {
+      return res.status(400).json({ ok: false, error: "website_url es obligatorio" });
+    }
+
+    const currentConfig = await getAppConfig();
+    const snapshot = await runLightSiteAnalysis(websiteUrl);
+
+    if (!snapshot) {
+      return res.status(400).json({
+        ok: false,
+        error: "No se pudo analizar la web indicada",
+      });
+    }
+
+    const inferredBrandName =
+      inferBrandNameFromSnapshot(snapshot) || currentConfig?.brand?.name || "";
+    const inferredServices = inferServicesFromSnapshot(snapshot, currentConfig);
+
+    const suggestedConfig = {
+      ...currentConfig,
+      brand: {
+        ...currentConfig?.brand,
+        name: inferredBrandName || currentConfig?.brand?.name || "Marca",
+        website_url: snapshot?.final_url || websiteUrl,
+      },
+      services: inferredServices,
+    };
+
+    res.json({
+      ok: true,
+      snapshot,
+      suggested_config: suggestedConfig,
+    });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
