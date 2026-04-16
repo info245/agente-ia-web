@@ -162,6 +162,7 @@ textarea {
 }
 
 #refreshBtn,
+#configSaveBtn,
 #saveBtn,
 #quotePreviewBtn,
 #quotePdfBtn,
@@ -190,6 +191,7 @@ textarea {
 }
 
 #refreshBtn:disabled,
+#configSaveBtn:disabled,
 #saveBtn:disabled,
 #quotePreviewBtn:disabled,
 #quotePdfBtn:disabled,
@@ -215,6 +217,16 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.crm-secondary-btn {
+  border: 1px solid rgba(191, 208, 234, 0.88);
+  background: rgba(255,255,255,0.9);
+  color: var(--text);
+  padding: 11px 16px;
+  border-radius: 999px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .action-icon {
@@ -423,6 +435,14 @@ textarea {
   padding-bottom: 18px;
   margin-bottom: 8px;
   border-bottom: 1px solid rgba(191, 208, 234, 0.68);
+}
+
+.crm-config-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-left: auto;
 }
 
 .crm-config-card .crm-card-header h3 {
@@ -1961,6 +1981,16 @@ textarea {
     margin-left: 0;
   }
 
+  .crm-topbar {
+    padding: 14px 16px;
+    border-radius: 22px;
+  }
+
+  .crm-eyebrow {
+    margin-bottom: 4px;
+    font-size: 0.72rem;
+  }
+
   .crm-card {
     padding: 14px;
     border-radius: 20px;
@@ -1969,15 +1999,17 @@ textarea {
   .config-tabs {
     width: 100%;
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     padding: 6px;
     gap: 6px;
+    border-radius: 22px;
   }
 
   .config-tab {
     text-align: center;
     width: 100%;
     padding: 12px 14px;
+    font-size: 0.9rem;
   }
 
   .crm-config-card {
@@ -2086,6 +2118,17 @@ textarea {
     font-size: 1.18rem;
   }
 
+  .crm-config-header-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .crm-config-header-actions > button {
+    width: 100%;
+    justify-content: center;
+  }
+
   .config-panel {
     padding: 12px;
     border-radius: 18px;
@@ -2106,6 +2149,10 @@ textarea {
   .crm-config-card .quote-grid label textarea {
     padding: 11px 12px;
     border-radius: 14px;
+  }
+
+  .config-tabs {
+    grid-template-columns: 1fr;
   }
 
   .config-tab {

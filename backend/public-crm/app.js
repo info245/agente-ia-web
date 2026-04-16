@@ -32,6 +32,7 @@ const el = {
   crmSidebarLogo: document.getElementById("crmSidebarLogo"),
   crmSidebarTitle: document.getElementById("crmSidebarTitle"),
   configForm: document.getElementById("configForm"),
+  configBackBtn: document.getElementById("configBackBtn"),
   configSaveBtn: document.getElementById("configSaveBtn"),
   configSaveStatus: document.getElementById("configSaveStatus"),
   configTabGeneral: document.getElementById("configTabGeneral"),
@@ -233,10 +234,10 @@ function setMainView(viewName) {
     el.crmMobileBottomNav.classList.toggle("is-hidden", isConfig);
   }
   if (el.crmMobileControls) {
-    el.crmMobileControls.classList.toggle("is-hidden", isMobile && !isConfig);
+    el.crmMobileControls.classList.toggle("is-hidden", isMobile);
   }
   if (el.crmSidebar) {
-    el.crmSidebar.classList.toggle("is-mobile-sales-hidden", isMobile && !isConfig);
+    el.crmSidebar.classList.toggle("is-mobile-sales-hidden", isMobile);
   }
   if (el.crmSidebarFilters) {
     el.crmSidebarFilters.classList.toggle("is-hidden", isConfig);
@@ -251,13 +252,12 @@ function setMainView(viewName) {
 
 function syncMobileAdaptiveUi() {
   const isMobile = window.matchMedia("(max-width: 980px)").matches;
-  const isConfig = el.crmViewConfig?.classList.contains("is-active");
 
   if (el.crmMobileControls) {
-    el.crmMobileControls.classList.toggle("is-hidden", isMobile && !isConfig);
+    el.crmMobileControls.classList.toggle("is-hidden", isMobile);
   }
   if (el.crmSidebar) {
-    el.crmSidebar.classList.toggle("is-mobile-sales-hidden", isMobile && !isConfig);
+    el.crmSidebar.classList.toggle("is-mobile-sales-hidden", isMobile);
   }
 
   if (el.crmMobileControls) {
@@ -1493,6 +1493,7 @@ el.configLogoClearBtn.addEventListener("click", () => {
 });
 el.crmViewSalesBtn.addEventListener("click", () => setMainView("sales"));
 el.crmViewConfigBtn.addEventListener("click", () => setMainView("config"));
+el.configBackBtn?.addEventListener("click", () => setMainView("sales"));
 el.crmSalesLinks.forEach((link) =>
   link.addEventListener("click", () => {
     if (window.matchMedia("(max-width: 980px)").matches && el.crmMobileControls) {
