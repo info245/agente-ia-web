@@ -874,7 +874,8 @@ textarea {
 .admin-account-edit-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: stretch;
 }
 
 .admin-create-grid label,
@@ -885,12 +886,14 @@ textarea {
   border-radius: 18px;
   background: rgba(255,255,255,0.88);
   border: 1px solid rgba(191, 208, 234, 0.82);
+  min-width: 0;
 }
 
 .admin-create-grid input,
 .admin-create-grid select,
 .admin-account-edit-grid input,
 .admin-account-edit-grid select {
+  width: 100%;
   min-height: 46px;
   padding: 12px 14px;
   border-radius: 14px;
@@ -902,6 +905,8 @@ textarea {
   display: flex !important;
   align-items: center;
   gap: 10px;
+  justify-content: flex-start;
+  min-height: 92px;
 }
 
 .admin-checkbox input {
@@ -916,6 +921,21 @@ textarea {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+#adminCreateAccountBtn {
+  border: 0;
+  background: linear-gradient(135deg, var(--accent), #8d58ff);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 999px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(109, 65, 243, 0.18);
+}
+
+#adminCreateAccountBtn.is-busy {
+  opacity: 0.72;
 }
 
 .admin-account-card {
