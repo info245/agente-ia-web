@@ -112,9 +112,27 @@ const INTEGRATIONS_SECRET = process.env.INTEGRATIONS_SECRET || "";
 const QUOTE_RESPONSE_SECRET =
   process.env.QUOTE_RESPONSE_SECRET || TASK_SECRET || INTEGRATIONS_SECRET || "";
 const WHATSAPP_FOLLOWUP_HOURS = Number(process.env.WHATSAPP_FOLLOWUP_HOURS || 10);
+const ENABLE_INTERNAL_SCHEDULER =
+  String(process.env.ENABLE_INTERNAL_SCHEDULER || "").toLowerCase() === "true";
+const SCHEDULER_AUTOMATION_INTERVAL_MINUTES = Math.max(
+  5,
+  Number(process.env.SCHEDULER_AUTOMATION_INTERVAL_MINUTES || 30)
+);
+const SCHEDULER_WHATSAPP_INTERVAL_MINUTES = Math.max(
+  5,
+  Number(process.env.SCHEDULER_WHATSAPP_INTERVAL_MINUTES || 30)
+);
+const SCHEDULER_STARTUP_DELAY_MS = Math.max(
+  1_000,
+  Number(process.env.SCHEDULER_STARTUP_DELAY_MS || 15_000)
+);
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
 const processedWhatsAppMessages = new Map();
+const schedulerState = {
+  automationRunning: false,
+  whatsappRunning: false,
+};
 const PROCESSED_MESSAGE_TTL_MS = 1000 * 60 * 60;
 
 function cleanupProcessedMessages() {
@@ -3979,38 +3997,178 @@ async function runAutomationFlowsForAccount({
   return processed;
 }
 
+async function runAutomationFlowsTask({
+  accountInput = null,
+  baseUrl,
+  limit = 500,
+} = {}) {
+  const accounts = accountInput
+    ? [await resolveAccount(accountInput)]
+    : await listAccounts();
+
+  const processed = [];
+  for (const account of accounts) {
+    if (!account?.id) continue;
+    const appConfig = await getAppConfig({ accountId: account.id });
+    const accountProcessed = await runAutomationFlowsForAccount({
+      account,
+      appConfig,
+      baseUrl,
+      limit,
+    });
+    processed.push(...accountProcessed);
+  }
+
+  return {
+    ok: true,
+    processed_count: processed.length,
+    processed,
+    accounts_checked: accounts.map((account) => account.id),
+  };
+}
+
+async function runWhatsAppFollowupsTask() {
+  const candidates = await listWhatsAppLeadsForFollowUp(200);
+  const now = Date.now();
+  const followupMs = Math.max(1, WHATSAPP_FOLLOWUP_HOURS) * 60 * 60 * 1000;
+  const processed = [];
+
+  for (const lead of candidates) {
+    const conversationId = lead?.conversation_id;
+    if (!conversationId) continue;
+
+    const messages = await getConversationMessages(conversationId, 10);
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== "assistant") continue;
+
+    const lastMessageAt = new Date(lastMessage.created_at).getTime();
+    if (!Number.isFinite(lastMessageAt)) continue;
+    if (now - lastMessageAt < followupMs) continue;
+
+    const latestFollowup = await getLatestConversationEvent(
+      conversationId,
+      "whatsapp_followup_sent"
+    ).catch(() => null);
+
+    const latestFollowupAt = latestFollowup?.created_at
+      ? new Date(latestFollowup.created_at).getTime()
+      : 0;
+
+    if (latestFollowupAt && latestFollowupAt >= lastMessageAt) continue;
+
+    const phone = normalizeLeadPhoneForWhatsApp(lead);
+    if (!phone) continue;
+
+    const reminderText = buildWhatsAppReminderHook(lead);
+    await sendWhatsAppText(phone, reminderText);
+
+    await trackConversationEvent({
+      conversation_id: conversationId,
+      event_type: "whatsapp_followup_sent",
+      channel: "whatsapp",
+      external_user_id: lead?.conversations?.external_user_id || phone,
+      account_id: lead?.account_id || null,
+      payload: {
+        hours_since_last_assistant_message: Math.round((now - lastMessageAt) / 3600000),
+        phone,
+        text: reminderText.slice(0, 500),
+      },
+    });
+
+    await saveMessage({
+      conversation_id: conversationId,
+      role: "assistant",
+      content: reminderText,
+      account_id: lead?.account_id || null,
+    });
+
+    processed.push({
+      lead_id: lead.id,
+      conversation_id: conversationId,
+      phone,
+    });
+  }
+
+  return {
+    ok: true,
+    hours_threshold: WHATSAPP_FOLLOWUP_HOURS,
+    processed_count: processed.length,
+    processed,
+  };
+}
+
+async function runSchedulerJob(jobName, fn) {
+  const runningKey = jobName === "automation" ? "automationRunning" : "whatsappRunning";
+  if (schedulerState[runningKey]) {
+    console.log(`[scheduler] skip ${jobName}: previous run still active`);
+    return;
+  }
+
+  schedulerState[runningKey] = true;
+  const startedAt = Date.now();
+
+  try {
+    const result = await fn();
+    console.log(`[scheduler] ${jobName} ok`, {
+      processed_count: result?.processed_count || 0,
+      elapsed_ms: Date.now() - startedAt,
+    });
+  } catch (error) {
+    console.log(`[scheduler] ${jobName} error`, error);
+  } finally {
+    schedulerState[runningKey] = false;
+  }
+}
+
+function startInternalScheduler() {
+  if (!ENABLE_INTERNAL_SCHEDULER) {
+    console.log("[scheduler] internal scheduler disabled");
+    return;
+  }
+
+  console.log("[scheduler] internal scheduler enabled", {
+    automation_interval_minutes: SCHEDULER_AUTOMATION_INTERVAL_MINUTES,
+    whatsapp_interval_minutes: SCHEDULER_WHATSAPP_INTERVAL_MINUTES,
+    startup_delay_ms: SCHEDULER_STARTUP_DELAY_MS,
+  });
+
+  setTimeout(() => {
+    runSchedulerJob("automation", () =>
+      runAutomationFlowsTask({
+        baseUrl: process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || `http://localhost:${PORT}`,
+        limit: 500,
+      })
+    );
+    runSchedulerJob("whatsapp", () => runWhatsAppFollowupsTask());
+  }, SCHEDULER_STARTUP_DELAY_MS);
+
+  setInterval(() => {
+    runSchedulerJob("automation", () =>
+      runAutomationFlowsTask({
+        baseUrl: process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL || `http://localhost:${PORT}`,
+        limit: 500,
+      })
+    );
+  }, SCHEDULER_AUTOMATION_INTERVAL_MINUTES * 60 * 1000);
+
+  setInterval(() => {
+    runSchedulerJob("whatsapp", () => runWhatsAppFollowupsTask());
+  }, SCHEDULER_WHATSAPP_INTERVAL_MINUTES * 60 * 1000);
+}
+
 app.post("/tasks/automation-flows", async (req, res) => {
   try {
     if (!isAuthorizedTaskRequest(req)) {
       return res.status(401).json({ ok: false, error: "Unauthorized task request" });
     }
 
-    const scopedAccount = req.query?.account_id || req.body?.account_id || null;
-    const baseUrl = buildAutomationBaseUrl(req);
-    const limit = Number(req.body?.limit || req.query?.limit || 500);
-    const accounts = scopedAccount
-      ? [await resolveAccount(scopedAccount)]
-      : await listAccounts();
-
-    const processed = [];
-    for (const account of accounts) {
-      if (!account?.id) continue;
-      const appConfig = await getAppConfig({ accountId: account.id });
-      const accountProcessed = await runAutomationFlowsForAccount({
-        account,
-        appConfig,
-        baseUrl,
-        limit,
-      });
-      processed.push(...accountProcessed);
-    }
-
-    return res.json({
-      ok: true,
-      processed_count: processed.length,
-      processed,
-      accounts_checked: accounts.map((account) => account.id),
+    const result = await runAutomationFlowsTask({
+      accountInput: req.query?.account_id || req.body?.account_id || null,
+      baseUrl: buildAutomationBaseUrl(req),
+      limit: Number(req.body?.limit || req.query?.limit || 500),
     });
+
+    return res.json(result);
   } catch (error) {
     console.log("automation flows task error", error);
     return res.status(500).json({ ok: false, error: error.message });
@@ -4023,73 +4181,8 @@ app.post("/tasks/whatsapp-followups", async (req, res) => {
       return res.status(401).json({ ok: false, error: "Unauthorized task request" });
     }
 
-    const candidates = await listWhatsAppLeadsForFollowUp(200);
-    const now = Date.now();
-    const followupMs = Math.max(1, WHATSAPP_FOLLOWUP_HOURS) * 60 * 60 * 1000;
-    const processed = [];
-
-    for (const lead of candidates) {
-      const conversationId = lead?.conversation_id;
-      if (!conversationId) continue;
-
-      const messages = await getConversationMessages(conversationId, 10);
-      const lastMessage = messages[messages.length - 1];
-      if (!lastMessage || lastMessage.role !== "assistant") continue;
-
-      const lastMessageAt = new Date(lastMessage.created_at).getTime();
-      if (!Number.isFinite(lastMessageAt)) continue;
-      if (now - lastMessageAt < followupMs) continue;
-
-      const latestFollowup = await getLatestConversationEvent(
-        conversationId,
-        "whatsapp_followup_sent"
-      ).catch(() => null);
-
-      const latestFollowupAt = latestFollowup?.created_at
-        ? new Date(latestFollowup.created_at).getTime()
-        : 0;
-
-      if (latestFollowupAt && latestFollowupAt >= lastMessageAt) continue;
-
-      const phone = normalizeLeadPhoneForWhatsApp(lead);
-      if (!phone) continue;
-
-      const reminderText = buildWhatsAppReminderHook(lead);
-      await sendWhatsAppText(phone, reminderText);
-
-      await trackConversationEvent({
-        conversation_id: conversationId,
-        event_type: "whatsapp_followup_sent",
-        channel: "whatsapp",
-        external_user_id: lead?.conversations?.external_user_id || phone,
-        account_id: lead?.account_id || null,
-        payload: {
-          hours_since_last_assistant_message: Math.round((now - lastMessageAt) / 3600000),
-          phone,
-          text: reminderText.slice(0, 500),
-        },
-      });
-
-      await saveMessage({
-        conversation_id: conversationId,
-        role: "assistant",
-        content: reminderText,
-        account_id: lead?.account_id || null,
-      });
-
-      processed.push({
-        lead_id: lead.id,
-        conversation_id: conversationId,
-        phone,
-      });
-    }
-
-    return res.json({
-      ok: true,
-      hours_threshold: WHATSAPP_FOLLOWUP_HOURS,
-      processed_count: processed.length,
-      processed,
-    });
+    const result = await runWhatsAppFollowupsTask();
+    return res.json(result);
   } catch (error) {
     console.log("whatsapp followup task error", error);
     return res.status(500).json({ ok: false, error: error.message });
@@ -4213,4 +4306,5 @@ app.post("/webhooks/whatsapp", async (req, res) => {
 
 app.listen(PORT, () => {
   console.log("Server running on port", PORT);
+  startInternalScheduler();
 });
