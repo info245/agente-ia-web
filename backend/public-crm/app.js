@@ -18,6 +18,9 @@ const el = {
   crmViewConfigBtn: document.getElementById("crmViewConfigBtn"),
   crmViewSales: document.getElementById("crmViewSales"),
   crmViewConfig: document.getElementById("crmViewConfig"),
+  crmMobileControls: document.getElementById("crmMobileControls"),
+  crmAnalyticsAccordion: document.getElementById("crmAnalyticsAccordion"),
+  crmMobileBottomNav: document.getElementById("crmMobileBottomNav"),
   crmSidebarFilters: document.getElementById("crmSidebarFilters"),
   crmSidebarFlow: document.getElementById("crmSidebarFlow"),
   crmSalesLinks: [...document.querySelectorAll(".crm-sales-link")],
@@ -221,6 +224,9 @@ function setMainView(viewName) {
   el.crmViewConfigBtn.classList.toggle("is-active", isConfig);
   el.crmViewSales.classList.toggle("is-active", !isConfig);
   el.crmViewConfig.classList.toggle("is-active", isConfig);
+  if (el.crmMobileBottomNav) {
+    el.crmMobileBottomNav.classList.toggle("is-hidden", isConfig);
+  }
   if (el.crmSidebarFilters) {
     el.crmSidebarFilters.classList.toggle("is-hidden", isConfig);
   }
@@ -229,6 +235,34 @@ function setMainView(viewName) {
   }
   for (const link of el.crmSalesLinks) {
     link.classList.toggle("is-hidden", isConfig);
+  }
+}
+
+function syncMobileAdaptiveUi() {
+  const isMobile = window.matchMedia("(max-width: 980px)").matches;
+
+  if (el.crmMobileControls) {
+    if (isMobile) {
+      if (!el.crmMobileControls.dataset.mobileReady) {
+        el.crmMobileControls.open = false;
+        el.crmMobileControls.dataset.mobileReady = "true";
+      }
+    } else {
+      el.crmMobileControls.open = true;
+      delete el.crmMobileControls.dataset.mobileReady;
+    }
+  }
+
+  if (el.crmAnalyticsAccordion) {
+    if (isMobile) {
+      if (!el.crmAnalyticsAccordion.dataset.mobileReady) {
+        el.crmAnalyticsAccordion.open = false;
+        el.crmAnalyticsAccordion.dataset.mobileReady = "true";
+      }
+    } else {
+      el.crmAnalyticsAccordion.open = true;
+      delete el.crmAnalyticsAccordion.dataset.mobileReady;
+    }
   }
 }
 
@@ -1420,6 +1454,13 @@ el.configLogoClearBtn.addEventListener("click", () => {
 });
 el.crmViewSalesBtn.addEventListener("click", () => setMainView("sales"));
 el.crmViewConfigBtn.addEventListener("click", () => setMainView("config"));
+el.crmSalesLinks.forEach((link) =>
+  link.addEventListener("click", () => {
+    if (window.matchMedia("(max-width: 980px)").matches && el.crmMobileControls) {
+      el.crmMobileControls.open = false;
+    }
+  })
+);
 el.configAnalyzeWebsiteBtn.addEventListener("click", analyzeWebsiteConfig);
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
 el.configTabIntegrations.addEventListener("click", () => setConfigTab("integrations"));
@@ -1484,9 +1525,11 @@ el.quoteBillingType.addEventListener("change", () => {
     el.quoteBillingLabel.value = nextLabel;
   }
 });
+window.addEventListener("resize", syncMobileAdaptiveUi);
 
 Promise.all([loadLeads(), loadConfig()]).catch((error) => {
   el.leadTableBody.innerHTML = `<tr><td colspan="8" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
 });
 
 setMainView("sales");
+syncMobileAdaptiveUi();

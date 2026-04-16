@@ -280,6 +280,20 @@ textarea {
   gap: 10px;
 }
 
+.crm-mobile-controls {
+  display: grid;
+  gap: 16px;
+}
+
+.crm-mobile-controls-summary {
+  display: none;
+}
+
+.crm-mobile-controls-body {
+  display: grid;
+  gap: 16px;
+}
+
 .crm-nav-link {
   display: flex;
   align-items: center;
@@ -413,6 +427,20 @@ textarea {
 .crm-config-card .crm-card-header h3 {
   font-size: 1.65rem;
   letter-spacing: -0.03em;
+}
+
+.crm-analytics-accordion {
+  display: grid;
+  gap: 18px;
+}
+
+.crm-analytics-summary {
+  display: none;
+}
+
+.crm-analytics-body {
+  display: grid;
+  gap: 18px;
 }
 
 .config-form {
@@ -740,6 +768,14 @@ textarea {
   margin: 6px 0 0;
   color: var(--muted);
   font-size: 0.96rem;
+}
+
+.crm-mobile-bottom-nav {
+  display: none;
+}
+
+.crm-mobile-bottom-nav.is-hidden {
+  display: none !important;
 }
 
 .crm-analytics {
@@ -1477,6 +1513,49 @@ textarea {
     display: none;
   }
 
+  .crm-mobile-controls {
+    gap: 0;
+  }
+
+  .crm-mobile-controls[open] {
+    padding-bottom: 2px;
+  }
+
+  .crm-mobile-controls-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 42px;
+    padding: 10px 14px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.16);
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .crm-mobile-controls-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .crm-mobile-controls-summary::after {
+    content: "▾";
+    font-size: 0.9rem;
+    opacity: 0.9;
+  }
+
+  .crm-mobile-controls:not([open]) .crm-mobile-controls-body {
+    display: none;
+  }
+
+  .crm-mobile-controls-body {
+    gap: 12px;
+    margin-top: 10px;
+  }
+
   .crm-sidebar-block {
     gap: 8px;
   }
@@ -1541,6 +1620,57 @@ textarea {
     order: 5;
   }
 
+  .crm-analytics {
+    padding: 16px;
+  }
+
+  .crm-analytics-accordion {
+    gap: 0;
+  }
+
+  .crm-analytics-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(109,65,243,0.08), rgba(78,143,255,0.08));
+    border: 1px solid rgba(191, 208, 234, 0.86);
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .crm-analytics-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .crm-analytics-summary strong {
+    display: block;
+    font-size: 1rem;
+    margin-bottom: 4px;
+  }
+
+  .crm-analytics-summary span {
+    color: var(--muted);
+    font-size: 0.86rem;
+  }
+
+  .crm-analytics-summary em {
+    font-style: normal;
+    color: var(--accent-dark);
+    font-weight: 800;
+    font-size: 0.82rem;
+  }
+
+  .crm-analytics-accordion:not([open]) .crm-analytics-body {
+    display: none;
+  }
+
+  .crm-analytics-body {
+    margin-top: 14px;
+  }
+
   .analytics-grid {
     display: grid;
     grid-auto-flow: column;
@@ -1573,6 +1703,41 @@ textarea {
 
   .analytics-service-card {
     padding: 16px;
+  }
+
+  .crm-mobile-bottom-nav {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 45;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px;
+    border-radius: 22px;
+    background: rgba(17, 35, 71, 0.92);
+    box-shadow: 0 18px 38px rgba(21, 26, 61, 0.28);
+    backdrop-filter: blur(16px);
+  }
+
+  .crm-mobile-bottom-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 8px 10px;
+    border-radius: 14px;
+    color: #fff;
+    text-decoration: none;
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-align: center;
+    background: rgba(255,255,255,0.08);
+  }
+
+  .crm-page {
+    padding-bottom: 94px;
   }
 
   .lead-table-wrap,
@@ -1755,6 +1920,10 @@ textarea {
     border-radius: 20px;
   }
 
+  .crm-mobile-controls-summary {
+    font-size: 0.9rem;
+  }
+
   .crm-filters-sidebar {
     grid-template-columns: 1fr;
   }
@@ -1765,6 +1934,15 @@ textarea {
 
   .analytics-grid {
     grid-auto-columns: minmax(170px, 88%);
+  }
+
+  .crm-mobile-bottom-nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .crm-mobile-bottom-link {
+    min-height: 40px;
+    font-size: 0.74rem;
   }
 
   .config-logo-picker {

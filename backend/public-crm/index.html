@@ -30,132 +30,149 @@
           </div>
         </div>
 
-        <nav class="crm-sidebar-nav">
-          <button id="crmViewSalesBtn" type="button" class="crm-nav-link is-active">CRM comercial</button>
-          <button id="crmViewConfigBtn" type="button" class="crm-nav-link">Configuracion del agente</button>
-          <a href="#crm-analytics" class="crm-nav-link crm-sales-link">Analitica comercial</a>
-          <a href="#crm-summary" class="crm-nav-link crm-sales-link">Lead activo</a>
-          <a href="#crm-leads" class="crm-nav-link crm-sales-link">Leads</a>
-          <a href="#crm-workspace" class="crm-nav-link crm-sales-link">Gestion y conversacion</a>
-          <a href="#crm-quote" class="crm-nav-link crm-sales-link">Presupuesto</a>
-        </nav>
+        <details id="crmMobileControls" class="crm-mobile-controls" open>
+          <summary id="crmMobileControlsSummary" class="crm-mobile-controls-summary">Menu rapido y filtros</summary>
+          <div class="crm-mobile-controls-body">
+            <nav class="crm-sidebar-nav">
+              <button id="crmViewSalesBtn" type="button" class="crm-nav-link is-active">CRM comercial</button>
+              <button id="crmViewConfigBtn" type="button" class="crm-nav-link">Configuracion del agente</button>
+              <a href="#crm-analytics" class="crm-nav-link crm-sales-link">Analitica comercial</a>
+              <a href="#crm-summary" class="crm-nav-link crm-sales-link">Lead activo</a>
+              <a href="#crm-leads" class="crm-nav-link crm-sales-link">Leads</a>
+              <a href="#crm-workspace" class="crm-nav-link crm-sales-link">Gestion y conversacion</a>
+              <a href="#crm-quote" class="crm-nav-link crm-sales-link">Presupuesto</a>
+            </nav>
 
-        <section id="crmSidebarFilters" class="crm-sidebar-block">
-          <div class="crm-sidebar-block-title">Filtros</div>
-          <div class="crm-filters crm-filters-sidebar">
-            <label class="filter-box">
-              <span>Fecha</span>
-              <select id="dateFilter">
-                <option value="all">Todas</option>
-                <option value="today">Hoy</option>
-                <option value="7d">Ultimos 7 dias</option>
-                <option value="30d">Ultimos 30 dias</option>
-              </select>
-            </label>
+            <section id="crmSidebarFilters" class="crm-sidebar-block">
+              <div class="crm-sidebar-block-title">Filtros</div>
+              <div class="crm-filters crm-filters-sidebar">
+                <label class="filter-box">
+                  <span>Fecha</span>
+                  <select id="dateFilter">
+                    <option value="all">Todas</option>
+                    <option value="today">Hoy</option>
+                    <option value="7d">Ultimos 7 dias</option>
+                    <option value="30d">Ultimos 30 dias</option>
+                  </select>
+                </label>
 
-            <label class="filter-box">
-              <span>Fuente</span>
-              <select id="sourceFilter">
-                <option value="all">Todas</option>
-                <option value="web">Web</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="lead_form">Lead Form</option>
-              </select>
-            </label>
+                <label class="filter-box">
+                  <span>Fuente</span>
+                  <select id="sourceFilter">
+                    <option value="all">Todas</option>
+                    <option value="web">Web</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="lead_form">Lead Form</option>
+                  </select>
+                </label>
 
-            <label class="filter-box">
-              <span>Servicio</span>
-              <select id="serviceFilter">
-                <option value="all">Todos</option>
-              </select>
-            </label>
+                <label class="filter-box">
+                  <span>Servicio</span>
+                  <select id="serviceFilter">
+                    <option value="all">Todos</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section id="crmSidebarFlow" class="crm-sidebar-block">
+              <div class="crm-sidebar-block-title">Flujo</div>
+              <div class="crm-sidebar-stack">
+                <div class="crm-mini-card">
+                  <span>Canales</span>
+                  <strong>Web, WhatsApp y Lead Ads</strong>
+                </div>
+                <div class="crm-mini-card">
+                  <span>Vista</span>
+                  <strong>Seguimiento comercial</strong>
+                </div>
+              </div>
+            </section>
           </div>
-        </section>
-
-        <section id="crmSidebarFlow" class="crm-sidebar-block">
-          <div class="crm-sidebar-block-title">Flujo</div>
-          <div class="crm-sidebar-stack">
-            <div class="crm-mini-card">
-              <span>Canales</span>
-              <strong>Web, WhatsApp y Lead Ads</strong>
-            </div>
-            <div class="crm-mini-card">
-              <span>Vista</span>
-              <strong>Seguimiento comercial</strong>
-            </div>
-          </div>
-        </section>
+        </details>
 
       </aside>
 
       <div class="crm-main">
         <div id="crmViewSales" class="crm-view is-active">
           <section id="crm-analytics" class="crm-card crm-analytics">
-            <div class="crm-card-header">
-              <div>
-                <h3>Analitica comercial</h3>
-                <p class="crm-section-copy">Visibilidad rapida del embudo: leads, WhatsApp, propuestas, aceptaciones y respuesta.</p>
+            <details id="crmAnalyticsAccordion" class="crm-analytics-accordion" open>
+              <summary class="crm-analytics-summary">
+                <div>
+                  <strong>Analitica comercial</strong>
+                  <span>Leads, WhatsApp, propuestas y aceptaciones</span>
+                </div>
+                <em>Desplegar</em>
+              </summary>
+
+              <div class="crm-analytics-body">
+                <div class="crm-card-header">
+                  <div>
+                    <h3>Analitica comercial</h3>
+                    <p class="crm-section-copy">Visibilidad rapida del embudo: leads, WhatsApp, propuestas, aceptaciones y respuesta.</p>
+                  </div>
+                  <span id="analyticsRangeLabel" class="table-count">Todas</span>
+                </div>
+
+                <div class="analytics-grid">
+                  <article class="analytics-card">
+                    <span>Leads generados</span>
+                    <strong id="analyticsLeadsGenerated">-</strong>
+                  </article>
+                  <article class="analytics-card">
+                    <span>Pasan a WhatsApp</span>
+                    <strong id="analyticsPassedWhatsapp">-</strong>
+                    <small id="analyticsWhatsappHint">-</small>
+                  </article>
+                  <article class="analytics-card">
+                    <span>Propuestas enviadas</span>
+                    <strong id="analyticsQuotesSent">-</strong>
+                  </article>
+                  <article class="analytics-card">
+                    <span>Propuestas aceptadas</span>
+                    <strong id="analyticsQuotesAccepted">-</strong>
+                  </article>
+                  <article class="analytics-card">
+                    <span>Tiempo medio de respuesta</span>
+                    <strong id="analyticsResponseTime">-</strong>
+                  </article>
+                  <article class="analytics-card">
+                    <span>Tasa de aceptacion</span>
+                    <strong id="analyticsAcceptanceRate">-</strong>
+                  </article>
+                </div>
+
+                <div class="analytics-timeline-card">
+                  <div class="analytics-breakdown-header">
+                    <h4>Evolucion por dia</h4>
+                  </div>
+                  <div id="analyticsTimeline" class="analytics-timeline"></div>
+                </div>
+
+                <div class="analytics-breakdowns">
+                  <section class="analytics-breakdown-card analytics-breakdown-card-wide">
+                    <div class="analytics-breakdown-header">
+                      <h4>Por servicio</h4>
+                    </div>
+                    <div id="analyticsServiceBreakdown" class="analytics-service-list"></div>
+                  </section>
+
+                  <section class="analytics-breakdown-card">
+                    <div class="analytics-breakdown-header">
+                      <h4>Por canal</h4>
+                    </div>
+                    <div id="analyticsChannelBreakdown" class="analytics-breakdown-list"></div>
+                  </section>
+
+                  <section class="analytics-breakdown-card">
+                    <div class="analytics-breakdown-header">
+                      <h4>Por fuente</h4>
+                    </div>
+                    <div id="analyticsSourceBreakdown" class="analytics-breakdown-list"></div>
+                  </section>
+                </div>
               </div>
-              <span id="analyticsRangeLabel" class="table-count">Todas</span>
-            </div>
-
-            <div class="analytics-grid">
-              <article class="analytics-card">
-                <span>Leads generados</span>
-                <strong id="analyticsLeadsGenerated">-</strong>
-              </article>
-              <article class="analytics-card">
-                <span>Pasan a WhatsApp</span>
-                <strong id="analyticsPassedWhatsapp">-</strong>
-                <small id="analyticsWhatsappHint">-</small>
-              </article>
-              <article class="analytics-card">
-                <span>Propuestas enviadas</span>
-                <strong id="analyticsQuotesSent">-</strong>
-              </article>
-              <article class="analytics-card">
-                <span>Propuestas aceptadas</span>
-                <strong id="analyticsQuotesAccepted">-</strong>
-              </article>
-              <article class="analytics-card">
-                <span>Tiempo medio de respuesta</span>
-                <strong id="analyticsResponseTime">-</strong>
-              </article>
-              <article class="analytics-card">
-                <span>Tasa de aceptacion</span>
-                <strong id="analyticsAcceptanceRate">-</strong>
-              </article>
-            </div>
-
-            <div class="analytics-timeline-card">
-              <div class="analytics-breakdown-header">
-                <h4>Evolucion por dia</h4>
-              </div>
-              <div id="analyticsTimeline" class="analytics-timeline"></div>
-            </div>
-
-            <div class="analytics-breakdowns">
-              <section class="analytics-breakdown-card analytics-breakdown-card-wide">
-                <div class="analytics-breakdown-header">
-                  <h4>Por servicio</h4>
-                </div>
-                <div id="analyticsServiceBreakdown" class="analytics-service-list"></div>
-              </section>
-
-              <section class="analytics-breakdown-card">
-                <div class="analytics-breakdown-header">
-                  <h4>Por canal</h4>
-                </div>
-                <div id="analyticsChannelBreakdown" class="analytics-breakdown-list"></div>
-              </section>
-
-              <section class="analytics-breakdown-card">
-                <div class="analytics-breakdown-header">
-                  <h4>Por fuente</h4>
-                </div>
-                <div id="analyticsSourceBreakdown" class="analytics-breakdown-list"></div>
-              </section>
-            </div>
+            </details>
           </section>
 
           <section id="crm-summary" class="crm-card crm-summary">
@@ -699,6 +716,14 @@
         </div>
       </div>
     </div>
+
+    <nav id="crmMobileBottomNav" class="crm-mobile-bottom-nav">
+      <a href="#crm-leads" class="crm-mobile-bottom-link">Leads</a>
+      <a href="#crm-summary" class="crm-mobile-bottom-link">Activo</a>
+      <a href="#crm-workspace" class="crm-mobile-bottom-link">Gestion</a>
+      <a href="#crm-quote" class="crm-mobile-bottom-link">Presupuesto</a>
+      <a href="#crm-analytics" class="crm-mobile-bottom-link">Analitica</a>
+    </nav>
   </main>
 
   <script src="./app.js"></script>
