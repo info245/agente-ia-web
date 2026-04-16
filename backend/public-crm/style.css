@@ -1464,6 +1464,117 @@ textarea {
 }
 
 @media (max-width: 980px) {
+  .crm-sidebar {
+    position: sticky;
+    top: 10px;
+    z-index: 35;
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .crm-sidebar-brand,
+  #crmSidebarFlow {
+    display: none;
+  }
+
+  .crm-sidebar-block {
+    gap: 8px;
+  }
+
+  .crm-sidebar-block-title {
+    display: none;
+  }
+
+  .crm-sidebar-nav {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .crm-sidebar-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .crm-nav-link {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 10px 14px;
+    white-space: nowrap;
+    font-size: 0.92rem;
+    border-radius: 14px;
+  }
+
+  .crm-filters-sidebar {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .crm-sidebar .filter-box {
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 16px;
+  }
+
+  .crm-sidebar .filter-box span {
+    font-size: 0.68rem;
+  }
+
+  #crm-leads {
+    order: 1;
+  }
+
+  #crm-summary {
+    order: 2;
+  }
+
+  #crm-workspace {
+    order: 3;
+  }
+
+  #crm-quote {
+    order: 4;
+  }
+
+  #crm-analytics {
+    order: 5;
+  }
+
+  .analytics-grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(180px, 72%);
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scrollbar-width: none;
+  }
+
+  .analytics-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .analytics-card {
+    padding: 16px;
+    gap: 8px;
+    border-radius: 20px;
+  }
+
+  .analytics-card strong {
+    font-size: 1.75rem;
+  }
+
+  .analytics-timeline-card,
+  .analytics-breakdown-card,
+  .analytics-breakdown-card-wide {
+    padding: 16px;
+  }
+
+  .analytics-service-card {
+    padding: 16px;
+  }
+
   .lead-table-wrap,
   .lead-table {
     display: none;
@@ -1642,6 +1753,18 @@ textarea {
   .crm-sidebar {
     padding: 14px;
     border-radius: 20px;
+  }
+
+  .crm-filters-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .crm-sidebar {
+    top: 8px;
+  }
+
+  .analytics-grid {
+    grid-auto-columns: minmax(170px, 88%);
   }
 
   .config-logo-picker {
