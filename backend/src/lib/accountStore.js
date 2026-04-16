@@ -19,6 +19,16 @@ function clean(value) {
   return String(value).trim();
 }
 
+function slugify(value, fallback = "account") {
+  const normalized = clean(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || fallback;
+}
+
 function setCache(accounts = []) {
   accountsCache = accounts;
   accountsCacheExpiresAt = Date.now() + CACHE_TTL_MS;
@@ -55,6 +65,11 @@ function normalizeAccount(raw = {}) {
     plan: clean(raw.plan) || "trial",
     is_default: Boolean(raw.is_default),
   };
+}
+
+function resetCache() {
+  accountsCache = null;
+  accountsCacheExpiresAt = 0;
 }
 
 export function getDefaultAccount() {
@@ -108,4 +123,80 @@ export async function resolveAccount(input = null) {
     accounts[0] ||
     getDefaultAccount()
   );
+}
+
+export async function createAccount(input = {}) {
+  const available = await hasAccountsTable();
+  if (!available) {
+    throw new Error(
+      "Falta la tabla accounts en Supabase. Ejecuta sql/005_multi_account.sql antes de crear cuentas."
+    );
+  }
+
+  const name = clean(input.name);
+  if (!name) {
+    throw new Error("El nombre de la cuenta es obligatorio.");
+  }
+
+  const slug = slugify(input.slug || name, "account");
+  const id = slugify(input.id || slug, "account");
+  const payload = {
+    id,
+    slug,
+    name,
+    status: clean(input.status) || "trial",
+    plan: clean(input.plan) || "starter",
+    is_default: Boolean(input.is_default),
+  };
+
+  if (payload.is_default) {
+    await supabase.from("accounts").update({ is_default: false }).neq("id", payload.id);
+  }
+
+  const { data, error } = await supabase
+    .from("accounts")
+    .insert(payload)
+    .select("id, slug, name, status, plan, is_default, created_at")
+    .single();
+
+  if (error) throw error;
+  resetCache();
+  return normalizeAccount(data);
+}
+
+export async function updateAccount(accountId, input = {}) {
+  const available = await hasAccountsTable();
+  if (!available) {
+    throw new Error(
+      "Falta la tabla accounts en Supabase. Ejecuta sql/005_multi_account.sql antes de editar cuentas."
+    );
+  }
+
+  const resolved = await resolveAccount(accountId);
+  const safeAccountId = clean(resolved?.id || accountId);
+  if (!safeAccountId) {
+    throw new Error("Cuenta no valida.");
+  }
+
+  const patch = {};
+  if (input.name !== undefined) patch.name = clean(input.name) || resolved.name;
+  if (input.slug !== undefined) patch.slug = slugify(input.slug || resolved.slug, "account");
+  if (input.status !== undefined) patch.status = clean(input.status) || resolved.status;
+  if (input.plan !== undefined) patch.plan = clean(input.plan) || resolved.plan;
+  if (input.is_default !== undefined) patch.is_default = Boolean(input.is_default);
+
+  if (patch.is_default) {
+    await supabase.from("accounts").update({ is_default: false }).neq("id", safeAccountId);
+  }
+
+  const { data, error } = await supabase
+    .from("accounts")
+    .update(patch)
+    .eq("id", safeAccountId)
+    .select("id, slug, name, status, plan, is_default, created_at")
+    .single();
+
+  if (error) throw error;
+  resetCache();
+  return normalizeAccount(data);
 }

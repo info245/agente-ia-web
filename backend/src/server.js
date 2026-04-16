@@ -32,7 +32,12 @@ import { mergeLeadData } from "./lib/leadMerge.js";
 import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 import { getAppConfig, saveAppConfig } from "./lib/appConfigStore.js";
-import { listAccounts, resolveAccount } from "./lib/accountStore.js";
+import {
+  listAccounts,
+  resolveAccount,
+  createAccount,
+  updateAccount,
+} from "./lib/accountStore.js";
 import { uploadBrandLogo } from "./lib/storageStore.js";
 
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
@@ -2497,6 +2502,24 @@ app.get("/api/admin/accounts", async (req, res) => {
     const accounts = await listAccounts();
     const activeAccount = await resolveRequestAccount(req);
     res.json({ ok: true, accounts, active_account: activeAccount });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/admin/accounts", async (req, res) => {
+  try {
+    const account = await createAccount(req.body || {});
+    res.json({ ok: true, account });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.patch("/api/admin/accounts/:accountId", async (req, res) => {
+  try {
+    const account = await updateAccount(req.params.accountId, req.body || {});
+    res.json({ ok: true, account });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }

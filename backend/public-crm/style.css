@@ -778,6 +778,70 @@ textarea {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+.admin-create-card {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  margin-bottom: 18px;
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(245,249,255,0.96), rgba(255,255,255,0.98));
+  border: 1px solid rgba(191, 208, 234, 0.86);
+  box-shadow: 0 16px 32px rgba(83, 110, 160, 0.08);
+}
+
+.admin-create-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.admin-create-grid,
+.admin-account-edit-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.admin-create-grid label,
+.admin-account-edit-grid label {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.88);
+  border: 1px solid rgba(191, 208, 234, 0.82);
+}
+
+.admin-create-grid input,
+.admin-create-grid select,
+.admin-account-edit-grid input,
+.admin-account-edit-grid select {
+  min-height: 46px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(191, 208, 234, 0.86);
+  background: linear-gradient(180deg, rgba(252,254,255,0.98), rgba(245,249,255,0.96));
+}
+
+.admin-checkbox {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-checkbox input {
+  min-height: auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.admin-create-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .admin-account-card {
   display: grid;
   gap: 18px;

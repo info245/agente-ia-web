@@ -108,6 +108,49 @@
                 <p class="crm-section-copy">Vision de cuentas, planes, actividad y acceso rapido a cada espacio cliente.</p>
               </div>
             </div>
+            <div class="admin-create-card">
+              <div>
+                <strong>Nueva cuenta</strong>
+                <p>Crea un cliente nuevo y dejalo listo para branding, integraciones y operativa comercial.</p>
+              </div>
+              <div class="admin-create-grid">
+                <label>
+                  Nombre
+                  <input id="adminCreateName" type="text" placeholder="Nombre del cliente" />
+                </label>
+                <label>
+                  Slug
+                  <input id="adminCreateSlug" type="text" placeholder="cliente-demo" />
+                </label>
+                <label>
+                  Plan
+                  <select id="adminCreatePlan">
+                    <option value="starter">starter</option>
+                    <option value="growth">growth</option>
+                    <option value="pro">pro</option>
+                    <option value="trial">trial</option>
+                    <option value="internal">internal</option>
+                  </select>
+                </label>
+                <label>
+                  Estado
+                  <select id="adminCreateStatus">
+                    <option value="trial">trial</option>
+                    <option value="active">active</option>
+                    <option value="paused">paused</option>
+                    <option value="archived">archived</option>
+                  </select>
+                </label>
+                <label class="admin-checkbox">
+                  <input id="adminCreateDefault" type="checkbox" />
+                  <span>Marcar como cuenta por defecto</span>
+                </label>
+              </div>
+              <div class="admin-create-actions">
+                <button id="adminCreateAccountBtn" type="button">Crear cuenta</button>
+                <div id="adminAccountStatus" class="save-status" aria-live="polite"></div>
+              </div>
+            </div>
             <div id="adminOverviewGrid" class="admin-overview-grid"></div>
           </section>
         </div>

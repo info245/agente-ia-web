@@ -99,6 +99,13 @@ const el = {
   configServicesList: document.getElementById("configServicesList"),
   configAddServiceBtn: document.getElementById("configAddServiceBtn"),
   adminOverviewGrid: document.getElementById("adminOverviewGrid"),
+  adminCreateName: document.getElementById("adminCreateName"),
+  adminCreateSlug: document.getElementById("adminCreateSlug"),
+  adminCreatePlan: document.getElementById("adminCreatePlan"),
+  adminCreateStatus: document.getElementById("adminCreateStatus"),
+  adminCreateDefault: document.getElementById("adminCreateDefault"),
+  adminCreateAccountBtn: document.getElementById("adminCreateAccountBtn"),
+  adminAccountStatus: document.getElementById("adminAccountStatus"),
   dateFilter: document.getElementById("dateFilter"),
   sourceFilter: document.getElementById("sourceFilter"),
   serviceFilter: document.getElementById("serviceFilter"),
@@ -554,9 +561,48 @@ function renderAdminOverview() {
             <div><span>Enviadas</span><strong>${Number(account?.totals?.quotes_sent || 0)}</strong></div>
             <div><span>Aceptadas</span><strong>${Number(account?.totals?.quotes_accepted || 0)}</strong></div>
           </div>
+          <div class="admin-account-edit-grid">
+            <label>
+              Nombre
+              <input type="text" data-account-field="name" data-account-id="${escapeHtml(account.id)}" value="${escapeHtml(account.name || "")}" />
+            </label>
+            <label>
+              Slug
+              <input type="text" data-account-field="slug" data-account-id="${escapeHtml(account.id)}" value="${escapeHtml(account.slug || "")}" />
+            </label>
+            <label>
+              Plan
+              <select data-account-field="plan" data-account-id="${escapeHtml(account.id)}">
+                ${["starter", "growth", "pro", "trial", "internal"]
+                  .map(
+                    (option) =>
+                      `<option value="${option}" ${String(account.plan) === option ? "selected" : ""}>${option}</option>`
+                  )
+                  .join("")}
+              </select>
+            </label>
+            <label>
+              Estado
+              <select data-account-field="status" data-account-id="${escapeHtml(account.id)}">
+                ${["trial", "active", "paused", "archived"]
+                  .map(
+                    (option) =>
+                      `<option value="${option}" ${String(account.status) === option ? "selected" : ""}>${option}</option>`
+                  )
+                  .join("")}
+              </select>
+            </label>
+            <label class="admin-checkbox">
+              <input type="checkbox" data-account-field="is_default" data-account-id="${escapeHtml(account.id)}" ${
+                account.is_default ? "checked" : ""
+              } />
+              <span>Cuenta por defecto</span>
+            </label>
+          </div>
           <div class="admin-account-footer">
             <small>Ultima actividad: ${fmtShortDate(account.last_activity_at)}</small>
             <div class="admin-account-actions">
+              <button type="button" class="crm-secondary-btn" data-save-account="${escapeHtml(account.id)}">Guardar cuenta</button>
               <button type="button" class="crm-secondary-btn" data-open-account="${escapeHtml(account.id)}" data-open-view="config">Configurar</button>
               <button type="button" class="crm-primary-inline-btn" data-open-account="${escapeHtml(account.id)}" data-open-view="sales">Abrir CRM</button>
             </div>
@@ -572,6 +618,40 @@ function renderAdminOverview() {
       const view = button.getAttribute("data-open-view") || "sales";
       await handleAccountChange(accountId);
       setMainView(view);
+    });
+  });
+
+  el.adminOverviewGrid.querySelectorAll("[data-save-account]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const accountId = button.getAttribute("data-save-account");
+      const fields = [
+        ...el.adminOverviewGrid.querySelectorAll(`[data-account-id="${accountId}"]`),
+      ];
+      const payload = {};
+      for (const field of fields) {
+        const key = field.getAttribute("data-account-field");
+        if (!key) continue;
+        payload[key] =
+          field.type === "checkbox" ? field.checked : field.value;
+      }
+
+      button.disabled = true;
+      button.classList.add("is-busy");
+      setStatus(el.adminAccountStatus, "Guardando cuenta...");
+      try {
+        await fetchJson(`${window.location.origin}/api/admin/accounts/${accountId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        await Promise.all([loadAccounts(), loadAdminOverview(), loadConfig(), loadLeads()]);
+        setStatus(el.adminAccountStatus, "Cuenta actualizada.", "ok");
+      } catch (error) {
+        setStatus(el.adminAccountStatus, `No se pudo guardar: ${error.message}`, "error");
+      } finally {
+        button.disabled = false;
+        button.classList.remove("is-busy");
+      }
     });
   });
 }
@@ -604,6 +684,46 @@ async function loadAdminOverview() {
   const data = await fetchJson(`${window.location.origin}/api/admin/overview`);
   state.adminOverview = data.accounts || [];
   renderAdminOverview();
+}
+
+async function createAdminAccount() {
+  const payload = {
+    name: el.adminCreateName.value,
+    slug: el.adminCreateSlug.value,
+    plan: el.adminCreatePlan.value,
+    status: el.adminCreateStatus.value,
+    is_default: el.adminCreateDefault.checked,
+  };
+
+  el.adminCreateAccountBtn.disabled = true;
+  el.adminCreateAccountBtn.classList.add("is-busy");
+  setStatus(el.adminAccountStatus, "Creando cuenta...");
+
+  try {
+    const data = await fetchJson(`${window.location.origin}/api/admin/accounts`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    el.adminCreateName.value = "";
+    el.adminCreateSlug.value = "";
+    el.adminCreatePlan.value = "starter";
+    el.adminCreateStatus.value = "trial";
+    el.adminCreateDefault.checked = false;
+
+    await Promise.all([loadAccounts(), loadAdminOverview()]);
+    if (data?.account?.id) {
+      await handleAccountChange(data.account.id);
+      setMainView("config");
+    }
+    setStatus(el.adminAccountStatus, "Cuenta creada correctamente.", "ok");
+  } catch (error) {
+    setStatus(el.adminAccountStatus, `No se pudo crear: ${error.message}`, "error");
+  } finally {
+    el.adminCreateAccountBtn.disabled = false;
+    el.adminCreateAccountBtn.classList.remove("is-busy");
+  }
 }
 
 async function handleAccountChange(nextAccountId) {
@@ -1828,6 +1948,7 @@ el.configLogoClearBtn.addEventListener("click", () => {
 el.crmViewSalesBtn.addEventListener("click", () => setMainView("sales"));
 el.crmViewAdminBtn?.addEventListener("click", () => setMainView("admin"));
 el.crmViewConfigBtn.addEventListener("click", () => setMainView("config"));
+el.adminCreateAccountBtn?.addEventListener("click", createAdminAccount);
 el.configBackBtn?.addEventListener("click", () => setMainView("sales"));
 el.crmSalesLinks.forEach((link) =>
   link.addEventListener("click", () => {
