@@ -114,6 +114,16 @@ textarea {
   box-shadow: 0 12px 28px rgba(109, 65, 243, 0.18);
 }
 
+.crm-auth-switch {
+  border: 1px solid rgba(191, 208, 234, 0.88);
+  min-height: 48px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.9);
+  color: var(--text);
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .crm-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);

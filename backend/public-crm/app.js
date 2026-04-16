@@ -33,6 +33,7 @@ const el = {
   crmBootstrapEmail: document.getElementById("crmBootstrapEmail"),
   crmBootstrapPassword: document.getElementById("crmBootstrapPassword"),
   crmBootstrapBtn: document.getElementById("crmBootstrapBtn"),
+  crmAuthSwitchBtn: document.getElementById("crmAuthSwitchBtn"),
   crmSidebar: document.querySelector(".crm-sidebar"),
   accountSelect: document.getElementById("accountSelect"),
   accountPlanBadge: document.getElementById("accountPlanBadge"),
@@ -212,6 +213,7 @@ function setAuthMode(mode = "login") {
   state.needsBootstrap = isBootstrap;
   el.crmLoginForm?.classList.toggle("is-hidden", isBootstrap);
   el.crmBootstrapForm?.classList.toggle("is-hidden", !isBootstrap);
+  el.crmAuthSwitchBtn?.classList.toggle("is-hidden", !isBootstrap);
   if (el.crmAuthTitle) {
     el.crmAuthTitle.textContent = isBootstrap ? "Crear super admin" : "Acceso CRM";
   }
@@ -829,6 +831,16 @@ async function bootstrapAdmin(event) {
     setMainView("admin");
     setStatus(el.crmAuthStatus, "");
   } catch (error) {
+    if (String(error.message || "").toLowerCase().includes("ya existe")) {
+      setAuthMode("login");
+      setStatus(
+        el.crmAuthStatus,
+        "Ya existe un super admin. Entra con tus credenciales en la pantalla de login.",
+        "error"
+      );
+      el.crmLoginEmail.value = el.crmBootstrapEmail.value || "";
+      return;
+    }
     setStatus(el.crmAuthStatus, `No se pudo crear el admin: ${error.message}`, "error");
   } finally {
     el.crmBootstrapBtn.disabled = false;
@@ -2135,6 +2147,11 @@ el.logoutBtn?.addEventListener("click", logoutCrm);
 el.configBackBtn?.addEventListener("click", () => setMainView("sales"));
 el.crmLoginForm?.addEventListener("submit", loginCrm);
 el.crmBootstrapForm?.addEventListener("submit", bootstrapAdmin);
+el.crmAuthSwitchBtn?.addEventListener("click", () => {
+  setAuthMode("login");
+  setStatus(el.crmAuthStatus, "");
+  el.crmLoginEmail.value = el.crmBootstrapEmail.value || "";
+});
 el.crmSalesLinks.forEach((link) =>
   link.addEventListener("click", () => {
     if (window.matchMedia("(max-width: 980px)").matches && el.crmMobileControls) {
