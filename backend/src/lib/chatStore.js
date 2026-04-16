@@ -391,6 +391,16 @@ export async function updateLeadCrmFields(leadId, patch = {}) {
   }
 
   const payload = {
+    name: clean(patch.name),
+    email: clean(patch.email),
+    phone: clean(patch.phone),
+    company_name: clean(patch.company_name),
+    interest_service: clean(patch.interest_service),
+    budget_range: clean(patch.budget_range),
+    main_goal: clean(patch.main_goal),
+    current_situation: clean(patch.current_situation),
+    pain_points: clean(patch.pain_points),
+    preferred_contact_channel: clean(patch.preferred_contact_channel),
     crm_status: clean(patch.crm_status),
     assigned_to: clean(patch.assigned_to),
     internal_notes: clean(patch.internal_notes),

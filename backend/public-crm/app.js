@@ -27,6 +27,16 @@ const el = {
   leadForm: document.getElementById("leadForm"),
   saveBtn: document.getElementById("saveBtn"),
   leadSaveStatus: document.getElementById("leadSaveStatus"),
+  leadName: document.getElementById("leadName"),
+  leadEmail: document.getElementById("leadEmail"),
+  leadPhone: document.getElementById("leadPhone"),
+  leadCompanyName: document.getElementById("leadCompanyName"),
+  leadInterestService: document.getElementById("leadInterestService"),
+  leadBudgetRange: document.getElementById("leadBudgetRange"),
+  leadMainGoal: document.getElementById("leadMainGoal"),
+  leadCurrentSituation: document.getElementById("leadCurrentSituation"),
+  leadPainPoints: document.getElementById("leadPainPoints"),
+  leadPreferredContactChannel: document.getElementById("leadPreferredContactChannel"),
   crmStatus: document.getElementById("crmStatus"),
   quoteStatus: document.getElementById("quoteStatus"),
   assignedTo: document.getElementById("assignedTo"),
@@ -278,6 +288,16 @@ function renderLeadDetail() {
 
   el.crmStatus.value = lead.crm_status || "nuevo";
   el.quoteStatus.value = lead.quote_status || "sin_presupuesto";
+  el.leadName.value = lead.name || "";
+  el.leadEmail.value = lead.email || "";
+  el.leadPhone.value = lead.phone || "";
+  el.leadCompanyName.value = lead.company_name || "";
+  el.leadInterestService.value = lead.interest_service || "";
+  el.leadBudgetRange.value = lead.budget_range || "";
+  el.leadMainGoal.value = lead.main_goal || "";
+  el.leadCurrentSituation.value = lead.current_situation || "";
+  el.leadPainPoints.value = lead.pain_points || "";
+  el.leadPreferredContactChannel.value = lead.preferred_contact_channel || "";
   el.assignedTo.value = lead.assigned_to || "";
   el.nextAction.value = lead.next_action || "";
   el.followUpAt.value = toDatetimeLocal(lead.follow_up_at);
@@ -405,6 +425,16 @@ async function saveLead() {
 
   try {
     const payload = {
+      name: el.leadName.value,
+      email: el.leadEmail.value,
+      phone: el.leadPhone.value,
+      company_name: el.leadCompanyName.value,
+      interest_service: el.leadInterestService.value,
+      budget_range: el.leadBudgetRange.value,
+      main_goal: el.leadMainGoal.value,
+      current_situation: el.leadCurrentSituation.value,
+      pain_points: el.leadPainPoints.value,
+      preferred_contact_channel: el.leadPreferredContactChannel.value,
       crm_status: el.crmStatus.value,
       quote_status: el.quoteStatus.value,
       assigned_to: el.assignedTo.value,
