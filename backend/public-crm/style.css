@@ -312,10 +312,11 @@ textarea {
 }
 
 .crm-sidebar .filter-box select {
-  color: #0f2147;
+  color: #ffffff;
   background: transparent;
   border: 0;
   appearance: auto;
+  font-weight: 700;
 }
 
 .crm-sidebar .filter-box select option {
