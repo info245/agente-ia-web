@@ -379,22 +379,57 @@ textarea {
 .crm-config-card {
   background:
     linear-gradient(180deg, rgba(248, 251, 255, 0.95), rgba(242, 247, 255, 0.94));
+  border-color: rgba(191, 208, 234, 0.82);
+  box-shadow:
+    0 24px 54px rgba(66, 97, 154, 0.12),
+    inset 0 1px 0 rgba(255,255,255,0.78);
+  overflow: hidden;
+  position: relative;
+}
+
+.crm-config-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 140px;
+  background:
+    radial-gradient(circle at top left, rgba(109, 65, 243, 0.18), transparent 48%),
+    radial-gradient(circle at top right, rgba(78, 143, 255, 0.16), transparent 42%);
+  pointer-events: none;
+}
+
+.crm-config-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.crm-config-card .crm-card-header {
+  align-items: flex-start;
+  padding-bottom: 18px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(191, 208, 234, 0.68);
+}
+
+.crm-config-card .crm-card-header h3 {
+  font-size: 1.65rem;
+  letter-spacing: -0.03em;
 }
 
 .config-form {
   display: grid;
-  gap: 12px;
+  gap: 18px;
 }
 
 .config-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px;
+  gap: 10px;
+  padding: 8px;
   width: fit-content;
-  background: rgba(226, 234, 252, 0.9);
-  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(191, 208, 234, 0.82);
   border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.78);
 }
 
 .config-tab {
@@ -402,7 +437,7 @@ textarea {
   background: transparent;
   color: var(--muted);
   font-weight: 800;
-  padding: 11px 18px;
+  padding: 12px 20px;
   border-radius: 999px;
   cursor: pointer;
   transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
@@ -415,15 +450,19 @@ textarea {
 .config-tab.is-active {
   background: linear-gradient(135deg, var(--accent-dark), var(--accent));
   color: #fff;
-  box-shadow: 0 10px 24px rgba(37, 45, 98, 0.18);
+  box-shadow: 0 14px 28px rgba(37, 45, 98, 0.2);
 }
 
 .config-panel {
   display: none;
-  padding: 18px;
-  border: 1px solid rgba(191, 208, 234, 0.88);
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(245, 249, 255, 0.92));
+  padding: 24px;
+  border: 1px solid rgba(191, 208, 234, 0.8);
+  border-radius: 30px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 255, 0.95));
+  box-shadow:
+    0 18px 36px rgba(77, 106, 158, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.84);
 }
 
 .config-panel.is-active {
@@ -435,6 +474,10 @@ textarea {
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
+  padding: 18px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(109,65,243,0.1), rgba(78,143,255,0.08));
+  border: 1px solid rgba(191, 208, 234, 0.84);
 }
 
 .config-website-actions button {
@@ -461,9 +504,52 @@ textarea {
   min-height: 160px;
 }
 
+.crm-config-card .quote-grid {
+  gap: 18px;
+  margin-top: 0;
+}
+
+.crm-config-card .quote-grid label,
+.crm-config-card .config-logo-field {
+  padding: 16px 18px;
+  border-radius: 22px;
+  background: rgba(255,255,255,0.82);
+  border: 1px solid rgba(191, 208, 234, 0.78);
+  box-shadow:
+    0 10px 24px rgba(83, 110, 160, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.82);
+}
+
+.crm-config-card .quote-grid label {
+  gap: 10px;
+  color: var(--text);
+}
+
+.crm-config-card .quote-grid label input,
+.crm-config-card .quote-grid label select,
+.crm-config-card .quote-grid label textarea {
+  min-height: 50px;
+  border-radius: 16px;
+  border: 1px solid rgba(191, 208, 234, 0.86);
+  background: linear-gradient(180deg, rgba(252,254,255,0.98), rgba(245,249,255,0.96));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.86);
+}
+
+.crm-config-card .quote-grid label textarea {
+  min-height: 150px;
+}
+
 .services-editor {
   display: grid;
-  gap: 14px;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(243, 247, 255, 0.9), rgba(255, 255, 255, 0.96));
+  border: 1px solid rgba(191, 208, 234, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.88),
+    0 14px 30px rgba(83, 110, 160, 0.07);
 }
 
 .services-editor-head {
@@ -476,14 +562,15 @@ textarea {
 
 .services-editor-head strong {
   display: block;
-  font-size: 1rem;
+  font-size: 1.15rem;
   margin-bottom: 4px;
 }
 
 .services-editor-head p {
   margin: 0;
   color: var(--muted);
-  font-size: 0.93rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
 }
 
 .services-editor-head button {
@@ -499,15 +586,30 @@ textarea {
 
 .services-editor-list {
   display: grid;
-  gap: 14px;
+  gap: 18px;
 }
 
 .service-item {
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(245, 249, 255, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  position: relative;
+  padding: 22px;
+  border: 1px solid rgba(191, 208, 234, 0.86);
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 250, 255, 0.97));
+  box-shadow:
+    0 16px 32px rgba(83, 110, 160, 0.09),
+    inset 0 1px 0 rgba(255,255,255,0.9);
+}
+
+.service-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 22px;
+  right: 22px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), #8d58ff);
 }
 
 .service-item-head {
@@ -515,11 +617,12 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .service-item-head strong {
-  font-size: 1rem;
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
 }
 
 .service-remove-btn {
@@ -535,12 +638,13 @@ textarea {
 .service-item-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 16px;
 }
 
 #configBootstrapSummary {
-  min-height: 180px;
+  min-height: 220px;
   background: linear-gradient(180deg, #f8fbff, #f0f5ff);
+  line-height: 1.65;
 }
 
 .crm-section-copy {
