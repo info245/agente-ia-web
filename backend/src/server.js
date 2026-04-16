@@ -1355,6 +1355,16 @@ function normalizeLeadPhoneForWhatsApp(lead = {}) {
   return fromPhone;
 }
 
+function buildHumanAgentWhatsAppUrl(service = "") {
+  const humanNumber = "34614149270";
+  const text = [
+    `Hola, vengo de la propuesta${service ? ` de ${service}` : ""}.`,
+    "Quiero hablar con un agente humano.",
+  ].join(" ");
+
+  return `https://wa.me/${humanNumber}?text=${encodeURIComponent(text)}`;
+}
+
 function buildQuoteFileName(lead, quote) {
   const safeTitle =
     `${String(quote?.title || "propuesta")
@@ -2425,6 +2435,7 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
 
     if (via === "whatsapp") {
       const phone = normalizeLeadPhoneForWhatsApp(lead);
+      const humanAgentUrl = buildHumanAgentWhatsAppUrl(lead?.interest_service || "");
       console.log("crm quote whatsapp target", {
         leadId: lead.id,
         phone,
@@ -2441,6 +2452,7 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
         quote?.title ? `Propuesta: ${quote.title}` : null,
         `Puedes revisarla aquí: ${previewUrl}`,
         "Si quieres, la comentamos contigo y la ajustamos antes de cerrarla.",
+        `Si prefieres hablar con un agente humano, puedes escribir aquí: ${humanAgentUrl}`,
       ]
         .filter(Boolean)
         .join("\n\n");

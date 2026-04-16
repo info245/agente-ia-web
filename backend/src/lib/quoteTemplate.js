@@ -36,6 +36,11 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       : billingType === "custom"
       ? "Personalizado"
       : "Mensual");
+  const humanWhatsAppNumber = "34614149270";
+  const humanWhatsAppText = `Hola, vengo de la propuesta de ${lead?.interest_service || "TMedia Global"} y quiero hablar con un agente humano.`;
+  const humanWhatsAppUrl = `https://wa.me/${humanWhatsAppNumber}?text=${encodeURIComponent(
+    humanWhatsAppText
+  )}`;
 
   const itemsRows = items.length
     ? items
@@ -340,6 +345,29 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       cursor: pointer;
       box-shadow: 0 10px 24px rgba(31, 94, 255, 0.22);
     }
+    .cta-box {
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid #cfe7d8;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #f3fff7, #ecfbf2);
+    }
+    .cta-box p {
+      margin: 0 0 12px;
+      line-height: 1.6;
+    }
+    .cta-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: #1faa59;
+      color: #fff;
+      text-decoration: none;
+      font-weight: 700;
+      box-shadow: 0 10px 24px rgba(31, 170, 89, 0.18);
+    }
     @media print {
       html {
         -webkit-print-color-adjust: exact;
@@ -587,6 +615,10 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
     <section class="section">
       <h2>Mensaje de la propuesta</h2>
       <div class="copy">${escapeHtml(content.body || "")}</div>
+      <div class="cta-box">
+        <p>Si prefieres resolver dudas o comentar la propuesta con una persona, puedes contactar directamente con un agente humano por WhatsApp.</p>
+        <a class="cta-button" href="${escapeHtml(humanWhatsAppUrl)}" target="_blank" rel="noopener noreferrer">Contactar con un agente humano</a>
+      </div>
     </section>
 
     ${assumptions ? `
