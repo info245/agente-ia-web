@@ -1,14 +1,20 @@
 :root {
-  --bg: #f6f0e4;
-  --card: #fffdfa;
-  --line: #e1d5c4;
-  --text: #211d19;
-  --muted: #766c62;
-  --accent: #1f5b4f;
-  --accent-soft: #efe6ff;
-  --accent-line: #b896ff;
-  --assistant: #eef5ec;
-  --user: #eef1ff;
+  --bg: #edf2fb;
+  --card: rgba(255, 255, 255, 0.94);
+  --card-strong: #ffffff;
+  --line: #d6e1f2;
+  --line-strong: #bfd0ea;
+  --text: #112347;
+  --muted: #5f7192;
+  --accent: #6d41f3;
+  --accent-dark: #1d2451;
+  --accent-soft: #f2ecff;
+  --accent-line: #cfd6ff;
+  --assistant: #eef8f1;
+  --user: #eef2ff;
+  --success: #1f8f5f;
+  --danger: #a93a51;
+  --shadow: 0 18px 48px rgba(88, 118, 168, 0.12);
 }
 
 * { box-sizing: border-box; }
@@ -16,11 +22,12 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Segoe UI", Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at top left, #fbf6ea, transparent 30%),
-    linear-gradient(135deg, #f7efe1, #f2e8d6);
+    radial-gradient(circle at top left, rgba(109, 65, 243, 0.12), transparent 24%),
+    radial-gradient(circle at top right, rgba(78, 143, 255, 0.14), transparent 28%),
+    linear-gradient(180deg, #f5f8ff, #eaf0fb 62%, #e7eefb);
 }
 
 button,
@@ -31,11 +38,11 @@ textarea {
 }
 
 .crm-page {
-  max-width: 1720px;
+  max-width: 1760px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 28px;
   display: grid;
-  gap: 18px;
+  gap: 22px;
 }
 
 .crm-topbar,
@@ -52,12 +59,24 @@ textarea {
 .crm-topbar {
   gap: 24px;
   flex-wrap: wrap;
+  padding: 18px 20px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(191, 208, 234, 0.75);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
 }
 
 .crm-brand h1,
 .crm-card-header h2,
 .crm-card-header h3 {
   margin: 0;
+}
+
+.crm-brand h1 {
+  font-size: 2.35rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
 }
 
 .crm-filters {
@@ -67,24 +86,30 @@ textarea {
 }
 
 .filter-box {
-  min-width: 180px;
+  min-width: 190px;
   display: grid;
-  gap: 6px;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.55);
+  gap: 7px;
+  padding: 13px 15px;
+  background: rgba(255, 255, 255, 0.88);
   border: 1px solid var(--line);
   border-radius: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .filter-box span {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.79rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .filter-box select {
   border: 0;
   background: transparent;
   outline: none;
+  color: var(--text);
+  font-weight: 600;
 }
 
 #refreshBtn,
@@ -99,11 +124,13 @@ textarea {
 #leadPrevBtn,
 #leadNextBtn {
   border: 0;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), #8d58ff);
   color: #fff;
-  padding: 10px 16px;
+  padding: 11px 18px;
   border-radius: 999px;
   cursor: pointer;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(109, 65, 243, 0.18);
 }
 
 #saveBtn.is-busy,
@@ -132,7 +159,7 @@ textarea {
   flex-wrap: wrap;
   justify-content: flex-end;
   row-gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .crm-actions button {
@@ -149,43 +176,57 @@ textarea {
 }
 
 .crm-card {
-  background: rgba(255, 253, 250, 0.96);
-  border: 1px solid var(--line);
-  border-radius: 24px;
-  padding: 18px;
-  box-shadow: 0 12px 32px rgba(64, 45, 20, 0.06);
+  background: var(--card);
+  border: 1px solid rgba(191, 208, 234, 0.9);
+  border-radius: 28px;
+  padding: 22px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
 }
 
 .crm-summary {
   border-top-left-radius: 0;
+  background:
+    linear-gradient(180deg, rgba(248, 251, 255, 0.95), rgba(240, 246, 255, 0.95));
 }
 
 .lead-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 14px;
+  gap: 14px;
+  margin-top: 16px;
 }
 
 .meta-box {
   border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.62);
+  border-radius: 18px;
+  padding: 14px 15px;
+  background: rgba(255, 255, 255, 0.82);
+  min-height: 86px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
 }
 
 .meta-box strong,
 .message-item strong {
   display: block;
-  margin-bottom: 6px;
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .pill {
-  background: rgba(31, 91, 79, 0.1);
-  color: var(--accent);
+  background: rgba(109, 65, 243, 0.1);
+  color: var(--accent-dark);
   border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 0.92rem;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .lead-table-wrap {
@@ -201,39 +242,42 @@ textarea {
   min-width: 1320px;
   border-collapse: collapse;
   table-layout: fixed;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .lead-table thead th {
-  background: var(--accent-soft);
-  border: 2px solid var(--accent-line);
-  padding: 14px 12px;
+  background: linear-gradient(180deg, #f4f6ff, #edf2ff);
+  border: 1px solid var(--accent-line);
+  padding: 16px 14px;
   text-align: left;
-  font-size: 0.96rem;
+  font-size: 0.81rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .lead-table tbody td {
-  border: 2px solid var(--accent-line);
-  padding: 14px 12px;
+  border: 1px solid var(--accent-line);
+  padding: 16px 14px;
   vertical-align: top;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .lead-row {
   cursor: pointer;
-  transition: background 0.18s ease;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
 .lead-row:hover {
-  background: rgba(184, 150, 255, 0.08);
+  background: rgba(109, 65, 243, 0.03);
 }
 
 .lead-row.active {
-  background: #fff;
+  box-shadow: inset 4px 0 0 var(--accent);
 }
 
 .lead-row.active td {
-  background: #fff;
+  background: linear-gradient(180deg, #ffffff, #fbfcff);
 }
 
 .lead-name-btn {
@@ -242,7 +286,7 @@ textarea {
   padding: 0;
   color: var(--text);
   font: inherit;
-  font-weight: 700;
+  font-weight: 800;
   text-align: left;
   cursor: pointer;
 }
@@ -302,11 +346,12 @@ textarea {
 .status-pill {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
+  padding: 6px 11px;
   border-radius: 999px;
-  background: rgba(31, 91, 79, 0.1);
-  color: var(--accent);
-  font-size: 0.88rem;
+  background: rgba(109, 65, 243, 0.09);
+  color: var(--accent-dark);
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 .table-count,
@@ -322,46 +367,78 @@ textarea {
 
 .crm-grid {
   display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 18px;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 22px;
+  align-items: stretch;
+}
+
+.crm-grid > .crm-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 980px;
 }
 
 .lead-form {
   display: grid;
   gap: 12px;
+  align-content: start;
+  height: 100%;
 }
 
 .lead-form label,
 .quote-grid label {
   display: grid;
   gap: 6px;
-  font-size: 0.95rem;
+  font-size: 0.83rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .lead-form input,
 .lead-form select,
 .lead-form textarea,
 .quote-form input,
-.quote-form textarea {
+.quote-form textarea,
+.quote-form select {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.85);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+}
+
+.lead-form input:focus,
+.lead-form select:focus,
+.lead-form textarea:focus,
+.quote-form input:focus,
+.quote-form textarea:focus,
+.quote-form select:focus,
+.filter-box select:focus {
+  outline: none;
+  border-color: rgba(109, 65, 243, 0.42);
+  box-shadow: 0 0 0 4px rgba(109, 65, 243, 0.12);
 }
 
 .message-list {
   display: grid;
-  gap: 10px;
-  max-height: 540px;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
+  padding-right: 4px;
 }
 
 .message-item {
   border: 1px solid var(--line);
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 18px;
+  padding: 14px 16px;
   background: #fff;
+  box-shadow: 0 6px 18px rgba(78, 96, 140, 0.05);
+  line-height: 1.55;
 }
 
 .message-item.user {
@@ -372,17 +449,21 @@ textarea {
   background: var(--assistant);
 }
 
+.message-item div {
+  color: var(--text);
+}
+
 .message-item time,
 .empty {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .quote-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 6px;
+  gap: 14px;
+  margin-top: 8px;
 }
 
 .quote-items-box {
@@ -401,10 +482,10 @@ textarea {
   grid-template-columns: 2fr 1fr 1fr auto;
   gap: 10px;
   align-items: end;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--line);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.65);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.74);
 }
 
 .quote-item-remove {
@@ -428,15 +509,15 @@ textarea {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.7);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.76);
 }
 
 .quote-total-row.grand {
-  border: 2px solid var(--accent-line);
-  background: var(--accent-soft);
+  border: 1px solid rgba(109, 65, 243, 0.24);
+  background: linear-gradient(180deg, #f5f0ff, #efe7ff);
 }
 
 .save-status {
@@ -463,6 +544,10 @@ textarea {
   .quote-grid,
   .quote-item {
     grid-template-columns: 1fr;
+  }
+
+  .crm-grid > .crm-card {
+    min-height: auto;
   }
 
   .crm-page {
@@ -627,6 +712,7 @@ textarea {
 
   .message-list {
     max-height: none;
+    min-height: 420px;
   }
 
   .quote-item {
