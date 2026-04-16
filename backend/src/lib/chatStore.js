@@ -278,6 +278,44 @@ export async function getLatestConversationEvent(
   return data || null;
 }
 
+export async function listConversationEventsByType(
+  conversation_id,
+  event_type,
+  limit = 100,
+  account_id = null
+) {
+  const safeConversationId = clean(conversation_id);
+  const safeEventType = clean(event_type);
+  const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 100;
+  const safeAccountId = clean(account_id);
+
+  if (!safeConversationId || !safeEventType) return [];
+
+  let query = supabase
+    .from("conversation_events")
+    .select("*")
+    .eq("conversation_id", safeConversationId)
+    .eq("event_type", safeEventType)
+    .order("created_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (safeAccountId && (await tableHasAccountColumn("conversation_events"))) {
+    query = query.eq("account_id", safeAccountId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("conversation_events") || message.includes("does not exist")) {
+      return [];
+    }
+    throw error;
+  }
+
+  return data || [];
+}
+
 export async function findConversationEventByHandoffCode(
   handoffCode,
   limit = 500

@@ -267,3 +267,27 @@ export async function sendQuoteEmailToLead({ lead, quote, previewUrl }) {
 
   return { ok: true, messageId: info.messageId };
 }
+
+export async function sendTransactionalEmail({
+  to,
+  subject,
+  text,
+  html,
+  replyTo = null,
+} = {}) {
+  if (!clientEnabled) return { skipped: true, reason: "client-disabled" };
+  if (!to) return { skipped: true, reason: "no-email" };
+  if (!clientFrom) throw new Error("LEADS_CLIENT_EMAIL_FROM está vacío");
+
+  const t = getTransporter();
+  const info = await t.sendMail({
+    from: clientFrom,
+    to,
+    subject: subject || "Mensaje comercial",
+    text: text || "",
+    html: html || nl2br(text || ""),
+    replyTo: replyTo || process.env.LEADS_EMAIL_REPLY_TO || process.env.SMTP_USER,
+  });
+
+  return { ok: true, messageId: info.messageId };
+}

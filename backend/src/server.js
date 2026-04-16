@@ -15,6 +15,7 @@ import {
   getConversationMessages,
   getLeadByConversationId,
   getLatestConversationEvent,
+  listConversationEventsByType,
   findLatestWebLeadByContact,
   findConversationEventByHandoffCode,
   listCrmLeads,
@@ -52,6 +53,7 @@ import {
   sendLeadEmail,
   sendClientConfirmationEmail,
   sendQuoteEmailToLead,
+  sendTransactionalEmail,
 } from "./lib/emailService.js";
 
 import {
@@ -1414,6 +1416,175 @@ function buildHumanAgentWhatsAppUrl(service = "", appConfig = null) {
   ].join(" ");
 
   return `https://wa.me/${humanNumber}?text=${encodeURIComponent(text)}`;
+}
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function nl2brHtml(value = "") {
+  return escapeHtml(value).replace(/\n/g, "<br>");
+}
+
+function buildAutomationBaseUrl(req) {
+  return (
+    process.env.PUBLIC_BASE_URL ||
+    process.env.APP_BASE_URL ||
+    `${req.protocol}://${req.get("host")}`
+  );
+}
+
+function buildAutomationTemplateVars({ lead, appConfig, previewUrl }) {
+  return {
+    nombre: getSafeLeadName(lead) || lead?.name || "hola",
+    marca: appConfig?.brand?.name || "TMedia Global",
+    servicio: lead?.interest_service || "nuestros servicios",
+    empresa: lead?.company_name || lead?.business_activity || "tu proyecto",
+    presupuesto: lead?.budget_range || "",
+    email: lead?.email || "",
+    telefono: lead?.phone || "",
+    link_presupuesto: previewUrl || "",
+    whatsapp_humano: buildHumanAgentWhatsAppUrl(
+      lead?.interest_service || "",
+      appConfig
+    ),
+    web_principal: appConfig?.brand?.website_url || "",
+  };
+}
+
+function renderTemplateString(template = "", vars = {}) {
+  return String(template || "").replace(/\{([a-z0-9_]+)\}/gi, (_match, key) => {
+    const value = vars[key];
+    return value === undefined || value === null ? "" : String(value);
+  });
+}
+
+function buildAutomationEmailHtml({ subject, body }) {
+  return `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
+      <h2 style="margin-bottom: 12px;">${escapeHtml(subject || "Seguimos en contacto")}</h2>
+      <div style="font-size: 14px; background: #f7f7f7; border: 1px solid #ddd; padding: 14px; border-radius: 8px;">
+        ${nl2brHtml(body || "")}
+      </div>
+    </div>
+  `;
+}
+
+function getAutomationBaseTimestamp({ flowKey, lead, quote }) {
+  if (flowKey === "quote_followup") {
+    return quote?.sent_at || quote?.updated_at || null;
+  }
+
+  return lead?.created_at || null;
+}
+
+function leadEligibleForFlow(flowKey, lead, quote) {
+  const crmStatus = normalizeText(lead?.crm_status || "");
+  const quoteStatus = normalizeText(lead?.quote_status || "");
+
+  if (["ganado", "perdido"].includes(crmStatus)) return false;
+
+  if (flowKey === "lead_recovery") {
+    return !["sent", "accepted", "rejected"].includes(quoteStatus);
+  }
+
+  if (flowKey === "quote_followup") {
+    return !!quote && quoteStatus === "sent" && quote?.status === "sent";
+  }
+
+  return false;
+}
+
+function getFlowStepSignature(flowKey, stepIndex) {
+  return `${String(flowKey || "")}:${Number(stepIndex)}`;
+}
+
+function wasAutomationStepAlreadySent(events = [], flowKey, stepIndex) {
+  const signature = getFlowStepSignature(flowKey, stepIndex);
+  return events.some(
+    (event) => String(event?.payload?.step_signature || "") === signature
+  );
+}
+
+async function sendAutomationStep({
+  lead,
+  step,
+  template,
+  vars,
+  accountId,
+  conversationId,
+}) {
+  const channel = String(step?.channel || template?.channel || "").trim().toLowerCase();
+  const subject = renderTemplateString(template?.subject || "", vars).trim();
+  const body = renderTemplateString(template?.body || "", vars).trim();
+
+  if (!body) {
+    throw new Error("La plantilla no tiene cuerpo de mensaje.");
+  }
+
+  if (channel === "whatsapp") {
+    const phone = normalizeLeadPhoneForWhatsApp(lead);
+    if (!phone) {
+      return { skipped: true, reason: "no-whatsapp-phone" };
+    }
+
+    const sendResult = await sendWhatsAppText(phone, body);
+    await saveMessage({
+      conversation_id: conversationId,
+      role: "assistant",
+      content: body,
+      account_id: accountId,
+    });
+
+    return {
+      ok: true,
+      via: "whatsapp",
+      external_user_id: phone,
+      provider_message_id:
+        sendResult?.messages?.[0]?.id || sendResult?.contacts?.[0]?.wa_id || null,
+      body,
+      subject: "",
+    };
+  }
+
+  if (channel === "email") {
+    if (!lead?.email) {
+      return { skipped: true, reason: "no-email" };
+    }
+
+    const sendResult = await sendTransactionalEmail({
+      to: lead.email,
+      subject: subject || "Seguimos en contacto",
+      text: body,
+      html: buildAutomationEmailHtml({
+        subject: subject || "Seguimos en contacto",
+        body,
+      }),
+    });
+
+    await saveMessage({
+      conversation_id: conversationId,
+      role: "tool",
+      content: `Email automatico enviado${subject ? ` | ${subject}` : ""}\n\n${body}`,
+      account_id: accountId,
+    });
+
+    return {
+      ok: true,
+      via: "email",
+      external_user_id: lead.email,
+      provider_message_id: sendResult?.messageId || null,
+      body,
+      subject,
+    };
+  }
+
+  return { skipped: true, reason: "unsupported-channel" };
 }
 
 function buildQuoteFileName(lead, quote) {
@@ -3526,6 +3697,152 @@ app.post("/api/integrations/external-lead", async (req, res) => {
     });
   } catch (error) {
     console.log("external lead intake error", error);
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+async function runAutomationFlowsForAccount({
+  account,
+  appConfig,
+  baseUrl,
+  limit = 500,
+}) {
+  const leads = await listCrmLeads({ limit, accountId: account.id });
+  const processed = [];
+
+  for (const lead of leads) {
+    const conversationId = lead?.conversation_id;
+    if (!conversationId) continue;
+
+    const automationEvents = await listConversationEventsByType(
+      conversationId,
+      "automation_step_sent",
+      100,
+      account.id
+    );
+
+    const flowEntries = Object.entries(appConfig?.automation_flows || {});
+
+    for (const [flowKey, flow] of flowEntries) {
+      if (flow?.enabled === false) continue;
+
+      const needsQuote = flowKey === "quote_followup";
+      const quote = needsQuote ? await getLatestQuoteByLeadId(lead.id).catch(() => null) : null;
+      if (!leadEligibleForFlow(flowKey, lead, quote)) continue;
+
+      const baseTimestamp = getAutomationBaseTimestamp({ flowKey, lead, quote });
+      const baseDate = baseTimestamp ? new Date(baseTimestamp) : null;
+      if (!baseDate || Number.isNaN(baseDate.getTime())) continue;
+
+      const previewUrl = quote
+        ? `${baseUrl}/crm/quotes/${lead.id}/preview?account_id=${encodeURIComponent(account.id)}`
+        : "";
+      const vars = buildAutomationTemplateVars({
+        lead,
+        appConfig,
+        previewUrl,
+      });
+
+      const steps = Array.isArray(flow?.steps) ? flow.steps : [];
+      for (let index = 0; index < steps.length; index += 1) {
+        const step = steps[index];
+        if (!step || step.active === false) continue;
+        if (wasAutomationStepAlreadySent(automationEvents, flowKey, index)) continue;
+
+        const delayValue = Number(step.delay_value || 0);
+        const delayUnit = String(step.delay_unit || "hours").trim().toLowerCase();
+        const multiplier =
+          delayUnit === "minutes" ? 60_000 : delayUnit === "days" ? 86_400_000 : 3_600_000;
+        const dueAt = baseDate.getTime() + Math.max(0, delayValue) * multiplier;
+        if (Date.now() < dueAt) continue;
+
+        const template = appConfig?.message_templates?.[step.template_key] || null;
+        if (!template) continue;
+
+        const sendResult = await sendAutomationStep({
+          lead,
+          step,
+          template,
+          vars,
+          accountId: account.id,
+          conversationId,
+        });
+
+        if (sendResult?.ok) {
+          const eventPayload = {
+            flow_key: flowKey,
+            flow_label: flow?.label || flowKey,
+            step_index: index,
+            step_signature: getFlowStepSignature(flowKey, index),
+            template_key: step.template_key,
+            channel: sendResult.via,
+            provider_message_id: sendResult.provider_message_id || null,
+            scheduled_from: baseDate.toISOString(),
+            delay_value: step.delay_value,
+            delay_unit: step.delay_unit,
+            subject: sendResult.subject || null,
+            body_preview: String(sendResult.body || "").slice(0, 500),
+          };
+
+          await trackConversationEvent({
+            conversation_id: conversationId,
+            event_type: "automation_step_sent",
+            channel: sendResult.via,
+            external_user_id: sendResult.external_user_id,
+            account_id: account.id,
+            payload: eventPayload,
+          });
+
+          processed.push({
+            account_id: account.id,
+            lead_id: lead.id,
+            conversation_id: conversationId,
+            flow_key: flowKey,
+            step_index: index,
+            via: sendResult.via,
+          });
+        }
+      }
+    }
+  }
+
+  return processed;
+}
+
+app.post("/tasks/automation-flows", async (req, res) => {
+  try {
+    if (!isAuthorizedTaskRequest(req)) {
+      return res.status(401).json({ ok: false, error: "Unauthorized task request" });
+    }
+
+    const scopedAccount = req.query?.account_id || req.body?.account_id || null;
+    const baseUrl = buildAutomationBaseUrl(req);
+    const limit = Number(req.body?.limit || req.query?.limit || 500);
+    const accounts = scopedAccount
+      ? [await resolveAccount(scopedAccount)]
+      : await listAccounts();
+
+    const processed = [];
+    for (const account of accounts) {
+      if (!account?.id) continue;
+      const appConfig = await getAppConfig({ accountId: account.id });
+      const accountProcessed = await runAutomationFlowsForAccount({
+        account,
+        appConfig,
+        baseUrl,
+        limit,
+      });
+      processed.push(...accountProcessed);
+    }
+
+    return res.json({
+      ok: true,
+      processed_count: processed.length,
+      processed,
+      accounts_checked: accounts.map((account) => account.id),
+    });
+  } catch (error) {
+    console.log("automation flows task error", error);
     return res.status(500).json({ ok: false, error: error.message });
   }
 });
