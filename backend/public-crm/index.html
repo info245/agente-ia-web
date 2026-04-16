@@ -7,6 +7,44 @@
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
+  <section id="crmAuthShell" class="crm-auth-shell">
+    <div class="crm-auth-card">
+      <p class="crm-eyebrow">TM Growth Copilot</p>
+      <h1 id="crmAuthTitle">Acceso CRM</h1>
+      <p id="crmAuthCopy" class="crm-section-copy">Entra como super admin o como administrador de una cuenta cliente.</p>
+
+      <form id="crmLoginForm" class="crm-auth-form">
+        <label>
+          Email
+          <input id="crmLoginEmail" type="email" autocomplete="username" />
+        </label>
+        <label>
+          Contraseña
+          <input id="crmLoginPassword" type="password" autocomplete="current-password" />
+        </label>
+        <button id="crmLoginBtn" type="submit">Entrar</button>
+      </form>
+
+      <form id="crmBootstrapForm" class="crm-auth-form is-hidden">
+        <label>
+          Nombre
+          <input id="crmBootstrapName" type="text" />
+        </label>
+        <label>
+          Email admin
+          <input id="crmBootstrapEmail" type="email" autocomplete="username" />
+        </label>
+        <label>
+          Contraseña admin
+          <input id="crmBootstrapPassword" type="password" autocomplete="new-password" />
+        </label>
+        <button id="crmBootstrapBtn" type="submit">Crear super admin</button>
+      </form>
+
+      <div id="crmAuthStatus" class="save-status" aria-live="polite"></div>
+    </div>
+  </section>
+
   <main class="crm-page">
     <section class="crm-topbar">
       <div class="crm-brand">
@@ -22,6 +60,7 @@
         </label>
         <span id="accountPlanBadge" class="pill">Internal</span>
         <button id="refreshBtn" type="button">Actualizar</button>
+        <button id="logoutBtn" type="button" class="crm-secondary-btn">Salir</button>
       </div>
     </section>
 
@@ -144,6 +183,18 @@
                 <label class="admin-checkbox">
                   <input id="adminCreateDefault" type="checkbox" />
                   <span>Marcar como cuenta por defecto</span>
+                </label>
+                <label>
+                  Email admin cliente
+                  <input id="adminCreateAdminEmail" type="email" placeholder="admin@cliente.com" />
+                </label>
+                <label>
+                  Password admin cliente
+                  <input id="adminCreateAdminPassword" type="password" placeholder="Minimo 8 caracteres" />
+                </label>
+                <label>
+                  Nombre visible admin
+                  <input id="adminCreateAdminDisplayName" type="text" placeholder="Nombre del responsable" />
                 </label>
               </div>
               <div class="admin-create-actions">

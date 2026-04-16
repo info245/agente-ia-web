@@ -1,4 +1,6 @@
 const state = {
+  currentUser: null,
+  needsBootstrap: false,
   accounts: [],
   activeAccountId: null,
   adminOverview: [],
@@ -17,10 +19,25 @@ const API_BASE = `${window.location.origin}/api/crm`;
 const ACCOUNT_STORAGE_KEY = "crmActiveAccountId";
 
 const el = {
+  crmPage: document.querySelector(".crm-page"),
+  crmAuthShell: document.getElementById("crmAuthShell"),
+  crmAuthTitle: document.getElementById("crmAuthTitle"),
+  crmAuthCopy: document.getElementById("crmAuthCopy"),
+  crmAuthStatus: document.getElementById("crmAuthStatus"),
+  crmLoginForm: document.getElementById("crmLoginForm"),
+  crmLoginEmail: document.getElementById("crmLoginEmail"),
+  crmLoginPassword: document.getElementById("crmLoginPassword"),
+  crmLoginBtn: document.getElementById("crmLoginBtn"),
+  crmBootstrapForm: document.getElementById("crmBootstrapForm"),
+  crmBootstrapName: document.getElementById("crmBootstrapName"),
+  crmBootstrapEmail: document.getElementById("crmBootstrapEmail"),
+  crmBootstrapPassword: document.getElementById("crmBootstrapPassword"),
+  crmBootstrapBtn: document.getElementById("crmBootstrapBtn"),
   crmSidebar: document.querySelector(".crm-sidebar"),
   accountSelect: document.getElementById("accountSelect"),
   accountPlanBadge: document.getElementById("accountPlanBadge"),
   refreshBtn: document.getElementById("refreshBtn"),
+  logoutBtn: document.getElementById("logoutBtn"),
   crmViewAdminBtn: document.getElementById("crmViewAdminBtn"),
   crmViewSalesBtn: document.getElementById("crmViewSalesBtn"),
   crmViewConfigBtn: document.getElementById("crmViewConfigBtn"),
@@ -104,6 +121,9 @@ const el = {
   adminCreatePlan: document.getElementById("adminCreatePlan"),
   adminCreateStatus: document.getElementById("adminCreateStatus"),
   adminCreateDefault: document.getElementById("adminCreateDefault"),
+  adminCreateAdminEmail: document.getElementById("adminCreateAdminEmail"),
+  adminCreateAdminPassword: document.getElementById("adminCreateAdminPassword"),
+  adminCreateAdminDisplayName: document.getElementById("adminCreateAdminDisplayName"),
   adminCreateAccountBtn: document.getElementById("adminCreateAccountBtn"),
   adminAccountStatus: document.getElementById("adminAccountStatus"),
   dateFilter: document.getElementById("dateFilter"),
@@ -185,6 +205,30 @@ function fmtMoney(value, currency = "EUR") {
     style: "currency",
     currency: currency || "EUR",
   }).format(amount);
+}
+
+function setAuthMode(mode = "login") {
+  const isBootstrap = mode === "bootstrap";
+  state.needsBootstrap = isBootstrap;
+  el.crmLoginForm?.classList.toggle("is-hidden", isBootstrap);
+  el.crmBootstrapForm?.classList.toggle("is-hidden", !isBootstrap);
+  if (el.crmAuthTitle) {
+    el.crmAuthTitle.textContent = isBootstrap ? "Crear super admin" : "Acceso CRM";
+  }
+  if (el.crmAuthCopy) {
+    el.crmAuthCopy.textContent = isBootstrap
+      ? "Este es el primer acceso. Crea la cuenta administradora principal del sistema."
+      : "Entra como super admin o como administrador de una cuenta cliente.";
+  }
+}
+
+function setAuthenticatedUi(isAuthenticated) {
+  el.crmAuthShell?.classList.toggle("is-hidden", isAuthenticated);
+  el.crmPage?.classList.toggle("is-hidden", !isAuthenticated);
+}
+
+function getDefaultViewForRole() {
+  return state.currentUser?.role === "super_admin" ? "admin" : "sales";
 }
 
 function getStoredAccountId() {
@@ -357,13 +401,16 @@ function renderIntegrationValidation(type, validation = {}, badgeText = "") {
 function setMainView(viewName) {
   const isAdmin = viewName === "admin";
   const isConfig = viewName === "config";
-  const isSales = !isConfig && !isAdmin;
   const isMobile = window.matchMedia("(max-width: 980px)").matches;
+  const canSeeAdmin = state.currentUser?.role === "super_admin";
+  const finalIsAdmin = isAdmin && canSeeAdmin;
+  const isSales = !isConfig && !finalIsAdmin;
 
-  el.crmViewAdminBtn.classList.toggle("is-active", isAdmin);
+  el.crmViewAdminBtn?.classList.toggle("is-hidden", !canSeeAdmin);
+  el.crmViewAdminBtn?.classList.toggle("is-active", finalIsAdmin);
   el.crmViewSalesBtn.classList.toggle("is-active", isSales);
   el.crmViewConfigBtn.classList.toggle("is-active", isConfig);
-  el.crmViewAdmin.classList.toggle("is-active", isAdmin);
+  el.crmViewAdmin.classList.toggle("is-active", finalIsAdmin);
   el.crmViewSales.classList.toggle("is-active", isSales);
   el.crmViewConfig.classList.toggle("is-active", isConfig);
   if (el.crmMobileBottomNav) {
@@ -503,6 +550,23 @@ async function fetchJson(url, options = {}) {
   return data;
 }
 
+async function fetchOptionalJson(url, options = {}) {
+  const res = await fetch(url, options);
+  const contentType = res.headers.get("content-type") || "";
+  const raw = await res.text();
+  let data = null;
+
+  if (contentType.includes("application/json") && raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch (_error) {
+      data = null;
+    }
+  }
+
+  return { ok: res.ok, status: res.status, data };
+}
+
 function renderAccounts() {
   if (!el.accountSelect) return;
 
@@ -525,6 +589,10 @@ function renderAccounts() {
 
   if (el.accountPlanBadge) {
     el.accountPlanBadge.textContent = activeAccount?.plan || "Internal";
+  }
+
+  if (el.accountSelect) {
+    el.accountSelect.disabled = state.currentUser?.role !== "super_admin";
   }
 }
 
@@ -664,7 +732,7 @@ async function loadAccounts() {
   }
 
   const data = await fetchJson(
-    `${window.location.origin}/api/admin/accounts${params.toString() ? `?${params.toString()}` : ""}`
+    `${window.location.origin}/api/crm/accounts${params.toString() ? `?${params.toString()}` : ""}`
   );
 
   state.accounts = data.accounts || [];
@@ -681,9 +749,90 @@ async function loadAccounts() {
 }
 
 async function loadAdminOverview() {
+  if (state.currentUser?.role !== "super_admin") {
+    state.adminOverview = [];
+    renderAdminOverview();
+    return;
+  }
+
   const data = await fetchJson(`${window.location.origin}/api/admin/overview`);
   state.adminOverview = data.accounts || [];
   renderAdminOverview();
+}
+
+async function checkBootstrapStatus() {
+  const result = await fetchOptionalJson(`${window.location.origin}/api/auth/bootstrap-status`);
+  return Boolean(result?.data?.needs_bootstrap);
+}
+
+async function hydrateCurrentUser() {
+  const result = await fetchOptionalJson(`${window.location.origin}/api/auth/me`);
+  if (!result.ok || !result.data?.user) {
+    state.currentUser = null;
+    return null;
+  }
+
+  state.currentUser = result.data.user;
+  if (state.currentUser?.account?.id && state.currentUser.role !== "super_admin") {
+    state.activeAccountId = state.currentUser.account.id;
+    setStoredAccountId(state.activeAccountId);
+  }
+  return state.currentUser;
+}
+
+async function loginCrm(event) {
+  event.preventDefault();
+  el.crmLoginBtn.disabled = true;
+  setStatus(el.crmAuthStatus, "Entrando...");
+
+  try {
+    const result = await fetchJson(`${window.location.origin}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: el.crmLoginEmail.value,
+        password: el.crmLoginPassword.value,
+      }),
+    });
+
+    state.currentUser = result.user || null;
+    setAuthenticatedUi(true);
+    await bootstrapCrm();
+    setMainView(getDefaultViewForRole());
+    setStatus(el.crmAuthStatus, "");
+  } catch (error) {
+    setStatus(el.crmAuthStatus, `No se pudo entrar: ${error.message}`, "error");
+  } finally {
+    el.crmLoginBtn.disabled = false;
+  }
+}
+
+async function bootstrapAdmin(event) {
+  event.preventDefault();
+  el.crmBootstrapBtn.disabled = true;
+  setStatus(el.crmAuthStatus, "Creando super admin...");
+
+  try {
+    const result = await fetchJson(`${window.location.origin}/api/auth/bootstrap-admin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        display_name: el.crmBootstrapName.value,
+        email: el.crmBootstrapEmail.value,
+        password: el.crmBootstrapPassword.value,
+      }),
+    });
+
+    state.currentUser = result.user || null;
+    setAuthenticatedUi(true);
+    await bootstrapCrm();
+    setMainView("admin");
+    setStatus(el.crmAuthStatus, "");
+  } catch (error) {
+    setStatus(el.crmAuthStatus, `No se pudo crear el admin: ${error.message}`, "error");
+  } finally {
+    el.crmBootstrapBtn.disabled = false;
+  }
 }
 
 async function createAdminAccount() {
@@ -693,6 +842,9 @@ async function createAdminAccount() {
     plan: el.adminCreatePlan.value,
     status: el.adminCreateStatus.value,
     is_default: el.adminCreateDefault.checked,
+    admin_email: el.adminCreateAdminEmail.value,
+    admin_password: el.adminCreateAdminPassword.value,
+    admin_display_name: el.adminCreateAdminDisplayName.value,
   };
 
   el.adminCreateAccountBtn.disabled = true;
@@ -711,6 +863,9 @@ async function createAdminAccount() {
     el.adminCreatePlan.value = "starter";
     el.adminCreateStatus.value = "trial";
     el.adminCreateDefault.checked = false;
+    el.adminCreateAdminEmail.value = "";
+    el.adminCreateAdminPassword.value = "";
+    el.adminCreateAdminDisplayName.value = "";
 
     await Promise.all([loadAccounts(), loadAdminOverview()]);
     if (data?.account?.id) {
@@ -740,6 +895,33 @@ async function handleAccountChange(nextAccountId) {
 
   renderAccounts();
   await Promise.all([loadLeads(), loadConfig(), loadAdminOverview()]);
+}
+
+async function logoutCrm() {
+  try {
+    await fetchJson(`${window.location.origin}/api/auth/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+  } catch (_error) {
+    // noop
+  }
+
+  state.currentUser = null;
+  state.accounts = [];
+  state.activeAccountId = null;
+  state.adminOverview = [];
+  state.leads = [];
+  state.filteredLeads = [];
+  state.selectedLead = null;
+  state.selectedQuote = null;
+  state.analytics = null;
+  state.appConfig = null;
+  setStoredAccountId("");
+  setAuthenticatedUi(false);
+  const needsBootstrap = await checkBootstrapStatus();
+  setAuthMode(needsBootstrap ? "bootstrap" : "login");
 }
 
 function looksGenericName(value) {
@@ -1949,7 +2131,10 @@ el.crmViewSalesBtn.addEventListener("click", () => setMainView("sales"));
 el.crmViewAdminBtn?.addEventListener("click", () => setMainView("admin"));
 el.crmViewConfigBtn.addEventListener("click", () => setMainView("config"));
 el.adminCreateAccountBtn?.addEventListener("click", createAdminAccount);
+el.logoutBtn?.addEventListener("click", logoutCrm);
 el.configBackBtn?.addEventListener("click", () => setMainView("sales"));
+el.crmLoginForm?.addEventListener("submit", loginCrm);
+el.crmBootstrapForm?.addEventListener("submit", bootstrapAdmin);
 el.crmSalesLinks.forEach((link) =>
   link.addEventListener("click", () => {
     if (window.matchMedia("(max-width: 980px)").matches && el.crmMobileControls) {
@@ -2027,12 +2212,27 @@ async function bootstrapCrm() {
   await Promise.all([loadLeads(), loadConfig(), loadAdminOverview()]);
 }
 
-bootstrapCrm().catch((error) => {
+async function startCrm() {
+  if (el.mobileDateFilter && el.dateFilter) {
+    el.mobileDateFilter.value = el.dateFilter.value;
+  }
+  syncMobileAdaptiveUi();
+
+  const user = await hydrateCurrentUser();
+  if (user) {
+    setAuthenticatedUi(true);
+    await bootstrapCrm();
+    setMainView(getDefaultViewForRole());
+    return;
+  }
+
+  setAuthenticatedUi(false);
+  const needsBootstrap = await checkBootstrapStatus();
+  setAuthMode(needsBootstrap ? "bootstrap" : "login");
+}
+
+startCrm().catch((error) => {
+  setAuthenticatedUi(false);
+  setStatus(el.crmAuthStatus, `No se pudo iniciar el CRM: ${error.message}`, "error");
   el.leadTableBody.innerHTML = `<tr><td colspan="8" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
 });
-
-setMainView("sales");
-if (el.mobileDateFilter && el.dateFilter) {
-  el.mobileDateFilter.value = el.dateFilter.value;
-}
-syncMobileAdaptiveUi();

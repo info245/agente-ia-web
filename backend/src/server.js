@@ -1,7 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -38,6 +37,12 @@ import {
   createAccount,
   updateAccount,
 } from "./lib/accountStore.js";
+import {
+  countCrmUsers,
+  createCrmUser,
+  getCrmUserById,
+  verifyCrmUserCredentials,
+} from "./lib/authStore.js";
 import { uploadBrandLogo } from "./lib/storageStore.js";
 
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
@@ -75,13 +80,21 @@ app.use(
     },
   })
 );
+app.use(attachCrmUser);
 app.use("/crm", express.static(crmPublicDir));
 app.get("/crm", (_req, res) => {
   res.sendFile(path.join(crmPublicDir, "index.html"));
 });
+app.use("/api/crm", requireCrmAuth());
 
 const PORT = process.env.PORT || 3000;
 const BUILD_TAG = "memory-v14-channel-funnel-router";
+const CRM_AUTH_COOKIE = "crm_session";
+const CRM_AUTH_SECRET =
+  process.env.CRM_AUTH_SECRET ||
+  process.env.INTEGRATIONS_SECRET ||
+  "tmedia-dev-auth-secret";
+const CRM_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -126,6 +139,10 @@ function norm(v) {
 }
 
 async function resolveRequestAccount(req) {
+  if (req.crmUser?.role && req.crmUser.role !== "super_admin") {
+    return resolveAccount(req.crmUser.account_id);
+  }
+
   const accountInput =
     req.query?.account_id ||
     req.query?.account_slug ||
@@ -1509,6 +1526,101 @@ function buildValidationResult(status = "pending", message = "", checkedAt = new
   };
 }
 
+function parseCookies(req) {
+  const raw = String(req.headers.cookie || "");
+  return raw.split(";").reduce((acc, chunk) => {
+    const [key, ...rest] = chunk.trim().split("=");
+    if (!key) return acc;
+    acc[key] = decodeURIComponent(rest.join("=") || "");
+    return acc;
+  }, {});
+}
+
+function signSessionToken(payload = {}) {
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", CRM_AUTH_SECRET)
+    .update(encodedPayload)
+    .digest("base64url");
+  return `${encodedPayload}.${signature}`;
+}
+
+function verifySessionToken(token) {
+  const [encodedPayload, signature] = String(token || "").split(".");
+  if (!encodedPayload || !signature) return null;
+
+  const expectedSignature = crypto
+    .createHmac("sha256", CRM_AUTH_SECRET)
+    .update(encodedPayload)
+    .digest("base64url");
+
+  if (signature !== expectedSignature) return null;
+
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+    if (!payload?.exp || Date.now() > Number(payload.exp)) return null;
+    return payload;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function writeSessionCookie(res, token) {
+  const secure = process.env.NODE_ENV === "production";
+  const parts = [
+    `${CRM_AUTH_COOKIE}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${Math.floor(CRM_SESSION_TTL_MS / 1000)}`,
+  ];
+  if (secure) parts.push("Secure");
+  res.setHeader("Set-Cookie", parts.join("; "));
+}
+
+function clearSessionCookie(res) {
+  const secure = process.env.NODE_ENV === "production";
+  const parts = [
+    `${CRM_AUTH_COOKIE}=`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    "Max-Age=0",
+  ];
+  if (secure) parts.push("Secure");
+  res.setHeader("Set-Cookie", parts.join("; "));
+}
+
+async function attachCrmUser(req, _res, next) {
+  try {
+    const token = parseCookies(req)[CRM_AUTH_COOKIE];
+    const session = verifySessionToken(token);
+    if (!session?.user_id) {
+      req.crmUser = null;
+      return next();
+    }
+
+    const user = await getCrmUserById(session.user_id);
+    req.crmUser = user;
+    return next();
+  } catch (_error) {
+    req.crmUser = null;
+    return next();
+  }
+}
+
+function requireCrmAuth(role = null) {
+  return async function crmAuthMiddleware(req, res, next) {
+    if (!req.crmUser) {
+      return res.status(401).json({ ok: false, error: "Auth required" });
+    }
+    if (role && req.crmUser.role !== role) {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+    return next();
+  };
+}
+
 function validateIntegrationConfig(type, config = {}) {
   const checkedAt = new Date().toISOString();
   const integrations = config?.integrations || {};
@@ -2497,7 +2609,106 @@ app.get("/api/crm/analytics", async (req, res) => {
   }
 });
 
-app.get("/api/admin/accounts", async (req, res) => {
+app.get("/api/crm/accounts", async (req, res) => {
+  try {
+    const allAccounts = await listAccounts();
+    const activeAccount = await resolveRequestAccount(req);
+    const accounts =
+      req.crmUser?.role === "super_admin"
+        ? allAccounts
+        : allAccounts.filter((account) => String(account.id) === String(activeAccount.id));
+
+    res.json({ ok: true, accounts, active_account: activeAccount });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/auth/bootstrap-status", async (_req, res) => {
+  try {
+    const userCount = await countCrmUsers();
+    res.json({ ok: true, needs_bootstrap: userCount === 0 });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/auth/bootstrap-admin", async (req, res) => {
+  try {
+    const userCount = await countCrmUsers();
+    if (userCount > 0) {
+      return res.status(400).json({ ok: false, error: "Ya existe al menos un usuario admin." });
+    }
+
+    const user = await createCrmUser({
+      email: req.body?.email,
+      password: req.body?.password,
+      display_name: req.body?.display_name,
+      role: "super_admin",
+      status: "active",
+    });
+
+    const token = signSessionToken({
+      user_id: user.id,
+      role: user.role,
+      exp: Date.now() + CRM_SESSION_TTL_MS,
+    });
+    writeSessionCookie(res, token);
+
+    res.json({ ok: true, user });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const user = await verifyCrmUserCredentials(req.body?.email, req.body?.password);
+    if (!user) {
+      return res.status(401).json({ ok: false, error: "Credenciales invalidas" });
+    }
+
+    const token = signSessionToken({
+      user_id: user.id,
+      role: user.role,
+      exp: Date.now() + CRM_SESSION_TTL_MS,
+    });
+    writeSessionCookie(res, token);
+
+    res.json({ ok: true, user });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/auth/logout", async (_req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+app.get("/api/auth/me", async (req, res) => {
+  try {
+    if (!req.crmUser) {
+      return res.status(401).json({ ok: false, error: "No authenticated user" });
+    }
+
+    const account = req.crmUser.account_id
+      ? await resolveAccount(req.crmUser.account_id)
+      : null;
+
+    res.json({
+      ok: true,
+      user: {
+        ...req.crmUser,
+        account,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) => {
   try {
     const accounts = await listAccounts();
     const activeAccount = await resolveRequestAccount(req);
@@ -2507,16 +2718,30 @@ app.get("/api/admin/accounts", async (req, res) => {
   }
 });
 
-app.post("/api/admin/accounts", async (req, res) => {
+app.post("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) => {
   try {
     const account = await createAccount(req.body || {});
-    res.json({ ok: true, account });
+    const adminEmail = String(req.body?.admin_email || "").trim();
+    const adminPassword = String(req.body?.admin_password || "").trim();
+
+    let clientAdmin = null;
+    if (adminEmail && adminPassword) {
+      clientAdmin = await createCrmUser({
+        email: adminEmail,
+        password: adminPassword,
+        display_name: req.body?.admin_display_name || account.name,
+        role: "client_admin",
+        account_id: account.id,
+        status: "active",
+      });
+    }
+    res.json({ ok: true, account, client_admin: clientAdmin });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
 });
 
-app.patch("/api/admin/accounts/:accountId", async (req, res) => {
+app.patch("/api/admin/accounts/:accountId", requireCrmAuth("super_admin"), async (req, res) => {
   try {
     const account = await updateAccount(req.params.accountId, req.body || {});
     res.json({ ok: true, account });
@@ -2525,7 +2750,7 @@ app.patch("/api/admin/accounts/:accountId", async (req, res) => {
   }
 });
 
-app.get("/api/admin/overview", async (req, res) => {
+app.get("/api/admin/overview", requireCrmAuth("super_admin"), async (req, res) => {
   try {
     const accounts = await listAccounts();
 

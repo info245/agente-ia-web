@@ -48,6 +48,72 @@ textarea {
   gap: 22px;
 }
 
+.is-hidden {
+  display: none !important;
+}
+
+.crm-auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+}
+
+.crm-auth-card {
+  width: min(100%, 520px);
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+  border-radius: 30px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,249,255,0.96));
+  border: 1px solid rgba(191, 208, 234, 0.86);
+  box-shadow: var(--shadow);
+}
+
+.crm-auth-card h1 {
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: -0.04em;
+}
+
+.crm-auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.crm-auth-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.crm-auth-form input {
+  width: 100%;
+  min-height: 52px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(191, 208, 234, 0.86);
+  background: rgba(255,255,255,0.94);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.78);
+}
+
+.crm-auth-form button {
+  border: 0;
+  min-height: 52px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), #8d58ff);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(109, 65, 243, 0.18);
+}
+
 .crm-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
@@ -2210,6 +2276,19 @@ textarea {
 }
 
 @media (max-width: 640px) {
+  .crm-auth-shell {
+    padding: 16px;
+  }
+
+  .crm-auth-card {
+    padding: 22px 18px;
+    border-radius: 24px;
+  }
+
+  .crm-auth-card h1 {
+    font-size: 1.55rem;
+  }
+
   .crm-page {
     padding: 12px;
     gap: 14px;
