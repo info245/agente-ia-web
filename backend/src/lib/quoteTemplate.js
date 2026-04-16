@@ -19,6 +19,7 @@ export function renderQuotePreviewHtml({
   lead = {},
   quote = {},
   logoUrl = "",
+  brandName = "TMedia Global",
   autoPrint = false,
   acceptUrl = "",
   rejectUrl = "",
@@ -574,8 +575,8 @@ export function renderQuotePreviewHtml({
     <header class="hero">
       <div class="brand">
         <div class="brand-box">
-          ${logoUrl ? `<img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="TMedia Global" />` : ""}
-          <div class="eyebrow">TMedia Global</div>
+          ${logoUrl ? `<img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(brandName)}" />` : ""}
+          <div class="eyebrow">${escapeHtml(brandName)}</div>
           <h1>${escapeHtml(quote?.title || "Propuesta comercial")}</h1>
           <div class="copy">${escapeHtml(content.summary || "Propuesta personalizada preparada a partir de la informacion recogida en el CRM.")}</div>
         </div>
@@ -681,7 +682,7 @@ export function renderQuotePreviewHtml({
     </section>` : ""}
 
     <section class="section footer">
-      Esta propuesta ha sido generada desde el CRM interno de TMedia Global y puede editarse antes de su envio definitivo por email o WhatsApp.
+      Esta propuesta ha sido generada desde el CRM interno de ${escapeHtml(brandName)} y puede editarse antes de su envio definitivo por email o WhatsApp.
     </section>
   </article>
   ${autoPrint ? `
@@ -698,6 +699,7 @@ export function renderQuoteResponseHtml({
   action = "",
   lead = {},
   quote = {},
+  brandName = "TMedia Global",
   humanAgentUrl = "",
   redirectUrl = "",
 } = {}) {
@@ -842,7 +844,7 @@ export function renderQuoteResponseHtml({
 <body>
   <article class="card">
     <header class="hero">
-      <div class="eyebrow">TMedia Global</div>
+      <div class="eyebrow">${escapeHtml(brandName)}</div>
       <h1>${escapeHtml(title)}</h1>
       <p>${escapeHtml(subtitle)}</p>
     </header>

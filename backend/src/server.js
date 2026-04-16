@@ -31,6 +31,7 @@ import { mergeLeadData } from "./lib/leadMerge.js";
 
 import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
+import { getAppConfig, saveAppConfig } from "./lib/appConfigStore.js";
 
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
 import { getServiceFacts } from "./lib/websiteFacts.js";
@@ -713,8 +714,11 @@ function buildWhatsAppHandoff({
   lead,
   analysisSnapshot,
   handoffCode,
+  appConfig = null,
 }) {
-  const publicNumber = String(WHATSAPP_PUBLIC_NUMBER || "").replace(/\D/g, "");
+  const publicNumber = String(
+    appConfig?.contact?.public_whatsapp_number || WHATSAPP_PUBLIC_NUMBER || ""
+  ).replace(/\D/g, "");
   if (!publicNumber || !conversationId || !handoffCode) return null;
 
   const intro = "Hola, vengo desde el chat web y quiero seguir por aquí.";
@@ -726,7 +730,9 @@ function buildWhatsAppHandoff({
     whatsapp_url: whatsappUrl,
     handoff_code: handoffCode,
     prefill_text: intro,
-    label: "Continuar en WhatsApp",
+    label:
+      String(appConfig?.agent?.final_cta_label || "").trim() ||
+      "Continuar en WhatsApp",
   };
 }
 
@@ -1362,8 +1368,10 @@ function normalizeLeadPhoneForWhatsApp(lead = {}) {
   return fromPhone;
 }
 
-function buildHumanAgentWhatsAppUrl(service = "") {
-  const humanNumber = "34614149270";
+function buildHumanAgentWhatsAppUrl(service = "", appConfig = null) {
+  const humanNumber = String(
+    appConfig?.contact?.human_agent_whatsapp_number || "34614149270"
+  ).replace(/\D/g, "");
   const text = [
     `Hola, vengo de la propuesta${service ? ` de ${service}` : ""}.`,
     "Quiero hablar con un agente humano.",
@@ -1909,6 +1917,7 @@ async function processIncomingMessage({
   console.log("--------------------");
 
   let reply = null;
+  const appConfig = await getAppConfig().catch(() => null);
   const conversationMode = getConversationMode({
     channel: channel || "web",
     currentAnalysis: analysisSnapshot,
@@ -1929,6 +1938,7 @@ async function processIncomingMessage({
             lead: leadAfter || {},
             analysisSnapshot,
             handoffCode,
+            appConfig,
           });
         })()
       : null;
@@ -1952,7 +1962,7 @@ async function processIncomingMessage({
   }
 
   if (!reply) {
-    const serviceFacts = getServiceFacts(leadAfter.interest_service);
+    const serviceFacts = getServiceFacts(leadAfter.interest_service, appConfig);
 
     let factsBlock = "";
 
@@ -2017,7 +2027,7 @@ ${d.chunk}
     });
 
     const systemPrompt = `
-${getAgentSystemPrompt()}
+${getAgentSystemPrompt(appConfig)}
 
 REGLAS IMPORTANTES
 
@@ -2333,6 +2343,24 @@ app.get("/api/crm/analytics", async (req, res) => {
   }
 });
 
+app.get("/api/crm/config", async (_req, res) => {
+  try {
+    const config = await getAppConfig();
+    res.json({ ok: true, config });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/config", async (req, res) => {
+  try {
+    const config = await saveAppConfig(req.body || {});
+    res.json({ ok: true, config });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
   try {
     const messages = await getConversationMessages(req.params.conversationId, 200);
@@ -2367,7 +2395,8 @@ app.get("/api/crm/leads/:leadId/quote", async (req, res) => {
 app.get("/api/crm/service-facts/:serviceName", async (req, res) => {
   try {
     const serviceName = decodeURIComponent(req.params.serviceName || "");
-    const facts = getServiceFacts(serviceName);
+    const appConfig = await getAppConfig();
+    const facts = getServiceFacts(serviceName, appConfig);
     res.json({ ok: true, facts: facts || null });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -2376,6 +2405,7 @@ app.get("/api/crm/service-facts/:serviceName", async (req, res) => {
 
 app.get("/crm/quotes/:leadId/preview", async (req, res) => {
   try {
+    const appConfig = await getAppConfig();
     const leads = await listCrmLeads(500);
     const lead =
       leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
@@ -2416,11 +2446,18 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
           action: "human",
           token: responseToken,
         })
-      : buildHumanAgentWhatsAppUrl(lead?.interest_service || "");
+      : buildHumanAgentWhatsAppUrl(lead?.interest_service || "", appConfig);
+    const configuredLogoUrl = String(appConfig?.brand?.logo_url || "").trim();
+    const resolvedLogoUrl = configuredLogoUrl
+      ? configuredLogoUrl.startsWith("http")
+        ? configuredLogoUrl
+        : `${baseUrl}${configuredLogoUrl.startsWith("/") ? "" : "/"}${configuredLogoUrl}`
+      : `${baseUrl}/crm/assets/tmedia-global-logo.png`;
     const html = renderQuotePreviewHtml({
       lead,
       quote,
-      logoUrl: `${baseUrl}/crm/assets/tmedia-global-logo.png`,
+      logoUrl: resolvedLogoUrl,
+      brandName: appConfig?.brand?.name || "TMedia Global",
       autoPrint: req.query.print === "1",
       acceptUrl,
       rejectUrl,
@@ -2435,6 +2472,7 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
 
 app.get("/crm/quotes/:leadId/respond", async (req, res) => {
   try {
+    const appConfig = await getAppConfig();
     const action = String(req.query.action || "").trim().toLowerCase();
     if (!["accept", "reject", "human"].includes(action)) {
       return res.status(400).send("Accion no valida");
@@ -2465,7 +2503,10 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
       return res.status(403).send("Token de propuesta no valido");
     }
 
-    const humanAgentUrl = buildHumanAgentWhatsAppUrl(lead?.interest_service || "");
+    const humanAgentUrl = buildHumanAgentWhatsAppUrl(
+      lead?.interest_service || "",
+      appConfig
+    );
     const previewUrl = `${req.protocol}://${req.get("host")}/crm/quotes/${lead.id}/preview`;
 
     if (action === "human") {
@@ -2510,6 +2551,7 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
       action: response.action,
       lead: updatedLead,
       quote: response.quote,
+      brandName: appConfig?.brand?.name || "TMedia Global",
       humanAgentUrl,
       redirectUrl: previewUrl,
     });
@@ -2576,6 +2618,7 @@ app.post("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
 
 app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
   try {
+    const appConfig = await getAppConfig();
     const leads = await listCrmLeads(500);
     const lead =
       leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
@@ -2611,7 +2654,10 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
 
     if (via === "whatsapp") {
       const phone = normalizeLeadPhoneForWhatsApp(lead);
-      const humanAgentUrl = buildHumanAgentWhatsAppUrl(lead?.interest_service || "");
+      const humanAgentUrl = buildHumanAgentWhatsAppUrl(
+        lead?.interest_service || "",
+        appConfig
+      );
       console.log("crm quote whatsapp target", {
         leadId: lead.id,
         phone,

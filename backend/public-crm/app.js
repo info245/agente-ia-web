@@ -6,6 +6,7 @@ const state = {
   leadPage: 0,
   quoteItems: [],
   analytics: null,
+  appConfig: null,
 };
 
 const LEAD_PAGE_SIZE = 15;
@@ -13,6 +14,22 @@ const API_BASE = `${window.location.origin}/api/crm`;
 
 const el = {
   refreshBtn: document.getElementById("refreshBtn"),
+  configForm: document.getElementById("configForm"),
+  configSaveBtn: document.getElementById("configSaveBtn"),
+  configSaveStatus: document.getElementById("configSaveStatus"),
+  configBrandName: document.getElementById("configBrandName"),
+  configWebsiteUrl: document.getElementById("configWebsiteUrl"),
+  configLogoUrl: document.getElementById("configLogoUrl"),
+  configPublicWhatsappNumber: document.getElementById("configPublicWhatsappNumber"),
+  configHumanWhatsappNumber: document.getElementById("configHumanWhatsappNumber"),
+  configSupportEmail: document.getElementById("configSupportEmail"),
+  configAgentTone: document.getElementById("configAgentTone"),
+  configFinalCtaLabel: document.getElementById("configFinalCtaLabel"),
+  configHandoffTargetChannel: document.getElementById("configHandoffTargetChannel"),
+  configPrimaryColor: document.getElementById("configPrimaryColor"),
+  configAccentColor: document.getElementById("configAccentColor"),
+  configPromptAdditions: document.getElementById("configPromptAdditions"),
+  configServicesJson: document.getElementById("configServicesJson"),
   dateFilter: document.getElementById("dateFilter"),
   sourceFilter: document.getElementById("sourceFilter"),
   leadTitle: document.getElementById("leadTitle"),
@@ -90,6 +107,14 @@ function fmtMoney(value, currency = "EUR") {
     style: "currency",
     currency: currency || "EUR",
   }).format(amount);
+}
+
+function prettyJson(value) {
+  try {
+    return JSON.stringify(value || {}, null, 2);
+  } catch (_error) {
+    return "{}";
+  }
 }
 
 function getDateFilterLabel(value) {
@@ -421,6 +446,27 @@ function renderAnalytics() {
   renderTimeline(analytics?.timeline || []);
 }
 
+function renderConfig() {
+  const config = state.appConfig || {};
+
+  el.configBrandName.value = config?.brand?.name || "";
+  el.configWebsiteUrl.value = config?.brand?.website_url || "";
+  el.configLogoUrl.value = config?.brand?.logo_url || "";
+  el.configPrimaryColor.value = config?.brand?.primary_color || "";
+  el.configAccentColor.value = config?.brand?.accent_color || "";
+  el.configPublicWhatsappNumber.value =
+    config?.contact?.public_whatsapp_number || "";
+  el.configHumanWhatsappNumber.value =
+    config?.contact?.human_agent_whatsapp_number || "";
+  el.configSupportEmail.value = config?.contact?.support_email || "";
+  el.configAgentTone.value = config?.agent?.tone || "";
+  el.configFinalCtaLabel.value = config?.agent?.final_cta_label || "";
+  el.configHandoffTargetChannel.value =
+    config?.agent?.handoff_target_channel || "whatsapp";
+  el.configPromptAdditions.value = config?.agent?.prompt_additions || "";
+  el.configServicesJson.value = prettyJson(config?.services || {});
+}
+
 function renderMessages(messages = []) {
   el.messageList.innerHTML = "";
 
@@ -513,6 +559,12 @@ async function loadLeads() {
   }
 }
 
+async function loadConfig() {
+  const data = await fetchJson(`${API_BASE}/config`);
+  state.appConfig = data.config || null;
+  renderConfig();
+}
+
 async function loadAnalytics() {
   const params = new URLSearchParams({
     channel: el.sourceFilter.value || "all",
@@ -548,6 +600,58 @@ async function selectLead(leadId) {
     await loadQuote(state.selectedLead.id);
   } else {
     renderQuote(null);
+  }
+}
+
+async function saveConfig() {
+  el.configSaveBtn.disabled = true;
+  el.configSaveBtn.classList.add("is-busy");
+  setStatus(el.configSaveStatus, "Guardando configuracion...");
+
+  try {
+    let services = {};
+    try {
+      services = JSON.parse(el.configServicesJson.value || "{}");
+    } catch (_error) {
+      throw new Error("El bloque de servicios no es un JSON valido");
+    }
+
+    const payload = {
+      brand: {
+        name: el.configBrandName.value,
+        website_url: el.configWebsiteUrl.value,
+        logo_url: el.configLogoUrl.value,
+        primary_color: el.configPrimaryColor.value,
+        accent_color: el.configAccentColor.value,
+      },
+      contact: {
+        public_whatsapp_number: el.configPublicWhatsappNumber.value,
+        human_agent_whatsapp_number: el.configHumanWhatsappNumber.value,
+        support_email: el.configSupportEmail.value,
+      },
+      agent: {
+        tone: el.configAgentTone.value,
+        final_cta_label: el.configFinalCtaLabel.value,
+        handoff_target_channel: el.configHandoffTargetChannel.value,
+        prompt_additions: el.configPromptAdditions.value,
+      },
+      services,
+    };
+
+    const data = await fetchJson(`${API_BASE}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    state.appConfig = data.config || null;
+    renderConfig();
+    setStatus(el.configSaveStatus, "Configuracion guardada.", "ok");
+  } catch (error) {
+    setStatus(el.configSaveStatus, `No se pudo guardar: ${error.message}`, "error");
+  } finally {
+    el.configSaveBtn.disabled = false;
+    el.configSaveBtn.classList.remove("is-busy");
   }
 }
 
@@ -901,6 +1005,7 @@ async function sendQuote(via) {
 
 el.saveBtn.addEventListener("click", saveLead);
 el.refreshBtn.addEventListener("click", loadLeads);
+el.configSaveBtn.addEventListener("click", saveConfig);
 el.dateFilter.addEventListener("change", () => {
   state.leadPage = 0;
   renderLeadTable();
@@ -954,6 +1059,6 @@ el.quoteBillingType.addEventListener("change", () => {
   }
 });
 
-loadLeads().catch((error) => {
+Promise.all([loadLeads(), loadConfig()]).catch((error) => {
   el.leadTableBody.innerHTML = `<tr><td colspan="8" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
 });

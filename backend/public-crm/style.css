@@ -352,6 +352,26 @@ textarea {
     linear-gradient(180deg, rgba(248, 251, 255, 0.95), rgba(240, 246, 255, 0.95));
 }
 
+.crm-config-card {
+  background:
+    linear-gradient(180deg, rgba(248, 251, 255, 0.95), rgba(242, 247, 255, 0.94));
+}
+
+.config-form {
+  display: grid;
+  gap: 12px;
+}
+
+.config-form textarea {
+  min-height: 160px;
+}
+
+#configServicesJson {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 .crm-section-copy {
   margin: 6px 0 0;
   color: var(--muted);
