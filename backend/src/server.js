@@ -32,6 +32,8 @@ import { mergeLeadData } from "./lib/leadMerge.js";
 import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 import { getAppConfig, saveAppConfig } from "./lib/appConfigStore.js";
+import { listAccounts, resolveAccount } from "./lib/accountStore.js";
+import { uploadBrandLogo } from "./lib/storageStore.js";
 
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
 import { getServiceFacts } from "./lib/websiteFacts.js";
@@ -62,7 +64,7 @@ app.use(cors());
 app.options("*", cors());
 app.use(
   express.json({
-    limit: "1mb",
+    limit: "5mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -116,6 +118,17 @@ function hasProcessedWhatsAppMessage(messageId) {
 
 function norm(v) {
   return String(v || "").trim();
+}
+
+async function resolveRequestAccount(req) {
+  const accountInput =
+    req.query?.account_id ||
+    req.query?.account_slug ||
+    req.body?.account_id ||
+    req.body?.account_slug ||
+    null;
+
+  return resolveAccount(accountInput);
 }
 
 function getLogoDataUrl() {
@@ -1661,6 +1674,7 @@ async function processIncomingMessage({
   conversation_id,
   external_user_id,
   channel,
+  account_id = null,
 }) {
   if (!text || typeof text !== "string") {
     throw new Error("El campo 'text' es obligatorio y debe ser texto.");
@@ -1676,18 +1690,27 @@ async function processIncomingMessage({
 
   let currentConversationId = conversation_id;
   let createdConversation = false;
+  const scopedAccountId = String(account_id || "").trim() || null;
+  const loadLeadForConversation = () =>
+    getLeadByConversationId(currentConversationId, { accountId: scopedAccountId });
+  const trackEventScoped = (params = {}) =>
+    trackConversationEvent({
+      ...params,
+      account_id: scopedAccountId,
+    });
 
   if (!currentConversationId) {
     const conversation = await createConversation({
       channel: channel || "web",
       external_user_id: external_user_id || null,
+      account_id: scopedAccountId,
     });
     currentConversationId = conversation.id;
     createdConversation = true;
   }
 
   if (createdConversation) {
-    await trackConversationEvent({
+    await trackEventScoped({
       conversation_id: currentConversationId,
       event_type: "conversation_started",
       channel: channel || "web",
@@ -1702,9 +1725,10 @@ async function processIncomingMessage({
     conversation_id: currentConversationId,
     role: "user",
     content: userText,
+    account_id: scopedAccountId,
   });
 
-  await trackConversationEvent({
+  await trackEventScoped({
     conversation_id: currentConversationId,
     event_type: "message_received",
     channel: channel || "web",
@@ -1717,7 +1741,7 @@ async function processIncomingMessage({
   });
 
   const history = await getConversationMessages(currentConversationId, 30);
-  const leadBefore = await getLeadByConversationId(currentConversationId);
+  const leadBefore = await loadLeadForConversation();
   const leadSignatureBefore = buildLeadSignature(leadBefore || {});
   const whatsappPhone =
     channel === "whatsapp"
@@ -1788,7 +1812,7 @@ async function processIncomingMessage({
     last_question: leadBefore?.last_question ?? null,
   });
 
-  let leadAfter = await getLeadByConversationId(currentConversationId);
+  let leadAfter = await loadLeadForConversation();
 
   if (!isLikelyValidName(leadAfter?.name) && leadAfter?.name) {
     await upsertLeadFromConversation({
@@ -1797,7 +1821,7 @@ async function processIncomingMessage({
       name: null,
     });
 
-    leadAfter = await getLeadByConversationId(currentConversationId);
+    leadAfter = await loadLeadForConversation();
   }
 
   let relatedWebLead = null;
@@ -1812,7 +1836,8 @@ async function processIncomingMessage({
 
         if (handoffEvent?.conversation_id) {
           relatedWebLead = await getLeadByConversationId(
-            handoffEvent.conversation_id
+            handoffEvent.conversation_id,
+            { accountId: scopedAccountId }
           );
           handoffContext.payload = handoffEvent.payload || null;
         }
@@ -1822,6 +1847,7 @@ async function processIncomingMessage({
         relatedWebLead = await findLatestWebLeadByContact({
           email: leadAfter?.email,
           phone: whatsappPhone || leadAfter?.phone,
+          accountId: scopedAccountId,
         });
       }
 
@@ -1833,7 +1859,7 @@ async function processIncomingMessage({
       }
 
       if (handoffContext?.code && relatedWebLead?.conversation_id) {
-        await trackConversationEvent({
+        await trackEventScoped({
           conversation_id: currentConversationId,
           event_type: "channel_handoff",
           channel: channel || "whatsapp",
@@ -1893,7 +1919,7 @@ async function processIncomingMessage({
       last_question: leadAfter?.last_question ?? relatedWebLead?.last_question ?? null,
     });
 
-    leadAfter = await getLeadByConversationId(currentConversationId);
+    leadAfter = await loadLeadForConversation();
   }
 
   const currentAnalysisEvent =
@@ -1917,7 +1943,7 @@ async function processIncomingMessage({
       const newSnapshot = await runLightSiteAnalysis(detectedUrl);
       if (newSnapshot) {
         analysisSnapshot = newSnapshot;
-        await trackConversationEvent({
+        await trackEventScoped({
           conversation_id: currentConversationId,
           event_type: "analysis_snapshot",
           channel: channel || "web",
@@ -1947,7 +1973,7 @@ async function processIncomingMessage({
       conversation_id: currentConversationId,
     });
 
-    leadAfter = await getLeadByConversationId(currentConversationId);
+    leadAfter = await loadLeadForConversation();
   } else {
     const currentStep = getCurrentStep(leadAfter || {});
     const currentQuestion =
@@ -1962,7 +1988,7 @@ async function processIncomingMessage({
       last_question: currentQuestion,
     });
 
-    leadAfter = await getLeadByConversationId(currentConversationId);
+    leadAfter = await loadLeadForConversation();
   }
 
   console.log("---- LEAD DEBUG ----");
@@ -1979,7 +2005,7 @@ async function processIncomingMessage({
   console.log("--------------------");
 
   let reply = null;
-  const appConfig = await getAppConfig().catch(() => null);
+  const appConfig = await getAppConfig({ accountId: scopedAccountId }).catch(() => null);
   const conversationMode = getConversationMode({
     channel: channel || "web",
     currentAnalysis: analysisSnapshot,
@@ -2176,9 +2202,10 @@ ${ragContext}
     conversation_id: currentConversationId,
     role: "assistant",
     content: reply,
+    account_id: scopedAccountId,
   });
 
-  await trackConversationEvent({
+  await trackEventScoped({
     conversation_id: currentConversationId,
     event_type: "message_sent",
     channel: channel || "web",
@@ -2189,11 +2216,11 @@ ${ragContext}
     },
   });
 
-  leadAfter = await getLeadByConversationId(currentConversationId);
+    leadAfter = await loadLeadForConversation();
   const leadSignatureAfter = buildLeadSignature(leadAfter || {});
 
   if (leadSignatureBefore !== leadSignatureAfter) {
-    await trackConversationEvent({
+    await trackEventScoped({
       conversation_id: currentConversationId,
       event_type: "lead_updated",
       channel: channel || "web",
@@ -2228,7 +2255,7 @@ ${ragContext}
           summary: finalSummary,
         });
 
-        leadAfter = await getLeadByConversationId(currentConversationId);
+        leadAfter = await loadLeadForConversation();
       }
     } catch (e) {
       console.log("final summary error", e.message);
@@ -2236,7 +2263,7 @@ ${ragContext}
   }
 
   if (chatCompleted) {
-    await trackConversationEvent({
+    await trackEventScoped({
       conversation_id: currentConversationId,
       event_type: "chat_completed",
       channel: channel || "web",
@@ -2249,7 +2276,7 @@ ${ragContext}
   }
 
   try {
-    const latestLead = await getLeadByConversationId(currentConversationId);
+    const latestLead = await loadLeadForConversation();
     const signature = buildLeadSignature(latestLead);
     const previousSignature = lastLeadEmailSent.get(currentConversationId);
 
@@ -2268,7 +2295,7 @@ ${ragContext}
   }
 
   try {
-    const latestLead = await getLeadByConversationId(currentConversationId);
+    const latestLead = await loadLeadForConversation();
 
     if (
       latestLead?.email &&
@@ -2287,7 +2314,7 @@ ${ragContext}
   }
 
   if (handoffCandidate?.handoff_code) {
-    await trackConversationEvent({
+    await trackEventScoped({
       conversation_id: currentConversationId,
       event_type: "channel_handoff_offer",
       channel: channel || "web",
@@ -2347,7 +2374,10 @@ app.get("/debug/extract", async (req, res) => {
 
 app.get("/debug/lead/:conversationId", async (req, res) => {
   try {
-    const lead = await getLeadByConversationId(req.params.conversationId);
+    const account = await resolveRequestAccount(req);
+    const lead = await getLeadByConversationId(req.params.conversationId, {
+      accountId: account.id,
+    });
     res.json({
       ok: true,
       build: BUILD_TAG,
@@ -2363,7 +2393,8 @@ app.get("/debug/lead/:conversationId", async (req, res) => {
 
 app.get("/api/crm/leads", async (req, res) => {
   try {
-    const leads = await listCrmLeads(200);
+    const account = await resolveRequestAccount(req);
+    const leads = await listCrmLeads({ limit: 200, accountId: account.id });
 
     const enriched = await Promise.all(
       leads.map(async (lead) => {
@@ -2393,7 +2424,9 @@ app.get("/api/crm/leads", async (req, res) => {
 
 app.get("/api/crm/analytics", async (req, res) => {
   try {
+    const account = await resolveRequestAccount(req);
     const analytics = await getCrmAnalytics({
+      accountId: account.id,
       channel: req.query.channel || "all",
       dateRange: req.query.date_range || "all",
       service: req.query.service || "all",
@@ -2406,10 +2439,21 @@ app.get("/api/crm/analytics", async (req, res) => {
   }
 });
 
+app.get("/api/admin/accounts", async (req, res) => {
+  try {
+    const accounts = await listAccounts();
+    const activeAccount = await resolveRequestAccount(req);
+    res.json({ ok: true, accounts, active_account: activeAccount });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/api/crm/config", async (_req, res) => {
   try {
-    const config = await getAppConfig();
-    res.json({ ok: true, config });
+    const account = await resolveRequestAccount(_req);
+    const config = await getAppConfig({ accountId: account.id });
+    res.json({ ok: true, config, account });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -2417,9 +2461,15 @@ app.get("/api/crm/config", async (_req, res) => {
 
 app.get("/api/widget/config", async (req, res) => {
   try {
-    const config = await getAppConfig();
+    const account = await resolveRequestAccount(req);
+    const config = await getAppConfig({ accountId: account.id });
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const publicConfig = {
+      account: {
+        id: account.id,
+        slug: account.slug,
+        name: account.name,
+      },
       brand: {
         name: config?.brand?.name || "Agente IA",
         logo_url: resolvePublicAssetUrl(baseUrl, config?.brand?.logo_url),
@@ -2442,8 +2492,46 @@ app.get("/api/widget/config", async (req, res) => {
 
 app.post("/api/crm/config", async (req, res) => {
   try {
-    const config = await saveAppConfig(req.body || {});
-    res.json({ ok: true, config });
+    const account = await resolveRequestAccount(req);
+    const config = await saveAppConfig(req.body || {}, { accountId: account.id });
+    res.json({ ok: true, config, account });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/assets/logo", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const fileName = String(req.body?.file_name || "logo").trim();
+    const contentType = String(req.body?.content_type || "").trim();
+    const rawData = String(req.body?.data_url || req.body?.data_base64 || "").trim();
+
+    if (!rawData) {
+      return res.status(400).json({ ok: false, error: "Falta la imagen del logo." });
+    }
+
+    const base64Payload = rawData.includes(",")
+      ? rawData.split(",").slice(1).join(",")
+      : rawData;
+
+    const uploaded = await uploadBrandLogo({
+      accountId: account.id,
+      brandName: req.body?.brand_name || account.name,
+      fileName,
+      contentType,
+      dataBase64: base64Payload,
+    });
+
+    res.json({
+      ok: true,
+      asset: {
+        bucket: uploaded.bucket,
+        path: uploaded.path,
+        public_url: uploaded.publicUrl,
+      },
+      account,
+    });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -2451,12 +2539,13 @@ app.post("/api/crm/config", async (req, res) => {
 
 app.post("/api/crm/config/bootstrap-site", async (req, res) => {
   try {
+    const account = await resolveRequestAccount(req);
     const websiteUrl = String(req.body?.website_url || "").trim();
     if (!websiteUrl) {
       return res.status(400).json({ ok: false, error: "website_url es obligatorio" });
     }
 
-    const currentConfig = await getAppConfig();
+    const currentConfig = await getAppConfig({ accountId: account.id });
     const snapshot = await runLightSiteAnalysis(websiteUrl);
 
     if (!snapshot) {
@@ -2492,8 +2581,11 @@ app.post("/api/crm/config/bootstrap-site", async (req, res) => {
 
 app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
   try {
+    const account = await resolveRequestAccount(req);
     const messages = await getConversationMessages(req.params.conversationId, 200);
-    const lead = await getLeadByConversationId(req.params.conversationId);
+    const lead = await getLeadByConversationId(req.params.conversationId, {
+      accountId: account.id,
+    });
     res.json({ ok: true, messages, lead });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -2523,19 +2615,21 @@ app.get("/api/crm/leads/:leadId/quote", async (req, res) => {
 
 app.get("/api/crm/service-facts/:serviceName", async (req, res) => {
   try {
-    const serviceName = decodeURIComponent(req.params.serviceName || "");
-    const appConfig = await getAppConfig();
-    const facts = getServiceFacts(serviceName, appConfig);
-    res.json({ ok: true, facts: facts || null });
-  } catch (error) {
-    res.status(500).json({ ok: false, error: error.message });
-  }
-});
+      const serviceName = decodeURIComponent(req.params.serviceName || "");
+      const account = await resolveRequestAccount(req);
+      const appConfig = await getAppConfig({ accountId: account.id });
+      const facts = getServiceFacts(serviceName, appConfig);
+      res.json({ ok: true, facts: facts || null });
+    } catch (error) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
 
 app.get("/crm/quotes/:leadId/preview", async (req, res) => {
   try {
-    const appConfig = await getAppConfig();
-    const leads = await listCrmLeads(500);
+    const account = await resolveRequestAccount(req);
+      const appConfig = await getAppConfig({ accountId: account.id });
+      const leads = await listCrmLeads({ limit: 500, accountId: account.id });
     const lead =
       leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
 
@@ -2601,13 +2695,14 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
 
 app.get("/crm/quotes/:leadId/respond", async (req, res) => {
   try {
-    const appConfig = await getAppConfig();
+    const account = await resolveRequestAccount(req);
+    const appConfig = await getAppConfig({ accountId: account.id });
     const action = String(req.query.action || "").trim().toLowerCase();
     if (!["accept", "reject", "human"].includes(action)) {
       return res.status(400).send("Accion no valida");
     }
 
-    const leads = await listCrmLeads(500);
+    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
     const lead =
       leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
 
@@ -2695,7 +2790,8 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
 
 app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
   try {
-    const leads = await listCrmLeads(500);
+    const account = await resolveRequestAccount(req);
+    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
     const lead =
       leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
 
@@ -2727,7 +2823,8 @@ app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
 
 async function handleCrmQuoteUpsert(req, res) {
   try {
-    const leads = await listCrmLeads(500);
+      const account = await resolveRequestAccount(req);
+      const leads = await listCrmLeads({ limit: 500, accountId: account.id });
     const lead =
       leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
 
@@ -2747,8 +2844,9 @@ app.post("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
 
 app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
   try {
-    const appConfig = await getAppConfig();
-    const leads = await listCrmLeads(500);
+      const account = await resolveRequestAccount(req);
+      const appConfig = await getAppConfig({ accountId: account.id });
+      const leads = await listCrmLeads({ limit: 500, accountId: account.id });
     const lead =
       leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
 
@@ -2821,6 +2919,7 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
 
 app.post("/messages", async (req, res) => {
   try {
+    const account = await resolveRequestAccount(req);
     const { text, conversation_id, external_user_id, channel } = req.body || {};
 
     const result = await processIncomingMessage({
@@ -2828,6 +2927,7 @@ app.post("/messages", async (req, res) => {
       conversation_id,
       external_user_id,
       channel,
+      account_id: account.id,
     });
 
     res.json(result);
@@ -2847,6 +2947,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       return res.status(401).json({ ok: false, error: "Unauthorized integration request" });
     }
 
+    const account = await resolveRequestAccount(req);
     const payload = req.body || {};
     const sourcePlatform = norm(payload.source_platform || payload.platform || "external_form");
     const sourceCampaign = norm(payload.source_campaign || payload.campaign || "");
@@ -2860,6 +2961,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
     const conversation = await createConversation({
       channel: "lead_form",
       external_user_id: norm(payload.external_user_id || `${sourcePlatform}:${Date.now()}`),
+      account_id: account.id,
     });
 
     const leadPayload = {
@@ -2899,6 +3001,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       source_form_name: sourceFormName,
       source_ad_name: sourceAdName,
       source_adset_name: sourceAdsetName,
+      account_id: account.id,
     };
 
     const lead = await upsertLeadFromConversation(leadPayload);
@@ -2924,6 +3027,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       event_type: "conversation_started",
       channel: "lead_form",
       external_user_id: conversation.external_user_id,
+      account_id: account.id,
       payload: {
         source_platform: sourcePlatform,
         source_campaign: sourceCampaign,
@@ -2936,6 +3040,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       event_type: "external_lead_imported",
       channel: "lead_form",
       external_user_id: conversation.external_user_id,
+      account_id: account.id,
       payload: {
         source_platform: sourcePlatform,
         source_campaign: sourceCampaign,
@@ -2950,6 +3055,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       conversation_id: conversation.id,
       role: "tool",
       content: `Lead importado desde ${sourcePlatform}${sourceCampaign ? ` | ${sourceCampaign}` : ""}. ${leadPayload.summary}`,
+      account_id: account.id,
     });
 
     if (payload.notify_internal !== false) {
@@ -2991,12 +3097,14 @@ app.post("/api/integrations/external-lead", async (req, res) => {
           conversation_id: conversation.id,
           role: "assistant",
           content: introMessage,
+          account_id: account.id,
         });
         await trackConversationEvent({
           conversation_id: conversation.id,
           event_type: "external_lead_autostart",
           channel: "whatsapp",
           external_user_id: phone,
+          account_id: account.id,
           payload: {
             via: "whatsapp",
             source_platform: sourcePlatform,
@@ -3019,6 +3127,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         event_type: "external_lead_autostart",
         channel: "email",
         external_user_id: lead.email || payload.email || null,
+        account_id: account.id,
         payload: {
           via: "email",
           source_platform: sourcePlatform,
@@ -3084,6 +3193,7 @@ app.post("/tasks/whatsapp-followups", async (req, res) => {
         event_type: "whatsapp_followup_sent",
         channel: "whatsapp",
         external_user_id: lead?.conversations?.external_user_id || phone,
+        account_id: lead?.account_id || null,
         payload: {
           hours_since_last_assistant_message: Math.round((now - lastMessageAt) / 3600000),
           phone,
@@ -3095,6 +3205,7 @@ app.post("/tasks/whatsapp-followups", async (req, res) => {
         conversation_id: conversationId,
         role: "assistant",
         content: reminderText,
+        account_id: lead?.account_id || null,
       });
 
       processed.push({

@@ -1,4 +1,6 @@
 const state = {
+  accounts: [],
+  activeAccountId: null,
   leads: [],
   filteredLeads: [],
   selectedLead: null,
@@ -11,9 +13,12 @@ const state = {
 
 const LEAD_PAGE_SIZE = 15;
 const API_BASE = `${window.location.origin}/api/crm`;
+const ACCOUNT_STORAGE_KEY = "crmActiveAccountId";
 
 const el = {
   crmSidebar: document.querySelector(".crm-sidebar"),
+  accountSelect: document.getElementById("accountSelect"),
+  accountPlanBadge: document.getElementById("accountPlanBadge"),
   refreshBtn: document.getElementById("refreshBtn"),
   crmViewSalesBtn: document.getElementById("crmViewSalesBtn"),
   crmViewConfigBtn: document.getElementById("crmViewConfigBtn"),
@@ -157,6 +162,46 @@ function fmtMoney(value, currency = "EUR") {
     style: "currency",
     currency: currency || "EUR",
   }).format(amount);
+}
+
+function getStoredAccountId() {
+  try {
+    return window.localStorage.getItem(ACCOUNT_STORAGE_KEY) || "";
+  } catch (_error) {
+    return "";
+  }
+}
+
+function setStoredAccountId(value) {
+  try {
+    if (value) {
+      window.localStorage.setItem(ACCOUNT_STORAGE_KEY, value);
+    } else {
+      window.localStorage.removeItem(ACCOUNT_STORAGE_KEY);
+    }
+  } catch (_error) {
+    // noop
+  }
+}
+
+function getRequestedAccountId() {
+  const url = new URL(window.location.href);
+  return (
+    String(url.searchParams.get("account_id") || "").trim() ||
+    String(url.searchParams.get("account") || "").trim() ||
+    getStoredAccountId()
+  );
+}
+
+function withAccountScope(url) {
+  const accountId = String(state.activeAccountId || "").trim();
+  if (!accountId) return url;
+
+  const next = new URL(url, window.location.origin);
+  if (next.pathname.startsWith("/api/") || next.pathname.startsWith("/crm/")) {
+    next.searchParams.set("account_id", accountId);
+  }
+  return next.toString();
 }
 
 function prettyJson(value) {
@@ -344,13 +389,14 @@ function toDatetimeLocal(value) {
 }
 
 async function fetchJson(url, options = {}) {
-  const res = await fetch(url, options);
+  const scopedUrl = withAccountScope(url);
+  const res = await fetch(scopedUrl, options);
   const contentType = res.headers.get("content-type") || "";
   const raw = await res.text();
 
   if (!contentType.includes("application/json")) {
     const preview = raw.trim().slice(0, 120);
-    throw new Error(`La API no devolvio JSON en ${options.method || "GET"} ${url}. Respuesta: ${preview || `HTTP ${res.status}`}`);
+      throw new Error(`La API no devolvio JSON en ${options.method || "GET"} ${scopedUrl}. Respuesta: ${preview || `HTTP ${res.status}`}`);
   }
 
   let data;
@@ -364,6 +410,71 @@ async function fetchJson(url, options = {}) {
     throw new Error(data?.error || `HTTP ${res.status}`);
   }
   return data;
+}
+
+function renderAccounts() {
+  if (!el.accountSelect) return;
+
+  const accounts = state.accounts || [];
+  el.accountSelect.innerHTML = accounts
+    .map(
+      (account) =>
+        `<option value="${escapeHtml(account.id)}">${escapeHtml(account.name)}</option>`
+    )
+    .join("");
+
+  if (state.activeAccountId) {
+    el.accountSelect.value = state.activeAccountId;
+  }
+
+  const activeAccount =
+    accounts.find((account) => String(account.id) === String(state.activeAccountId)) ||
+    accounts[0] ||
+    null;
+
+  if (el.accountPlanBadge) {
+    el.accountPlanBadge.textContent = activeAccount?.plan || "Internal";
+  }
+}
+
+async function loadAccounts() {
+  const requestedAccountId = getRequestedAccountId();
+  const params = new URLSearchParams();
+  if (requestedAccountId) {
+    params.set("account_id", requestedAccountId);
+  }
+
+  const data = await fetchJson(
+    `${window.location.origin}/api/admin/accounts${params.toString() ? `?${params.toString()}` : ""}`
+  );
+
+  state.accounts = data.accounts || [];
+  state.activeAccountId =
+    data.active_account?.id || state.accounts[0]?.id || requestedAccountId || "default";
+
+  setStoredAccountId(state.activeAccountId);
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("account_id", state.activeAccountId);
+  window.history.replaceState({}, "", url);
+
+  renderAccounts();
+}
+
+async function handleAccountChange(nextAccountId) {
+  state.activeAccountId = String(nextAccountId || "").trim();
+  setStoredAccountId(state.activeAccountId);
+
+  const url = new URL(window.location.href);
+  if (state.activeAccountId) {
+    url.searchParams.set("account_id", state.activeAccountId);
+  } else {
+    url.searchParams.delete("account_id");
+  }
+  window.history.replaceState({}, "", url);
+
+  renderAccounts();
+  await Promise.all([loadLeads(), loadConfig()]);
 }
 
 function looksGenericName(value) {
@@ -943,6 +1054,9 @@ async function loadLeads() {
 async function loadConfig() {
   const data = await fetchJson(`${API_BASE}/config`);
   state.appConfig = data.config || null;
+  if (data.account?.id) {
+    state.activeAccountId = data.account.id;
+  }
   renderConfig();
 }
 
@@ -1055,6 +1169,28 @@ async function saveConfig() {
     el.configSaveBtn.disabled = false;
     el.configSaveBtn.classList.remove("is-busy");
   }
+}
+
+async function uploadLogoAsset(file) {
+  const encoded = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen."));
+    reader.readAsDataURL(file);
+  });
+
+  const data = await fetchJson(`${API_BASE}/assets/logo`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      file_name: file.name || "logo",
+      content_type: file.type || "image/png",
+      data_url: encoded,
+      brand_name: el.configBrandName.value || state.appConfig?.brand?.name || "Marca",
+    }),
+  });
+
+  return data?.asset?.public_url || "";
 }
 
 async function analyzeWebsiteConfig() {
@@ -1453,6 +1589,11 @@ async function sendQuote(via) {
 
 el.saveBtn.addEventListener("click", saveLead);
 el.refreshBtn.addEventListener("click", loadLeads);
+el.accountSelect?.addEventListener("change", () =>
+  handleAccountChange(el.accountSelect.value).catch((error) => {
+    console.error(error);
+  })
+);
 el.configSaveBtn.addEventListener("click", saveConfig);
 el.configAddServiceBtn.addEventListener("click", () => {
   el.configServicesList.appendChild(createServiceEditorItem());
@@ -1467,21 +1608,24 @@ el.configLogoFile.addEventListener("change", async (event) => {
     return;
   }
 
-  const encoded = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("No se pudo leer la imagen."));
-    reader.readAsDataURL(file);
-  }).catch((error) => {
+  el.configLogoFile.disabled = true;
+  setStatus(el.configSaveStatus, "Subiendo logo...");
+
+  try {
+    const uploadedUrl = await uploadLogoAsset(file);
+    if (!uploadedUrl) {
+      throw new Error("No se pudo obtener la URL publica del logo.");
+    }
+
+    el.configLogoUrl.value = uploadedUrl;
+    updateConfigLogoPreview(uploadedUrl);
+    setStatus(el.configSaveStatus, "Logo subido. Guarda la configuracion para aplicarlo.", "ok");
+  } catch (error) {
     setStatus(el.configSaveStatus, error.message, "error");
-    return "";
-  });
-
-  if (!encoded) return;
-
-  el.configLogoUrl.value = encoded;
-  updateConfigLogoPreview(encoded);
-  setStatus(el.configSaveStatus, "Logo listo para guardar.", "ok");
+    event.target.value = "";
+  } finally {
+    el.configLogoFile.disabled = false;
+  }
 });
 el.configLogoClearBtn.addEventListener("click", () => {
   el.configLogoUrl.value = "";
@@ -1531,11 +1675,11 @@ el.quoteAutofillBtn.addEventListener("click", autofillQuote);
 el.quoteSaveBtn.addEventListener("click", saveQuote);
 el.quotePreviewBtn.addEventListener("click", () => {
   if (!state.selectedLead?.id) return;
-  window.open(`/crm/quotes/${state.selectedLead.id}/preview`, "_blank", "noopener,noreferrer");
+  window.open(withAccountScope(`/crm/quotes/${state.selectedLead.id}/preview`), "_blank", "noopener,noreferrer");
 });
 el.quotePdfBtn.addEventListener("click", () => {
   if (!state.selectedLead?.id) return;
-  window.open(`/crm/quotes/${state.selectedLead.id}/preview?print=1`, "_blank", "noopener,noreferrer");
+  window.open(withAccountScope(`/crm/quotes/${state.selectedLead.id}/preview?print=1`), "_blank", "noopener,noreferrer");
 });
 el.quoteSendEmailBtn.addEventListener("click", () => sendQuote("email"));
 el.quoteSendWhatsappBtn.addEventListener("click", () => sendQuote("whatsapp"));
@@ -1554,7 +1698,12 @@ el.quoteBillingType.addEventListener("change", () => {
 });
 window.addEventListener("resize", syncMobileAdaptiveUi);
 
-Promise.all([loadLeads(), loadConfig()]).catch((error) => {
+async function bootstrapCrm() {
+  await loadAccounts();
+  await Promise.all([loadLeads(), loadConfig()]);
+}
+
+bootstrapCrm().catch((error) => {
   el.leadTableBody.innerHTML = `<tr><td colspan="8" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
 });
 

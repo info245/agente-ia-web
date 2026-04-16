@@ -23,23 +23,66 @@ function cleanQuoteItems(value) {
     .filter((item) => item.concept || item.quantity || item.unit_price);
 }
 
+const accountColumnSupport = new Map();
+
+async function tableHasAccountColumn(tableName) {
+  if (accountColumnSupport.has(tableName)) {
+    return accountColumnSupport.get(tableName);
+  }
+
+  const { error } = await supabase.from(tableName).select("account_id").limit(1);
+  if (error) {
+    const message = String(error.message || "").toLowerCase();
+    if (
+      message.includes("account_id") ||
+      message.includes("does not exist") ||
+      message.includes("relation") ||
+      message.includes("schema cache")
+    ) {
+      accountColumnSupport.set(tableName, false);
+      return false;
+    }
+    throw error;
+  }
+
+  accountColumnSupport.set(tableName, true);
+  return true;
+}
+
+async function applyAccountInsert(tableName, payload = {}, accountId = null) {
+  const safeAccountId = clean(accountId);
+  if (!safeAccountId) return payload;
+  if (!(await tableHasAccountColumn(tableName))) return payload;
+  return {
+    ...payload,
+    account_id: safeAccountId,
+  };
+}
+
 export async function getLatestConversationByExternalUserId({
   channel,
   external_user_id,
+  account_id = null,
 }) {
   const safeChannel = clean(channel);
   const safeExternalUserId = clean(external_user_id);
+  const safeAccountId = clean(account_id);
 
   if (!safeChannel || !safeExternalUserId) return null;
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("conversations")
     .select("*")
     .eq("channel", safeChannel)
     .eq("external_user_id", safeExternalUserId)
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  if (safeAccountId && (await tableHasAccountColumn("conversations"))) {
+    query = query.eq("account_id", safeAccountId);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) throw error;
   return data || null;
@@ -48,25 +91,34 @@ export async function getLatestConversationByExternalUserId({
 export async function createConversation({
   channel = "web",
   external_user_id = null,
+  account_id = null,
 } = {}) {
   const safeChannel = clean(channel) || "web";
   const safeExternalUserId = clean(external_user_id);
+  const safeAccountId = clean(account_id);
 
   if (safeChannel === "whatsapp" && safeExternalUserId) {
     const existing = await getLatestConversationByExternalUserId({
       channel: safeChannel,
       external_user_id: safeExternalUserId,
+      account_id: safeAccountId,
     });
 
     if (existing) return existing;
   }
 
-  const { data, error } = await supabase
-    .from("conversations")
-    .insert({
+  const insertPayload = await applyAccountInsert(
+    "conversations",
+    {
       channel: safeChannel,
       external_user_id: safeExternalUserId,
-    })
+    },
+    safeAccountId
+  );
+
+  const { data, error } = await supabase
+    .from("conversations")
+    .insert(insertPayload)
     .select()
     .single();
 
@@ -79,6 +131,7 @@ export async function saveMessage({
   role,
   content,
   metadata = null,
+  account_id = null,
 }) {
   const safeConversationId = clean(conversation_id);
   const safeRole = clean(role);
@@ -94,11 +147,16 @@ export async function saveMessage({
     throw new Error("saveMessage: content es obligatorio");
   }
 
-  const payload = {
+  const safeAccountId = clean(account_id);
+  const payload = await applyAccountInsert(
+    "messages",
+    {
     conversation_id: safeConversationId,
     role: safeRole,
     content: safeContent,
-  };
+    },
+    safeAccountId
+  );
 
   if (metadata && typeof metadata === "object") {
     payload.metadata = metadata;
@@ -141,6 +199,7 @@ export async function saveConversationEvent({
   channel = null,
   external_user_id = null,
   payload = null,
+  account_id = null,
 } = {}) {
   const safeConversationId = clean(conversation_id);
   const safeEventType = clean(event_type);
@@ -152,13 +211,13 @@ export async function saveConversationEvent({
     throw new Error("saveConversationEvent: event_type es obligatorio");
   }
 
-  const insertPayload = {
+  const insertPayload = await applyAccountInsert("conversation_events", {
     conversation_id: safeConversationId,
     event_type: safeEventType,
     channel: clean(channel),
     external_user_id: clean(external_user_id),
     payload: cleanJson(payload),
-  };
+  }, account_id);
 
   const { data, error } = await supabase
     .from("conversation_events")
@@ -321,26 +380,33 @@ export async function getConversationMessages(conversation_id, limit = 30) {
   return (data || []).slice().reverse();
 }
 
-export async function getLeadByConversationId(conversation_id) {
+export async function getLeadByConversationId(conversation_id, { accountId = null } = {}) {
   const safeConversationId = clean(conversation_id);
+  const safeAccountId = clean(accountId);
   if (!safeConversationId) {
     throw new Error("getLeadByConversationId: conversation_id es obligatorio");
   }
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("leads")
     .select("*")
-    .eq("conversation_id", safeConversationId)
-    .maybeSingle();
+    .eq("conversation_id", safeConversationId);
+
+  if (safeAccountId && (await tableHasAccountColumn("leads"))) {
+    query = query.eq("account_id", safeAccountId);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) throw error;
   return data || null;
 }
 
-export async function listCrmLeads(limit = 200) {
+export async function listCrmLeads({ limit = 200, accountId = null } = {}) {
   const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 200;
+  const safeAccountId = clean(accountId);
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("leads")
     .select(
       `
@@ -351,10 +417,16 @@ export async function listCrmLeads(limit = 200) {
         external_user_id,
         created_at
       )
-    `
-    )
-    .order("created_at", { ascending: false })
-    .limit(safeLimit);
+      `
+      )
+      .order("created_at", { ascending: false })
+      .limit(safeLimit);
+
+  if (safeAccountId && (await tableHasAccountColumn("leads"))) {
+    query = query.eq("account_id", safeAccountId);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
   return data || [];
@@ -388,14 +460,16 @@ export async function findLatestWebLeadByContact({
   email = null,
   phone = null,
   limit = 200,
+  accountId = null,
 } = {}) {
   const safeEmail = clean(email)?.toLowerCase() || null;
   const safePhone = normalizePhone(phone);
+  const safeAccountId = clean(accountId);
   if (!safeEmail && !safePhone) return null;
 
   const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 200;
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("leads")
     .select(
       `
@@ -406,11 +480,17 @@ export async function findLatestWebLeadByContact({
         external_user_id,
         created_at
       )
-    `
-    )
-    .eq("conversations.channel", "web")
-    .order("created_at", { ascending: false })
-    .limit(safeLimit);
+      `
+      )
+      .eq("conversations.channel", "web")
+      .order("created_at", { ascending: false })
+      .limit(safeLimit);
+
+  if (safeAccountId && (await tableHasAccountColumn("leads"))) {
+    query = query.eq("account_id", safeAccountId);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -432,13 +512,14 @@ export async function getCrmAnalytics({
   dateRange = "all",
   service = "all",
   limit = 1000,
+  accountId = null,
 } = {}) {
   const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 1000;
   const safeChannel = normalizeTextValue(channel);
   const safeService = normalizeTextValue(service);
   const startDate = getAnalyticsStartDate(dateRange);
 
-  const leads = await listCrmLeads(safeLimit);
+  const leads = await listCrmLeads({ limit: safeLimit, accountId });
   const filteredLeads = (leads || []).filter((lead) => {
     const leadChannel = normalizeTextValue(lead?.conversations?.channel || "web");
     const channelOk = safeChannel === "all" || leadChannel === safeChannel;
@@ -795,7 +876,7 @@ export async function upsertLatestQuoteForLead(lead = {}, quote = {}) {
     : total;
   const tax = Number.isFinite(Number(quote.tax)) ? Number(quote.tax) : 0;
 
-  const payload = {
+  const payload = await applyAccountInsert("quotes", {
     lead_id: safeLeadId,
     conversation_id: clean(lead.conversation_id),
     title: clean(quote.title) || "Propuesta comercial",
@@ -816,9 +897,9 @@ export async function upsertLatestQuoteForLead(lead = {}, quote = {}) {
     },
     html_snapshot: clean(quote.html_snapshot),
     sent_via: clean(quote.sent_via),
-    sent_at: quote.sent_at || null,
-    updated_at: new Date().toISOString(),
-  };
+      sent_at: quote.sent_at || null,
+      updated_at: new Date().toISOString(),
+    }, clean(lead.account_id));
 
   const query = current
     ? supabase.from("quotes").update(payload).eq("id", current.id)
@@ -936,7 +1017,7 @@ export async function upsertLeadFromConversation(lead = {}) {
     throw new Error("upsertLeadFromConversation: conversation_id es obligatorio");
   }
 
-  const payload = {
+  const payload = await applyAccountInsert("leads", {
     conversation_id: safeConversationId,
     name: clean(lead.name),
     email: clean(lead.email),
@@ -966,11 +1047,11 @@ export async function upsertLeadFromConversation(lead = {}) {
     current_step: clean(lead.current_step),
     last_question: clean(lead.last_question),
     source_platform: clean(lead.source_platform),
-    source_campaign: clean(lead.source_campaign),
-    source_form_name: clean(lead.source_form_name),
-    source_ad_name: clean(lead.source_ad_name),
-    source_adset_name: clean(lead.source_adset_name),
-  };
+      source_campaign: clean(lead.source_campaign),
+      source_form_name: clean(lead.source_form_name),
+      source_ad_name: clean(lead.source_ad_name),
+      source_adset_name: clean(lead.source_adset_name),
+    }, clean(lead.account_id));
 
   const { data, error } = await supabase
     .from("leads")
