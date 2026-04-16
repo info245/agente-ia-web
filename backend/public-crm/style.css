@@ -784,6 +784,10 @@ textarea {
   gap: 16px;
 }
 
+.analytics-breakdown-card-wide {
+  grid-column: 1 / -1;
+}
+
 .analytics-breakdown-card {
   border: 1px solid var(--line);
   border-radius: 24px;
@@ -819,6 +823,69 @@ textarea {
 
 .analytics-breakdown-row strong {
   font-size: 1rem;
+}
+
+.analytics-service-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.analytics-service-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f9fbff, #f1f5ff);
+  border: 1px solid var(--line);
+}
+
+.analytics-service-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.analytics-service-head strong {
+  font-size: 1rem;
+}
+
+.analytics-service-head span {
+  color: var(--accent-dark);
+  background: rgba(109, 65, 243, 0.1);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.analytics-service-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.analytics-service-metrics div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.76);
+  border: 1px solid rgba(191, 208, 234, 0.68);
+}
+
+.analytics-service-metrics span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 800;
+}
+
+.analytics-service-metrics strong {
+  font-size: 1.1rem;
 }
 
 .lead-meta {
@@ -1241,6 +1308,7 @@ textarea {
   .crm-shell,
   .analytics-grid,
   .analytics-breakdowns,
+  .analytics-service-list,
   .lead-meta,
   .crm-grid,
   .quote-grid,
@@ -1326,6 +1394,10 @@ textarea {
   }
 
   .timeline-bar-group {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-service-metrics {
     grid-template-columns: 1fr;
   }
 

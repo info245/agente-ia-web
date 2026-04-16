@@ -69,6 +69,7 @@ const el = {
   analyticsAcceptanceRate: document.getElementById("analyticsAcceptanceRate"),
   analyticsChannelBreakdown: document.getElementById("analyticsChannelBreakdown"),
   analyticsSourceBreakdown: document.getElementById("analyticsSourceBreakdown"),
+  analyticsServiceBreakdown: document.getElementById("analyticsServiceBreakdown"),
   analyticsTimeline: document.getElementById("analyticsTimeline"),
   leadTableBody: document.getElementById("leadTableBody"),
   leadMobileList: document.getElementById("leadMobileList"),
@@ -571,6 +572,34 @@ function renderBreakdown(target, rows = []) {
     .join("");
 }
 
+function renderServicePerformance(rows = []) {
+  if (!el.analyticsServiceBreakdown) return;
+
+  if (!rows.length) {
+    el.analyticsServiceBreakdown.innerHTML =
+      '<div class="empty">Sin datos por servicio todavia.</div>';
+    return;
+  }
+
+  el.analyticsServiceBreakdown.innerHTML = rows
+    .map(
+      (row) => `
+        <article class="analytics-service-card">
+          <div class="analytics-service-head">
+            <strong>${row.label || "-"}</strong>
+            <span>${row.acceptance_rate ?? 0}% aceptacion</span>
+          </div>
+          <div class="analytics-service-metrics">
+            <div><span>Leads</span><strong>${row.leads ?? 0}</strong></div>
+            <div><span>Enviadas</span><strong>${row.quotes_sent ?? 0}</strong></div>
+            <div><span>Aceptadas</span><strong>${row.quotes_accepted ?? 0}</strong></div>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
 function renderTimeline(rows = []) {
   if (!el.analyticsTimeline) return;
 
@@ -631,6 +660,7 @@ function renderAnalytics() {
     el.analyticsAcceptanceRate.textContent = "-";
     renderBreakdown(el.analyticsChannelBreakdown, []);
     renderBreakdown(el.analyticsSourceBreakdown, []);
+    renderServicePerformance([]);
     renderTimeline([]);
     return;
   }
@@ -646,6 +676,7 @@ function renderAnalytics() {
 
   renderBreakdown(el.analyticsChannelBreakdown, analytics?.breakdowns?.channel || []);
   renderBreakdown(el.analyticsSourceBreakdown, analytics?.breakdowns?.source || []);
+  renderServicePerformance(analytics?.breakdowns?.service || []);
   renderTimeline(analytics?.timeline || []);
 }
 

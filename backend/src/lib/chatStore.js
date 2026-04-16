@@ -607,6 +607,43 @@ export async function getCrmAnalytics({
     ? Math.round((proposalsAccepted / proposalsSent) * 100)
     : 0;
 
+  const servicePerformanceMap = new Map();
+  for (const lead of filteredLeads) {
+    const key = clean(lead?.interest_service) || "Sin servicio";
+    if (!servicePerformanceMap.has(key)) {
+      servicePerformanceMap.set(key, {
+        label: key,
+        leads: 0,
+        quotes_sent: 0,
+        quotes_accepted: 0,
+        acceptance_rate: 0,
+      });
+    }
+
+    const bucket = servicePerformanceMap.get(key);
+    bucket.leads += 1;
+
+    const quote = quoteByLead.get(lead.id);
+    const quoteStatus = normalizeTextValue(quote?.status);
+    const wasSent =
+      !!quote?.sent_at || ["sent", "accepted", "rejected"].includes(quoteStatus);
+
+    if (wasSent) bucket.quotes_sent += 1;
+    if (quoteStatus === "accepted") bucket.quotes_accepted += 1;
+  }
+
+  const servicePerformance = Array.from(servicePerformanceMap.values())
+    .map((row) => ({
+      ...row,
+      acceptance_rate: row.quotes_sent
+        ? Math.round((row.quotes_accepted / row.quotes_sent) * 100)
+        : 0,
+    }))
+    .sort((a, b) => {
+      if (b.leads !== a.leads) return b.leads - a.leads;
+      return b.quotes_accepted - a.quotes_accepted;
+    });
+
   const timelineMap = new Map();
   for (const lead of filteredLeads) {
     const sampleDate = new Date(lead?.created_at);
@@ -659,6 +696,7 @@ export async function getCrmAnalytics({
     breakdowns: {
       channel: channelBreakdown,
       source: sourceBreakdown,
+      service: servicePerformance,
     },
     timeline,
   };
