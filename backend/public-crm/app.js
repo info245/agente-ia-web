@@ -14,6 +14,10 @@ const API_BASE = `${window.location.origin}/api/crm`;
 
 const el = {
   refreshBtn: document.getElementById("refreshBtn"),
+  crmBrandEyebrow: document.getElementById("crmBrandEyebrow"),
+  crmBrandTitle: document.getElementById("crmBrandTitle"),
+  crmSidebarLogo: document.getElementById("crmSidebarLogo"),
+  crmSidebarTitle: document.getElementById("crmSidebarTitle"),
   configForm: document.getElementById("configForm"),
   configSaveBtn: document.getElementById("configSaveBtn"),
   configSaveStatus: document.getElementById("configSaveStatus"),
@@ -132,6 +136,45 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function normalizeAssetUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "./assets/tmedia-global-logo.png";
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+  if (raw.startsWith("/")) return raw;
+  return raw;
+}
+
+function applyBrandTheme(config = {}) {
+  const brand = config?.brand || {};
+  const primary = brand.primary_color || "#6d41f3";
+  const accent = brand.accent_color || "#8d58ff";
+  const logoUrl = normalizeAssetUrl(brand.logo_url);
+  const brandName = brand.name || "TMedia Global";
+
+  const root = document.documentElement;
+  root.style.setProperty("--accent", primary);
+  root.style.setProperty("--accent-dark", primary);
+  root.style.setProperty("--accent-line", accent);
+  root.style.setProperty("--sidebar-start", primary);
+  root.style.setProperty("--sidebar-mid", accent);
+  root.style.setProperty("--sidebar-end", primary);
+
+  if (el.crmSidebarLogo) {
+    el.crmSidebarLogo.src = logoUrl;
+    el.crmSidebarLogo.alt = brandName;
+  }
+  if (el.crmSidebarTitle) {
+    el.crmSidebarTitle.textContent = brandName;
+  }
+  if (el.crmBrandEyebrow) {
+    el.crmBrandEyebrow.textContent = brandName;
+  }
+  if (el.crmBrandTitle) {
+    el.crmBrandTitle.textContent = "CRM Comercial";
+  }
+  document.title = `CRM ${brandName}`;
 }
 
 function getDateFilterLabel(value) {
@@ -545,6 +588,7 @@ function renderAnalytics() {
 
 function renderConfig() {
   const config = state.appConfig || {};
+  applyBrandTheme(config);
 
   el.configBrandName.value = config?.brand?.name || "";
   el.configWebsiteUrl.value = config?.brand?.website_url || "";

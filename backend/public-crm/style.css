@@ -15,6 +15,9 @@
   --success: #1f8f5f;
   --danger: #a93a51;
   --shadow: 0 18px 48px rgba(88, 118, 168, 0.12);
+  --sidebar-start: #4128b9;
+  --sidebar-mid: #5a39d8;
+  --sidebar-end: #2e2274;
 }
 
 * { box-sizing: border-box; }
@@ -227,7 +230,7 @@ textarea {
   display: grid;
   gap: 20px;
   padding: 18px;
-  background: linear-gradient(180deg, #4128b9, #5a39d8 40%, #2e2274);
+  background: linear-gradient(180deg, var(--sidebar-start), var(--sidebar-mid) 40%, var(--sidebar-end));
   color: #fff;
 }
 

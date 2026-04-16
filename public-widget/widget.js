@@ -1,5 +1,4 @@
-(() => {
-  // ====== LEE CONFIG DESDE EL <script ... data-*> ======
+;(async () => {
   const currentScript = document.currentScript;
 
   const backendFromAttr = currentScript?.getAttribute("data-backend");
@@ -8,19 +7,38 @@
   const colorFromAttr = currentScript?.getAttribute("data-color");
 
   const CONFIG = {
-    backendBaseUrl:
-      backendFromAttr || "https://tmedia-global-ai.onrender.com",
+    backendBaseUrl: backendFromAttr || "https://tmedia-global-ai.onrender.com",
     channel: "web",
     brandName: brandFromAttr || "Agente IA",
     position: posFromAttr === "left" ? "left" : "right",
     primaryColor: colorFromAttr || "#111827",
+    accentColor: "#8d58ff",
+    logoUrl: "",
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
     chatStartedStorageKey: "agente_ia_chat_started",
-    requestTimeoutMs: 25000, // 25s
+    requestTimeoutMs: 25000,
   };
 
-  // ====== HELPERS ======
+  async function loadRemoteWidgetConfig() {
+    try {
+      const res = await fetch(`${CONFIG.backendBaseUrl}/api/widget/config`);
+      const data = await res.json();
+      if (!res.ok || !data?.ok) return;
+
+      const remote = data.config || {};
+      CONFIG.brandName = brandFromAttr || remote?.brand?.name || CONFIG.brandName;
+      CONFIG.primaryColor =
+        colorFromAttr || remote?.brand?.primary_color || CONFIG.primaryColor;
+      CONFIG.accentColor = remote?.brand?.accent_color || CONFIG.accentColor;
+      CONFIG.logoUrl = remote?.brand?.logo_url || CONFIG.logoUrl;
+    } catch (_error) {
+      // fallback silencioso: el widget sigue funcionando con la config local
+    }
+  }
+
+  await loadRemoteWidgetConfig();
+
   const uid = () => Math.random().toString(36).slice(2, 10);
 
   function getOrCreateExternalUserId() {
@@ -86,10 +104,7 @@
       "agente_ia_last_completed_signature"
     );
 
-    if (signature && signature === lastSignature) {
-      return;
-    }
-
+    if (signature && signature === lastSignature) return;
     if (signature) {
       sessionStorage.setItem("agente_ia_last_completed_signature", signature);
     }
@@ -116,7 +131,6 @@
     return null;
   }
 
-  // ====== FETCH ROBUSTO ======
   async function postMessage({ text, conversationId, externalUserId }) {
     const payload = {
       text,
@@ -153,10 +167,7 @@
         throw new Error(`${msg}${details}${extra}`);
       }
 
-      if (!data) {
-        throw new Error("Respuesta no JSON del backend.");
-      }
-
+      if (!data) throw new Error("Respuesta no JSON del backend.");
       return data;
     } catch (err) {
       if (err.name === "AbortError") {
@@ -170,7 +181,6 @@
     }
   }
 
-  // ====== UI (Shadow DOM) ======
   const host = document.createElement("div");
   host.id = "agente-ia-widget-host";
   document.body.appendChild(host);
@@ -187,6 +197,12 @@
       box-shadow:0 10px 30px rgba(0,0,0,.18);
       display:inline-flex;gap:10px;align-items:center;
     }
+    .btn-logo,.brand-logo{
+      width:22px;height:22px;border-radius:999px;object-fit:cover;display:block;
+      background:rgba(255,255,255,.16);
+      flex:0 0 auto;
+    }
+    .brand-logo{width:30px;height:30px;}
     .bubble{position:fixed;bottom:18px;${side}:18px;z-index:999999;}
     .panel{
       position:fixed;bottom:78px;${side}:18px;width:360px;
@@ -199,13 +215,18 @@
       color:#111827;
     }
     .panel.open{display:flex;flex-direction:column;}
-    .header{padding:12px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:10px;}
+    .header{
+      padding:12px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:10px;
+      background:linear-gradient(135deg, ${CONFIG.primaryColor}, ${CONFIG.accentColor});
+      color:#fff;
+    }
+    .brand-lockup{display:flex;align-items:center;gap:10px;}
     .title{display:flex;flex-direction:column;gap:2px;}
     .title strong{font-size:14px;}
-    .title span{font-size:12px;color:#6b7280;}
+    .title span{font-size:12px;color:rgba(255,255,255,.78);}
     .header-actions{display:flex;gap:8px;}
-    .icon-btn{border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;}
-    .icon-btn:hover{background:#f9fafb;}
+    .icon-btn{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;}
+    .icon-btn:hover{background:rgba(255,255,255,.2);}
     .messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(to bottom, rgba(255,255,255,.9), rgba(255,255,255,.9));}
     .row{display:flex;width:100%;}
     .row.user{justify-content:flex-end;}
@@ -213,7 +234,7 @@
     .row.system{justify-content:center;}
     .bubble-msg{max-width:86%;padding:10px 12px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word;border:1px solid transparent;}
     .assistant .bubble-msg{background:#eef2ff;border-color:#dfe5ff;color:#111827;}
-    .user .bubble-msg{background:#111827;border-color:#0f172a;color:#fff;}
+    .user .bubble-msg{background:${CONFIG.primaryColor};border-color:${CONFIG.primaryColor};color:#fff;}
     .system .bubble-msg{background:#fff7ed;border-color:#fed7aa;color:#9a3412;text-align:center;max-width:92%;}
     .handoff-card{
       width:min(100%, 290px); background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46;
@@ -224,11 +245,11 @@
     .handoff-card span{font-size:12px; color:#065f46;}
     .handoff-link{
       display:inline-flex; align-items:center; justify-content:center; text-decoration:none;
-      border-radius:999px; padding:10px 12px; background:#10b981; color:#fff; font-weight:600;
+      border-radius:999px; padding:10px 12px; background:${CONFIG.accentColor}; color:#fff; font-weight:600;
     }
     .footer{border-top:1px solid #e5e7eb;padding:10px;background:#fff;display:grid;gap:8px;}
     .input{width:100%;resize:none;min-height:44px;max-height:110px;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;font:inherit;outline:none;}
-    .input:focus{border-color:#c7d2fe;box-shadow:0 0 0 4px rgba(99,102,241,.10);}
+    .input:focus{border-color:${CONFIG.accentColor};box-shadow:0 0 0 4px rgba(99,102,241,.10);}
     .actions{display:flex;justify-content:space-between;align-items:center;gap:10px;}
     .status{font-size:12px;color:#6b7280;}
     .send{border:1px solid transparent;border-radius:12px;padding:10px 12px;cursor:pointer;background:${CONFIG.primaryColor};color:#fff;font:inherit;}
@@ -238,246 +259,197 @@
   `;
   shadow.appendChild(style);
 
+  const logoMarkup = CONFIG.logoUrl
+    ? `<img class="brand-logo" src="${CONFIG.logoUrl}" alt="${CONFIG.brandName}" />`
+    : "";
+  const buttonLogoMarkup = CONFIG.logoUrl
+    ? `<img class="btn-logo" src="${CONFIG.logoUrl}" alt="${CONFIG.brandName}" />`
+    : "";
+
   const container = document.createElement("div");
   container.innerHTML = `
     <div class="bubble">
       <button class="btn" id="openBtn" type="button" aria-label="Abrir chat">
-        <span>💬</span>
+        ${buttonLogoMarkup}
         <span>${CONFIG.brandName}</span>
       </button>
     </div>
 
     <div class="panel" id="panel" role="dialog" aria-label="Chat">
       <div class="header">
-        <div class="title">
-          <strong>${CONFIG.brandName}</strong>
-          <span>Asistente virtual</span>
+        <div class="brand-lockup">
+          ${logoMarkup}
+          <div class="title">
+            <strong>${CONFIG.brandName}</strong>
+            <span>Asistente virtual</span>
+          </div>
         </div>
         <div class="header-actions">
           <button class="icon-btn" id="newBtn" type="button" title="Nueva conversación">↻</button>
           <button class="icon-btn" id="closeBtn" type="button" title="Cerrar">✕</button>
         </div>
       </div>
-
-      <div class="messages" id="messages" aria-live="polite"></div>
-
+      <div class="messages" id="messages"></div>
       <div class="footer">
-        <textarea class="input" id="input" rows="2" placeholder="Escribe tu mensaje..."></textarea>
+        <textarea id="input" class="input" placeholder="Escribe tu mensaje..." aria-label="Mensaje"></textarea>
         <div class="actions">
           <div class="status" id="status">Listo</div>
           <button class="send" id="sendBtn" type="button">Enviar</button>
         </div>
-        <div class="mini" id="mini"></div>
+        <div class="mini">Esta conversación puede continuar por WhatsApp si hace falta.</div>
       </div>
     </div>
   `;
   shadow.appendChild(container);
 
-  const el = {
-    openBtn: shadow.getElementById("openBtn"),
-    panel: shadow.getElementById("panel"),
-    closeBtn: shadow.getElementById("closeBtn"),
-    newBtn: shadow.getElementById("newBtn"),
-    messages: shadow.getElementById("messages"),
-    input: shadow.getElementById("input"),
-    sendBtn: shadow.getElementById("sendBtn"),
-    status: shadow.getElementById("status"),
-    mini: shadow.getElementById("mini"),
-  };
+  const $ = (id) => shadow.getElementById(id);
+  const openBtn = $("openBtn");
+  const panel = $("panel");
+  const closeBtn = $("closeBtn");
+  const newBtn = $("newBtn");
+  const messages = $("messages");
+  const input = $("input");
+  const status = $("status");
+  const sendBtn = $("sendBtn");
 
-  function setStatus(text, isError = false) {
-    el.status.textContent = text;
-    el.status.style.color = isError ? "#b91c1c" : "";
+  function setStatus(text) {
+    status.textContent = text || "Listo";
   }
 
-  function append(role, text) {
+  function appendMessage(role, text) {
     const row = document.createElement("div");
     row.className = `row ${role}`;
-
     const bubble = document.createElement("div");
     bubble.className = "bubble-msg";
     bubble.textContent = text;
-
     row.appendChild(bubble);
-    el.messages.appendChild(row);
-    el.messages.scrollTop = el.messages.scrollHeight;
+    messages.appendChild(row);
+    messages.scrollTop = messages.scrollHeight;
   }
 
-  function appendHandoffCard(handoff) {
-    if (!handoff?.whatsapp_url) return;
-
+  function appendHandoffCard(url, label = "Continuar por WhatsApp") {
     const row = document.createElement("div");
     row.className = "row assistant";
-
-    const card = document.createElement("div");
-    card.className = "handoff-card";
-    card.innerHTML = `
-      <strong>Seguir por WhatsApp</strong>
-      <span>Si te va bien, abre WhatsApp y seguimos por ahí con el contexto de este análisis.</span>
-      <a class="handoff-link" href="${handoff.whatsapp_url}" target="_blank" rel="noopener noreferrer">Continuar en WhatsApp</a>
+    row.innerHTML = `
+      <div class="handoff-card">
+        <strong>Seguimos por WhatsApp</strong>
+        <span>Si prefieres, continuamos por un canal más directo.</span>
+        <a class="handoff-link" href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>
+      </div>
     `;
-
-    row.appendChild(card);
-    el.messages.appendChild(row);
-    el.messages.scrollTop = el.messages.scrollHeight;
-  }
-
-  function setLoading(isLoading) {
-    el.sendBtn.disabled = isLoading;
-    el.input.disabled = isLoading;
-    setStatus(isLoading ? "Enviando..." : "Listo");
-  }
-
-  function updateMini() {
-    const conv = getConversationId();
-    const ext = getOrCreateExternalUserId();
-    el.mini.textContent = `conversation_id: ${conv || "—"} | external_user_id: ${ext}`;
+    messages.appendChild(row);
+    messages.scrollTop = messages.scrollHeight;
   }
 
   function openPanel() {
-    const wasOpen = el.panel.classList.contains("open");
-
-    el.panel.classList.add("open");
-    updateMini();
-
-    if (!wasOpen) {
-      pushDataLayer("chat_open");
-    }
-
-    if (el.messages.childElementCount === 0) {
-      append("assistant", "Hola, soy el asistente de TMedia Global. ¿Cómo te puedo ayudar?");
-    }
-
-    setTimeout(() => el.input.focus(), 50);
+    panel.classList.add("open");
+    input.focus();
   }
 
   function closePanel() {
-    el.panel.classList.remove("open");
+    panel.classList.remove("open");
   }
 
-  async function send() {
-    const text = (el.input.value || "").trim();
+  async function ensureGreeting() {
+    if (hasChatStarted()) return;
+    setStatus("Iniciando...");
+    sendBtn.disabled = true;
+
+    try {
+      const data = await postMessage({
+        text: "__start__",
+        conversationId: getConversationId(),
+        externalUserId: getOrCreateExternalUserId(),
+      });
+
+      if (data?.conversation_id) setConversationId(data.conversation_id);
+      appendMessage("assistant", data?.reply || "¡Hola! ¿En qué te puedo ayudar?");
+      setChatStarted(true);
+      pushDataLayer("chat_started");
+    } catch (error) {
+      appendMessage("system", error.message || "No se pudo iniciar el chat.");
+    } finally {
+      setStatus("Listo");
+      sendBtn.disabled = false;
+    }
+  }
+
+  async function handleSend() {
+    const text = String(input.value || "").trim();
     if (!text) return;
 
-    const externalUserId = getOrCreateExternalUserId();
-    const conversationId = getConversationId();
+    appendMessage("user", text);
+    input.value = "";
+    setStatus("Pensando...");
+    sendBtn.disabled = true;
+
     const contactType = detectContactType(text);
-
-    append("user", text);
-    el.input.value = "";
-    setLoading(true);
-    updateMini();
-
-    // Evento: primer mensaje de la conversación
-    if (!hasChatStarted()) {
-      setChatStarted(true);
-      pushDataLayer("chat_start", {
-        message_text: text,
-      });
-    }
-
-    // Evento: cada mensaje enviado
-    pushDataLayer("chat_message_sent", {
-      message_text: text,
-      contact_type: contactType,
-    });
-
-    // Evento: comparte contacto en el mensaje
     if (contactType) {
-      pushDataLayer("contact_shared", {
-        contact_type: contactType,
-        message_text: text,
-      });
+      pushDataLayer("contact_shared", { contact_type: contactType });
     }
 
     try {
-      const data = await postMessage({ text, conversationId, externalUserId });
-
-      if (data?.conversation_id) {
-        setConversationId(data.conversation_id);
-      }
-
-      append("assistant", data?.reply || "Sin respuesta del backend.");
-      if (data?.handoff?.whatsapp_url) {
-        appendHandoffCard(data.handoff);
-      }
-      updateMini();
-      setStatus("OK");
-
-      // Evento: lead generado (preferente por flag backend)
-      if (data?.lead_generated === true) {
-        pushDataLayer("lead_generated", {
-          lead_score: data?.lead_score ?? null,
-          interest_service: data?.interest_service ?? null,
-          budget_range: data?.budget_range ?? null,
-        });
-      } else if (contactType) {
-        // fallback si aún no devuelves lead_generated desde backend
-        pushDataLayer("lead_generated", {
-          lead_score: data?.lead_score ?? null,
-          interest_service: data?.interest_service ?? null,
-          budget_range: data?.budget_range ?? null,
-          inferred: true,
-        });
-      }
-
-      if (data?.chat_completed === true) {
-        pushChatCompleted({
-          conversation_id: data?.conversation_id || getConversationId() || null,
-          interest_service:
-            data?.lead?.interest_service ?? data?.interest_service ?? null,
-          budget_range:
-            data?.lead?.budget_range ?? data?.budget_range ?? null,
-          preferred_contact_channel:
-            data?.lead?.preferred_contact_channel ?? null,
-          lead_score: data?.lead?.lead_score ?? data?.lead_score ?? null,
-          mode: data?.mode ?? null,
-          phase: data?.phase ?? null,
-        });
-      }
-    } catch (err) {
-      append("system", `Error: ${err.message}`);
-      setStatus("Error", true);
-
-      pushDataLayer("chat_error", {
-        error_message: err.message,
+      const data = await postMessage({
+        text,
+        conversationId: getConversationId(),
+        externalUserId: getOrCreateExternalUserId(),
       });
+
+      if (data?.conversation_id) setConversationId(data.conversation_id);
+      if (data?.reply) appendMessage("assistant", data.reply);
+
+      if (data?.lead_generated) {
+        pushDataLayer("lead_generated", {
+          interest_service: data?.interest_service ?? null,
+          budget_range: data?.budget_range ?? null,
+          inferred: data?.inferred ?? null,
+        });
+      }
+
+      if (data?.chat_completed) {
+        pushChatCompleted({
+          conversation_id: data?.conversation_id,
+          interest_service: data?.interest_service,
+          budget_range: data?.budget_range,
+          preferred_contact_channel: data?.preferred_contact_channel,
+          mode: data?.mode,
+          phase: data?.phase,
+          lead_score: data?.lead_score,
+        });
+      }
+
+      if (data?.handoff_url) {
+        appendHandoffCard(
+          data.handoff_url,
+          data?.handoff_label || "Continuar por WhatsApp"
+        );
+      }
+    } catch (error) {
+      appendMessage("system", error.message || "No se pudo enviar el mensaje.");
     } finally {
-      setLoading(false);
+      setStatus("Listo");
+      sendBtn.disabled = false;
+      input.focus();
     }
   }
 
-  // ====== EVENTS ======
-  el.openBtn.addEventListener("click", () => {
-    if (el.panel.classList.contains("open")) closePanel();
-    else openPanel();
+  openBtn.addEventListener("click", async () => {
+    openPanel();
+    await ensureGreeting();
   });
-
-  el.closeBtn.addEventListener("click", closePanel);
-
-  el.newBtn.addEventListener("click", () => {
+  closeBtn.addEventListener("click", closePanel);
+  newBtn.addEventListener("click", async () => {
     clearConversationId();
     setChatStarted(false);
-
-    append("system", "Nueva conversación iniciada.");
-    updateMini();
-
-    pushDataLayer("chat_new_conversation");
+    messages.innerHTML = "";
+    pushDataLayer("chat_reset");
+    await ensureGreeting();
   });
-
-  el.sendBtn.addEventListener("click", send);
-
-  el.input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
+  sendBtn.addEventListener("click", handleSend);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSend();
     }
   });
-
-  el.input.addEventListener("input", () => {
-    el.input.style.height = "auto";
-    el.input.style.height = `${Math.min(el.input.scrollHeight, 110)}px`;
-  });
-
-  updateMini();
 })();

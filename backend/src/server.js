@@ -1475,6 +1475,14 @@ function inferServicesFromSnapshot(snapshot = {}, appConfig = null) {
   return Object.keys(selected).length ? selected : defaultServices;
 }
 
+function resolvePublicAssetUrl(baseUrl, assetUrl) {
+  const raw = String(assetUrl || "").trim();
+  if (!raw) return "";
+  if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${baseUrl}${raw}`;
+  return `${baseUrl}/${raw.replace(/^\.?\//, "")}`;
+}
+
 function getWhatsAppTextFromMessage(message) {
   if (!message) return null;
 
@@ -2401,6 +2409,31 @@ app.get("/api/crm/config", async (_req, res) => {
   try {
     const config = await getAppConfig();
     res.json({ ok: true, config });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/widget/config", async (req, res) => {
+  try {
+    const config = await getAppConfig();
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const publicConfig = {
+      brand: {
+        name: config?.brand?.name || "Agente IA",
+        logo_url: resolvePublicAssetUrl(baseUrl, config?.brand?.logo_url),
+        primary_color: config?.brand?.primary_color || "#6d41f3",
+        accent_color: config?.brand?.accent_color || "#8d58ff",
+      },
+      contact: {
+        public_whatsapp_number: config?.contact?.public_whatsapp_number || "",
+      },
+      agent: {
+        final_cta_label: config?.agent?.final_cta_label || "Continuar en WhatsApp",
+      },
+    };
+
+    res.json({ ok: true, config: publicConfig });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
