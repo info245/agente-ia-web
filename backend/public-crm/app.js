@@ -13,6 +13,7 @@ const LEAD_PAGE_SIZE = 15;
 const API_BASE = `${window.location.origin}/api/crm`;
 
 const el = {
+  crmSidebar: document.querySelector(".crm-sidebar"),
   refreshBtn: document.getElementById("refreshBtn"),
   crmViewSalesBtn: document.getElementById("crmViewSalesBtn"),
   crmViewConfigBtn: document.getElementById("crmViewConfigBtn"),
@@ -21,6 +22,8 @@ const el = {
   crmMobileControls: document.getElementById("crmMobileControls"),
   crmAnalyticsAccordion: document.getElementById("crmAnalyticsAccordion"),
   crmMobileBottomNav: document.getElementById("crmMobileBottomNav"),
+  crmMobileConfigBtn: document.getElementById("crmMobileConfigBtn"),
+  mobileDateFilter: document.getElementById("mobileDateFilter"),
   crmSidebarFilters: document.getElementById("crmSidebarFilters"),
   crmSidebarFlow: document.getElementById("crmSidebarFlow"),
   crmSalesLinks: [...document.querySelectorAll(".crm-sales-link")],
@@ -220,12 +223,20 @@ function updateConfigLogoPreview(value) {
 
 function setMainView(viewName) {
   const isConfig = viewName === "config";
+  const isMobile = window.matchMedia("(max-width: 980px)").matches;
+
   el.crmViewSalesBtn.classList.toggle("is-active", !isConfig);
   el.crmViewConfigBtn.classList.toggle("is-active", isConfig);
   el.crmViewSales.classList.toggle("is-active", !isConfig);
   el.crmViewConfig.classList.toggle("is-active", isConfig);
   if (el.crmMobileBottomNav) {
     el.crmMobileBottomNav.classList.toggle("is-hidden", isConfig);
+  }
+  if (el.crmMobileControls) {
+    el.crmMobileControls.classList.toggle("is-hidden", isMobile && !isConfig);
+  }
+  if (el.crmSidebar) {
+    el.crmSidebar.classList.toggle("is-mobile-sales-hidden", isMobile && !isConfig);
   }
   if (el.crmSidebarFilters) {
     el.crmSidebarFilters.classList.toggle("is-hidden", isConfig);
@@ -240,6 +251,14 @@ function setMainView(viewName) {
 
 function syncMobileAdaptiveUi() {
   const isMobile = window.matchMedia("(max-width: 980px)").matches;
+  const isConfig = el.crmViewConfig?.classList.contains("is-active");
+
+  if (el.crmMobileControls) {
+    el.crmMobileControls.classList.toggle("is-hidden", isMobile && !isConfig);
+  }
+  if (el.crmSidebar) {
+    el.crmSidebar.classList.toggle("is-mobile-sales-hidden", isMobile && !isConfig);
+  }
 
   if (el.crmMobileControls) {
     if (isMobile) {
@@ -271,6 +290,26 @@ function getDateFilterLabel(value) {
   if (value === "7d") return "Ultimos 7 dias";
   if (value === "30d") return "Ultimos 30 dias";
   return "Todas";
+}
+
+function reloadSalesData() {
+  state.leadPage = 0;
+  renderLeadTable();
+  renderLeadDetail();
+  loadAnalytics().catch((error) => {
+    console.warn("CRM analytics reload failed", error);
+  });
+}
+
+function handleDateFilterChange(nextValue) {
+  const value = nextValue || "all";
+  if (el.dateFilter) {
+    el.dateFilter.value = value;
+  }
+  if (el.mobileDateFilter) {
+    el.mobileDateFilter.value = value;
+  }
+  reloadSalesData();
 }
 
 function populateServiceFilter(leads = []) {
@@ -1465,30 +1504,17 @@ el.configAnalyzeWebsiteBtn.addEventListener("click", analyzeWebsiteConfig);
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
 el.configTabIntegrations.addEventListener("click", () => setConfigTab("integrations"));
 el.configTabWebsite.addEventListener("click", () => setConfigTab("website"));
-el.dateFilter.addEventListener("change", () => {
-  state.leadPage = 0;
-  renderLeadTable();
-  renderLeadDetail();
-  loadAnalytics().catch((error) => {
-    console.warn("CRM analytics reload failed", error);
-  });
-});
+el.dateFilter.addEventListener("change", () => handleDateFilterChange(el.dateFilter.value));
+el.mobileDateFilter?.addEventListener("change", () =>
+  handleDateFilterChange(el.mobileDateFilter.value)
+);
 el.sourceFilter.addEventListener("change", () => {
-  state.leadPage = 0;
-  renderLeadTable();
-  renderLeadDetail();
-  loadAnalytics().catch((error) => {
-    console.warn("CRM analytics reload failed", error);
-  });
+  reloadSalesData();
 });
 el.serviceFilter.addEventListener("change", () => {
-  state.leadPage = 0;
-  renderLeadTable();
-  renderLeadDetail();
-  loadAnalytics().catch((error) => {
-    console.warn("CRM analytics reload failed", error);
-  });
+  reloadSalesData();
 });
+el.crmMobileConfigBtn?.addEventListener("click", () => setMainView("config"));
 el.leadPrevBtn.addEventListener("click", () => {
   if (state.leadPage <= 0) return;
   state.leadPage -= 1;
@@ -1532,4 +1558,7 @@ Promise.all([loadLeads(), loadConfig()]).catch((error) => {
 });
 
 setMainView("sales");
+if (el.mobileDateFilter && el.dateFilter) {
+  el.mobileDateFilter.value = el.dateFilter.value;
+}
 syncMobileAdaptiveUi();

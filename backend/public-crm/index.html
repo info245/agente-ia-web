@@ -718,11 +718,25 @@
     </div>
 
     <nav id="crmMobileBottomNav" class="crm-mobile-bottom-nav">
-      <a href="#crm-leads" class="crm-mobile-bottom-link">Leads</a>
-      <a href="#crm-summary" class="crm-mobile-bottom-link">Activo</a>
-      <a href="#crm-workspace" class="crm-mobile-bottom-link">Gestion</a>
-      <a href="#crm-quote" class="crm-mobile-bottom-link">Presupuesto</a>
-      <a href="#crm-analytics" class="crm-mobile-bottom-link">Analitica</a>
+      <div class="crm-mobile-bottom-top">
+        <label class="crm-mobile-bottom-filter">
+          <span>Fecha</span>
+          <select id="mobileDateFilter">
+            <option value="all">Todas</option>
+            <option value="today">Hoy</option>
+            <option value="7d">Ultimos 7 dias</option>
+            <option value="30d">Ultimos 30 dias</option>
+          </select>
+        </label>
+        <button id="crmMobileConfigBtn" type="button" class="crm-mobile-bottom-action">Config</button>
+      </div>
+      <div class="crm-mobile-bottom-links">
+        <a href="#crm-leads" class="crm-mobile-bottom-link">Leads</a>
+        <a href="#crm-summary" class="crm-mobile-bottom-link">Activo</a>
+        <a href="#crm-workspace" class="crm-mobile-bottom-link">Gestion</a>
+        <a href="#crm-quote" class="crm-mobile-bottom-link">Presupuesto</a>
+        <a href="#crm-analytics" class="crm-mobile-bottom-link">Analitica</a>
+      </div>
     </nav>
   </main>
 

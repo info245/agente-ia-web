@@ -321,7 +321,8 @@ textarea {
 }
 
 .crm-nav-link.is-hidden,
-.crm-sidebar-block.is-hidden {
+.crm-sidebar-block.is-hidden,
+.crm-mobile-controls.is-hidden {
   display: none;
 }
 
@@ -1508,6 +1509,10 @@ textarea {
     gap: 12px;
   }
 
+  .crm-sidebar.is-mobile-sales-hidden {
+    display: none;
+  }
+
   .crm-sidebar-brand,
   #crmSidebarFlow {
     display: none;
@@ -1712,13 +1717,66 @@ textarea {
     bottom: 12px;
     z-index: 45;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 8px;
     padding: 10px;
     border-radius: 22px;
     background: rgba(17, 35, 71, 0.92);
     box-shadow: 0 18px 38px rgba(21, 26, 61, 0.28);
     backdrop-filter: blur(16px);
+  }
+
+  .crm-mobile-bottom-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .crm-mobile-bottom-filter {
+    display: grid;
+    gap: 4px;
+    padding: 8px 10px;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.08);
+  }
+
+  .crm-mobile-bottom-filter span {
+    font-size: 0.64rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.7);
+  }
+
+  .crm-mobile-bottom-filter select {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 0.84rem;
+    font-weight: 700;
+    outline: none;
+  }
+
+  .crm-mobile-bottom-filter select option {
+    color: #16233f;
+  }
+
+  .crm-mobile-bottom-action {
+    min-width: 84px;
+    padding: 8px 12px;
+    border: 0;
+    border-radius: 16px;
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+
+  .crm-mobile-bottom-links {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .crm-mobile-bottom-link {
@@ -1936,7 +1994,7 @@ textarea {
     grid-auto-columns: minmax(170px, 88%);
   }
 
-  .crm-mobile-bottom-nav {
+  .crm-mobile-bottom-links {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
