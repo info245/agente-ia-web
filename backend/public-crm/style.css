@@ -60,6 +60,15 @@ textarea {
   gap: 22px;
 }
 
+.crm-view {
+  display: none;
+  gap: 22px;
+}
+
+.crm-view.is-active {
+  display: grid;
+}
+
 .crm-topbar,
 .crm-card-header,
 .crm-actions,
@@ -283,11 +292,23 @@ textarea {
   background: rgba(255,255,255,0.08);
   border: 1px solid rgba(255,255,255,0.1);
   transition: background 0.18s ease, transform 0.18s ease;
+  cursor: pointer;
+  text-align: left;
 }
 
 .crm-nav-link:hover {
   background: rgba(255,255,255,0.16);
   transform: translateX(2px);
+}
+
+.crm-nav-link.is-active {
+  background: rgba(255,255,255,0.2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+}
+
+.crm-nav-link.is-hidden,
+.crm-sidebar-block.is-hidden {
+  display: none;
 }
 
 .crm-sidebar-block {
@@ -799,6 +820,67 @@ textarea {
   cursor: pointer;
 }
 
+.config-logo-field {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(191, 208, 234, 0.88);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(245,249,255,0.92));
+}
+
+.config-logo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 700;
+}
+
+.config-logo-picker {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.config-logo-preview-wrap {
+  width: 112px;
+  height: 112px;
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(191, 208, 234, 0.88);
+  background: linear-gradient(180deg, rgba(237, 242, 251, 0.9), rgba(255,255,255,0.95));
+  display: grid;
+  place-items: center;
+}
+
+.config-logo-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.config-logo-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.config-logo-copy small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.config-logo-clear {
+  border: 1px solid rgba(191, 208, 234, 0.88);
+  background: rgba(255,255,255,0.9);
+  color: var(--text);
+  padding: 9px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .lead-name-btn:hover {
   color: var(--accent);
   text-decoration: underline;
@@ -1154,6 +1236,10 @@ textarea {
   .crm-sidebar {
     padding: 14px;
     border-radius: 20px;
+  }
+
+  .config-logo-picker {
+    grid-template-columns: 1fr;
   }
 
   .lead-table-wrap,

@@ -31,15 +31,16 @@
         </div>
 
         <nav class="crm-sidebar-nav">
-          <a href="#crm-config" class="crm-nav-link">Configuracion</a>
-          <a href="#crm-analytics" class="crm-nav-link">Analitica comercial</a>
-          <a href="#crm-summary" class="crm-nav-link">Lead activo</a>
-          <a href="#crm-leads" class="crm-nav-link">Leads</a>
-          <a href="#crm-workspace" class="crm-nav-link">Gestion y conversacion</a>
-          <a href="#crm-quote" class="crm-nav-link">Presupuesto</a>
+          <button id="crmViewSalesBtn" type="button" class="crm-nav-link is-active">CRM comercial</button>
+          <button id="crmViewConfigBtn" type="button" class="crm-nav-link">Configuracion del agente</button>
+          <a href="#crm-analytics" class="crm-nav-link crm-sales-link">Analitica comercial</a>
+          <a href="#crm-summary" class="crm-nav-link crm-sales-link">Lead activo</a>
+          <a href="#crm-leads" class="crm-nav-link crm-sales-link">Leads</a>
+          <a href="#crm-workspace" class="crm-nav-link crm-sales-link">Gestion y conversacion</a>
+          <a href="#crm-quote" class="crm-nav-link crm-sales-link">Presupuesto</a>
         </nav>
 
-        <section class="crm-sidebar-block">
+        <section id="crmSidebarFilters" class="crm-sidebar-block">
           <div class="crm-sidebar-block-title">Filtros</div>
           <div class="crm-filters crm-filters-sidebar">
             <label class="filter-box">
@@ -64,7 +65,7 @@
           </div>
         </section>
 
-        <section class="crm-sidebar-block">
+        <section id="crmSidebarFlow" class="crm-sidebar-block">
           <div class="crm-sidebar-block-title">Flujo</div>
           <div class="crm-sidebar-stack">
             <div class="crm-mini-card">
@@ -77,435 +78,465 @@
             </div>
           </div>
         </section>
+
+        <section id="crmSidebarConfigNote" class="crm-sidebar-block crm-config-note">
+          <div class="crm-sidebar-block-title">Ajustes del agente</div>
+          <div class="crm-sidebar-stack">
+            <div class="crm-mini-card">
+              <span>Marca</span>
+              <strong>Logo, colores y tono</strong>
+            </div>
+            <div class="crm-mini-card">
+              <span>Bootstrap</span>
+              <strong>Configurar desde la web</strong>
+            </div>
+          </div>
+        </section>
       </aside>
 
       <div class="crm-main">
-        <section id="crm-config" class="crm-card crm-config-card">
-          <div class="crm-card-header">
-            <div>
-              <h3>Configuracion comercial</h3>
-              <p class="crm-section-copy">Define marca, canales, tono y catalogo de servicios desde un solo sitio.</p>
-            </div>
-            <button id="configSaveBtn" type="button">Guardar configuracion</button>
-          </div>
-
-          <form id="configForm" class="config-form">
-            <div class="config-tabs">
-              <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">General</button>
-              <button id="configTabWebsite" type="button" class="config-tab" data-config-tab="website">Desde web</button>
+        <div id="crmViewSales" class="crm-view is-active">
+          <section id="crm-analytics" class="crm-card crm-analytics">
+            <div class="crm-card-header">
+              <div>
+                <h3>Analitica comercial</h3>
+                <p class="crm-section-copy">Visibilidad rapida del embudo: leads, WhatsApp, propuestas, aceptaciones y respuesta.</p>
+              </div>
+              <span id="analyticsRangeLabel" class="table-count">Todas</span>
             </div>
 
-            <section id="configPanelGeneral" class="config-panel is-active" data-config-panel="general">
-              <div class="quote-grid">
+            <div class="analytics-grid">
+              <article class="analytics-card">
+                <span>Leads generados</span>
+                <strong id="analyticsLeadsGenerated">-</strong>
+              </article>
+              <article class="analytics-card">
+                <span>Pasan a WhatsApp</span>
+                <strong id="analyticsPassedWhatsapp">-</strong>
+                <small id="analyticsWhatsappHint">-</small>
+              </article>
+              <article class="analytics-card">
+                <span>Propuestas enviadas</span>
+                <strong id="analyticsQuotesSent">-</strong>
+              </article>
+              <article class="analytics-card">
+                <span>Propuestas aceptadas</span>
+                <strong id="analyticsQuotesAccepted">-</strong>
+              </article>
+              <article class="analytics-card">
+                <span>Tiempo medio de respuesta</span>
+                <strong id="analyticsResponseTime">-</strong>
+              </article>
+              <article class="analytics-card">
+                <span>Tasa de aceptacion</span>
+                <strong id="analyticsAcceptanceRate">-</strong>
+              </article>
+            </div>
+
+            <div class="analytics-timeline-card">
+              <div class="analytics-breakdown-header">
+                <h4>Evolucion por dia</h4>
+              </div>
+              <div id="analyticsTimeline" class="analytics-timeline"></div>
+            </div>
+
+            <div class="analytics-breakdowns">
+              <section class="analytics-breakdown-card">
+                <div class="analytics-breakdown-header">
+                  <h4>Por canal</h4>
+                </div>
+                <div id="analyticsChannelBreakdown" class="analytics-breakdown-list"></div>
+              </section>
+
+              <section class="analytics-breakdown-card">
+                <div class="analytics-breakdown-header">
+                  <h4>Por fuente</h4>
+                </div>
+                <div id="analyticsSourceBreakdown" class="analytics-breakdown-list"></div>
+              </section>
+            </div>
+          </section>
+
+          <section id="crm-summary" class="crm-card crm-summary">
+            <div class="crm-card-header">
+              <h2 id="leadTitle">Selecciona un lead</h2>
+              <span id="leadChannel" class="pill">-</span>
+            </div>
+            <div id="leadMeta" class="lead-meta"></div>
+          </section>
+
+          <section id="crm-leads" class="crm-card">
+            <div class="crm-card-header">
+              <h3>Leads</h3>
+              <span id="leadTableInfo" class="table-count">0 resultados</span>
+            </div>
+
+            <div class="lead-table-wrap">
+              <table class="lead-table">
+                <thead>
+                  <tr>
+                    <th>Nombre de lead</th>
+                    <th>Servicio</th>
+                    <th>Presupuesto</th>
+                    <th>Canal</th>
+                    <th>Telefono</th>
+                    <th>Email</th>
+                    <th>Fecha</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="leadTableBody"></tbody>
+              </table>
+            </div>
+
+            <div id="leadMobileList" class="lead-mobile-list"></div>
+
+            <div class="table-pagination">
+              <button id="leadPrevBtn" type="button">Anterior</button>
+              <span id="leadPaginationInfo">Pagina 1 de 1</span>
+              <button id="leadNextBtn" type="button">Siguiente</button>
+            </div>
+          </section>
+
+          <section id="crm-workspace" class="crm-grid">
+            <section class="crm-card crm-panel">
+              <div class="crm-card-header">
+                <h3>Gestion</h3>
+              </div>
+              <form id="leadForm" class="lead-form">
                 <label>
-                  Marca
-                  <input id="configBrandName" type="text" />
+                  Nombre
+                  <input id="leadName" name="name" type="text" />
                 </label>
 
                 <label>
-                  Web principal
-                  <input id="configWebsiteUrl" type="url" />
+                  Email
+                  <input id="leadEmail" name="email" type="email" />
                 </label>
 
                 <label>
-                  URL de logo
-                  <input id="configLogoUrl" type="text" />
+                  Telefono
+                  <input id="leadPhone" name="phone" type="text" />
                 </label>
 
                 <label>
-                  WhatsApp publico
-                  <input id="configPublicWhatsappNumber" type="text" />
+                  Empresa
+                  <input id="leadCompanyName" name="company_name" type="text" />
                 </label>
 
                 <label>
-                  WhatsApp agente humano
-                  <input id="configHumanWhatsappNumber" type="text" />
+                  Servicio
+                  <input id="leadInterestService" name="interest_service" type="text" />
                 </label>
 
                 <label>
-                  Email soporte/comercial
-                  <input id="configSupportEmail" type="email" />
+                  Presupuesto
+                  <input id="leadBudgetRange" name="budget_range" type="text" />
                 </label>
 
                 <label>
-                  Tono del agente
-                  <input id="configAgentTone" type="text" />
+                  Objetivo principal
+                  <input id="leadMainGoal" name="main_goal" type="text" />
                 </label>
 
                 <label>
-                  CTA final
-                  <input id="configFinalCtaLabel" type="text" />
+                  Situacion actual
+                  <input id="leadCurrentSituation" name="current_situation" type="text" />
                 </label>
 
                 <label>
-                  Canal de handoff
-                  <select id="configHandoffTargetChannel">
+                  Problemas detectados
+                  <input id="leadPainPoints" name="pain_points" type="text" />
+                </label>
+
+                <label>
+                  Canal preferido
+                  <select id="leadPreferredContactChannel" name="preferred_contact_channel">
+                    <option value="">-</option>
                     <option value="whatsapp">whatsapp</option>
                     <option value="email">email</option>
                   </select>
                 </label>
 
                 <label>
-                  Color principal
-                  <input id="configPrimaryColor" type="text" />
+                  Estado CRM
+                  <select id="crmStatus" name="crm_status">
+                    <option value="nuevo">nuevo</option>
+                    <option value="contactado">contactado</option>
+                    <option value="cualificado">cualificado</option>
+                    <option value="presupuesto_borrador">presupuesto_borrador</option>
+                    <option value="presupuesto_enviado">presupuesto_enviado</option>
+                    <option value="negociacion">negociacion</option>
+                    <option value="ganado">ganado</option>
+                    <option value="perdido">perdido</option>
+                  </select>
                 </label>
 
                 <label>
-                  Color acento
-                  <input id="configAccentColor" type="text" />
+                  Estado presupuesto
+                  <select id="quoteStatus" name="quote_status">
+                    <option value="sin_presupuesto">sin_presupuesto</option>
+                    <option value="draft">draft</option>
+                    <option value="sent">sent</option>
+                    <option value="accepted">accepted</option>
+                    <option value="rejected">rejected</option>
+                  </select>
                 </label>
 
-                <label class="quote-grid-full">
-                  Ajustes extra de prompt
-                  <textarea id="configPromptAdditions" rows="5"></textarea>
+                <label>
+                  Responsable
+                  <input id="assignedTo" name="assigned_to" type="text" />
                 </label>
 
-                <div class="quote-grid-full services-editor">
-                  <div class="services-editor-head">
-                    <div>
-                      <strong>Servicios</strong>
-                      <p>Define lo que vende el agente, tarifas orientativas y URLs de apoyo.</p>
-                    </div>
-                    <button id="configAddServiceBtn" type="button">Añadir servicio</button>
-                  </div>
-                  <div id="configServicesList" class="services-editor-list"></div>
-                </div>
-              </div>
-            </section>
-
-            <section id="configPanelWebsite" class="config-panel" data-config-panel="website">
-              <div class="quote-grid">
-                <label class="quote-grid-full">
-                  URL de la web a analizar
-                  <input id="configBootstrapUrl" type="url" placeholder="https://tuweb.com" />
+                <label>
+                  Siguiente accion
+                  <input id="nextAction" name="next_action" type="text" />
                 </label>
 
-                <div class="config-website-actions quote-grid-full">
-                  <button id="configAnalyzeWebsiteBtn" type="button">Analizar web y proponer configuracion</button>
-                  <div id="configAnalyzeStatus" class="save-status" aria-live="polite"></div>
-                </div>
-
-                <label class="quote-grid-full">
-                  Resumen detectado
-                  <textarea id="configBootstrapSummary" rows="6" readonly></textarea>
+                <label>
+                  Seguimiento
+                  <input id="followUpAt" name="follow_up_at" type="datetime-local" />
                 </label>
-              </div>
+
+                <label>
+                  Notas internas
+                  <textarea id="internalNotes" name="internal_notes" rows="8"></textarea>
+                </label>
+
+                <button id="saveBtn" type="button">Guardar cambios</button>
+                <div id="leadSaveStatus" class="save-status" aria-live="polite"></div>
+              </form>
             </section>
 
-            <div id="configSaveStatus" class="save-status" aria-live="polite"></div>
-          </form>
-        </section>
-
-        <section id="crm-analytics" class="crm-card crm-analytics">
-          <div class="crm-card-header">
-            <div>
-              <h3>Analitica comercial</h3>
-              <p class="crm-section-copy">Visibilidad rapida del embudo: leads, WhatsApp, propuestas, aceptaciones y respuesta.</p>
-            </div>
-            <span id="analyticsRangeLabel" class="table-count">Todas</span>
-          </div>
-
-          <div class="analytics-grid">
-            <article class="analytics-card">
-              <span>Leads generados</span>
-              <strong id="analyticsLeadsGenerated">-</strong>
-            </article>
-            <article class="analytics-card">
-              <span>Pasan a WhatsApp</span>
-              <strong id="analyticsPassedWhatsapp">-</strong>
-              <small id="analyticsWhatsappHint">-</small>
-            </article>
-            <article class="analytics-card">
-              <span>Propuestas enviadas</span>
-              <strong id="analyticsQuotesSent">-</strong>
-            </article>
-            <article class="analytics-card">
-              <span>Propuestas aceptadas</span>
-              <strong id="analyticsQuotesAccepted">-</strong>
-            </article>
-            <article class="analytics-card">
-              <span>Tiempo medio de respuesta</span>
-              <strong id="analyticsResponseTime">-</strong>
-            </article>
-            <article class="analytics-card">
-              <span>Tasa de aceptacion</span>
-              <strong id="analyticsAcceptanceRate">-</strong>
-            </article>
-          </div>
-
-          <div class="analytics-timeline-card">
-            <div class="analytics-breakdown-header">
-              <h4>Evolucion por dia</h4>
-            </div>
-            <div id="analyticsTimeline" class="analytics-timeline"></div>
-          </div>
-
-          <div class="analytics-breakdowns">
-            <section class="analytics-breakdown-card">
-              <div class="analytics-breakdown-header">
-                <h4>Por canal</h4>
+            <section class="crm-card crm-panel crm-conversation-card">
+              <div class="crm-card-header">
+                <h3>Conversacion</h3>
               </div>
-              <div id="analyticsChannelBreakdown" class="analytics-breakdown-list"></div>
+              <div id="messageList" class="message-list"></div>
             </section>
+          </section>
 
-            <section class="analytics-breakdown-card">
-              <div class="analytics-breakdown-header">
-                <h4>Por fuente</h4>
-              </div>
-              <div id="analyticsSourceBreakdown" class="analytics-breakdown-list"></div>
-            </section>
-          </div>
-        </section>
-
-        <section id="crm-summary" class="crm-card crm-summary">
-          <div class="crm-card-header">
-            <h2 id="leadTitle">Selecciona un lead</h2>
-            <span id="leadChannel" class="pill">-</span>
-          </div>
-          <div id="leadMeta" class="lead-meta"></div>
-        </section>
-
-        <section id="crm-leads" class="crm-card">
-          <div class="crm-card-header">
-            <h3>Leads</h3>
-            <span id="leadTableInfo" class="table-count">0 resultados</span>
-          </div>
-
-          <div class="lead-table-wrap">
-            <table class="lead-table">
-              <thead>
-                <tr>
-                  <th>Nombre de lead</th>
-                  <th>Servicio</th>
-                  <th>Presupuesto</th>
-                  <th>Canal</th>
-                  <th>Telefono</th>
-                  <th>Email</th>
-                  <th>Fecha</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="leadTableBody"></tbody>
-            </table>
-          </div>
-
-          <div id="leadMobileList" class="lead-mobile-list"></div>
-
-          <div class="table-pagination">
-            <button id="leadPrevBtn" type="button">Anterior</button>
-            <span id="leadPaginationInfo">Pagina 1 de 1</span>
-            <button id="leadNextBtn" type="button">Siguiente</button>
-          </div>
-        </section>
-
-        <section id="crm-workspace" class="crm-grid">
-          <section class="crm-card crm-panel">
+          <section id="crm-quote" class="crm-card">
             <div class="crm-card-header">
-              <h3>Gestion</h3>
+              <h3>Presupuesto</h3>
+              <div class="crm-actions">
+                <button id="quotePreviewBtn" type="button"><span class="action-icon">👁</span><span>Vista previa</span></button>
+                <button id="quotePdfBtn" type="button"><span class="action-icon">📄</span><span>Descargar PDF</span></button>
+                <button id="quoteSendEmailBtn" type="button"><span class="action-icon">✉</span><span>Enviar por email</span></button>
+                <button id="quoteSendWhatsappBtn" type="button"><span class="action-icon">🟢</span><span>Enviar por WhatsApp</span></button>
+                <button id="quoteAutofillBtn" type="button"><span class="action-icon">⚡</span><span>Autorrellenar</span></button>
+                <button id="quoteSaveBtn" type="button"><span class="action-icon">💾</span><span>Guardar borrador</span></button>
+              </div>
             </div>
-            <form id="leadForm" class="lead-form">
-              <label>
-                Nombre
-                <input id="leadName" name="name" type="text" />
-              </label>
 
-              <label>
-                Email
-                <input id="leadEmail" name="email" type="email" />
-              </label>
+            <form id="quoteForm" class="quote-form">
+              <div class="quote-grid">
+                <label>
+                  Titulo
+                  <input id="quoteTitle" name="title" type="text" />
+                </label>
 
-              <label>
-                Telefono
-                <input id="leadPhone" name="phone" type="text" />
-              </label>
+                <label>
+                  Moneda
+                  <input id="quoteCurrency" name="currency" type="text" value="EUR" />
+                </label>
 
-              <label>
-                Empresa
-                <input id="leadCompanyName" name="company_name" type="text" />
-              </label>
+                <label>
+                  Tipo de precio
+                  <select id="quoteBillingType" name="billing_type">
+                    <option value="monthly">Mensual</option>
+                    <option value="one_time">Pago unico</option>
+                    <option value="custom">Personalizado</option>
+                  </select>
+                </label>
 
-              <label>
-                Servicio
-                <input id="leadInterestService" name="interest_service" type="text" />
-              </label>
+                <label>
+                  Etiqueta del precio
+                  <input id="quoteBillingLabel" name="billing_label" type="text" placeholder="Ej. mensual, pago unico, trimestral..." />
+                </label>
 
-              <label>
-                Presupuesto
-                <input id="leadBudgetRange" name="budget_range" type="text" />
-              </label>
+                <label>
+                  IVA %
+                  <input id="quoteTaxRate" name="tax_rate" type="number" min="0" step="0.01" value="21" />
+                </label>
 
-              <label>
-                Objetivo principal
-                <input id="leadMainGoal" name="main_goal" type="text" />
-              </label>
+                <label class="quote-grid-full">
+                  Resumen
+                  <input id="quoteSummary" name="summary" type="text" />
+                </label>
 
-              <label>
-                Situacion actual
-                <input id="leadCurrentSituation" name="current_situation" type="text" />
-              </label>
+                <label class="quote-grid-full">
+                  Alcance
+                  <textarea id="quoteScope" name="scope" rows="4"></textarea>
+                </label>
 
-              <label>
-                Problemas detectados
-                <input id="leadPainPoints" name="pain_points" type="text" />
-              </label>
+                <label class="quote-grid-full">
+                  Mensaje del presupuesto
+                  <textarea id="quoteBody" name="body" rows="8"></textarea>
+                </label>
 
-              <label>
-                Canal preferido
-                <select id="leadPreferredContactChannel" name="preferred_contact_channel">
-                  <option value="">-</option>
-                  <option value="whatsapp">whatsapp</option>
-                  <option value="email">email</option>
-                </select>
-              </label>
+                <label class="quote-grid-full">
+                  Supuestos y notas
+                  <textarea id="quoteAssumptions" name="assumptions" rows="4"></textarea>
+                </label>
+              </div>
 
-              <label>
-                Estado CRM
-                <select id="crmStatus" name="crm_status">
-                  <option value="nuevo">nuevo</option>
-                  <option value="contactado">contactado</option>
-                  <option value="cualificado">cualificado</option>
-                  <option value="presupuesto_borrador">presupuesto_borrador</option>
-                  <option value="presupuesto_enviado">presupuesto_enviado</option>
-                  <option value="negociacion">negociacion</option>
-                  <option value="ganado">ganado</option>
-                  <option value="perdido">perdido</option>
-                </select>
-              </label>
+              <section class="quote-items-box">
+                <div class="crm-card-header">
+                  <h4>Partidas</h4>
+                  <button id="quoteAddItemBtn" type="button">Añadir partida</button>
+                </div>
+                <div id="quoteItemsList" class="quote-items-list"></div>
+              </section>
 
-              <label>
-                Estado presupuesto
-                <select id="quoteStatus" name="quote_status">
-                  <option value="sin_presupuesto">sin_presupuesto</option>
-                  <option value="draft">draft</option>
-                  <option value="sent">sent</option>
-                  <option value="accepted">accepted</option>
-                  <option value="rejected">rejected</option>
-                </select>
-              </label>
-
-              <label>
-                Responsable
-                <input id="assignedTo" name="assigned_to" type="text" />
-              </label>
-
-              <label>
-                Siguiente accion
-                <input id="nextAction" name="next_action" type="text" />
-              </label>
-
-              <label>
-                Seguimiento
-                <input id="followUpAt" name="follow_up_at" type="datetime-local" />
-              </label>
-
-              <label>
-                Notas internas
-                <textarea id="internalNotes" name="internal_notes" rows="8"></textarea>
-              </label>
-
-              <button id="saveBtn" type="button">Guardar cambios</button>
-              <div id="leadSaveStatus" class="save-status" aria-live="polite"></div>
+              <section class="quote-totals">
+                <div class="quote-total-row">
+                  <span>Subtotal</span>
+                  <strong id="quoteSubtotal">0,00 EUR</strong>
+                </div>
+                <div class="quote-total-row">
+                  <span>IVA</span>
+                  <strong id="quoteTax">0,00 EUR</strong>
+                </div>
+                <div class="quote-total-row grand">
+                  <span>Total</span>
+                  <strong id="quoteTotal">0,00 EUR</strong>
+                </div>
+              </section>
+              <div id="quoteSaveStatus" class="save-status" aria-live="polite"></div>
             </form>
           </section>
+        </div>
 
-          <section class="crm-card crm-panel crm-conversation-card">
+        <div id="crmViewConfig" class="crm-view">
+          <section id="crm-config" class="crm-card crm-config-card">
             <div class="crm-card-header">
-              <h3>Conversacion</h3>
+              <div>
+                <h3>Configuracion del agente</h3>
+                <p class="crm-section-copy">Gestiona marca, canales, tono, servicios y bootstrap desde web sin invadir la operativa comercial.</p>
+              </div>
+              <button id="configSaveBtn" type="button">Guardar configuracion</button>
             </div>
-            <div id="messageList" class="message-list"></div>
+
+            <form id="configForm" class="config-form">
+              <div class="config-tabs">
+                <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">General</button>
+                <button id="configTabWebsite" type="button" class="config-tab" data-config-tab="website">Desde web</button>
+              </div>
+
+              <section id="configPanelGeneral" class="config-panel is-active" data-config-panel="general">
+                <div class="quote-grid">
+                  <label>
+                    Marca
+                    <input id="configBrandName" type="text" />
+                  </label>
+
+                  <label>
+                    Web principal
+                    <input id="configWebsiteUrl" type="url" />
+                  </label>
+
+                  <div class="config-logo-field">
+                    <div class="config-logo-head">
+                      <span>Logo de marca</span>
+                      <button id="configLogoClearBtn" type="button" class="config-logo-clear">Quitar logo</button>
+                    </div>
+                    <div class="config-logo-picker">
+                      <div class="config-logo-preview-wrap">
+                        <img id="configLogoPreview" class="config-logo-preview" src="./assets/tmedia-global-logo.png" alt="Logo de marca" />
+                      </div>
+                      <div class="config-logo-copy">
+                        <input id="configLogoFile" type="file" accept="image/*" />
+                        <small>Sube una imagen cuadrada o horizontal ligera. La guardaremos en la configuracion del agente.</small>
+                      </div>
+                    </div>
+                    <input id="configLogoUrl" type="hidden" />
+                  </div>
+
+                  <label>
+                    WhatsApp publico
+                    <input id="configPublicWhatsappNumber" type="text" />
+                  </label>
+
+                  <label>
+                    WhatsApp agente humano
+                    <input id="configHumanWhatsappNumber" type="text" />
+                  </label>
+
+                  <label>
+                    Email soporte/comercial
+                    <input id="configSupportEmail" type="email" />
+                  </label>
+
+                  <label>
+                    Tono del agente
+                    <input id="configAgentTone" type="text" />
+                  </label>
+
+                  <label>
+                    CTA final
+                    <input id="configFinalCtaLabel" type="text" />
+                  </label>
+
+                  <label>
+                    Canal de handoff
+                    <select id="configHandoffTargetChannel">
+                      <option value="whatsapp">whatsapp</option>
+                      <option value="email">email</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Color principal
+                    <input id="configPrimaryColor" type="text" />
+                  </label>
+
+                  <label>
+                    Color acento
+                    <input id="configAccentColor" type="text" />
+                  </label>
+
+                  <label class="quote-grid-full">
+                    Ajustes extra de prompt
+                    <textarea id="configPromptAdditions" rows="5"></textarea>
+                  </label>
+
+                  <div class="quote-grid-full services-editor">
+                    <div class="services-editor-head">
+                      <div>
+                        <strong>Servicios</strong>
+                        <p>Define lo que vende el agente, tarifas orientativas y URLs de apoyo.</p>
+                      </div>
+                      <button id="configAddServiceBtn" type="button">Añadir servicio</button>
+                    </div>
+                    <div id="configServicesList" class="services-editor-list"></div>
+                  </div>
+                </div>
+              </section>
+
+              <section id="configPanelWebsite" class="config-panel" data-config-panel="website">
+                <div class="quote-grid">
+                  <label class="quote-grid-full">
+                    URL de la web a analizar
+                    <input id="configBootstrapUrl" type="url" placeholder="https://tuweb.com" />
+                  </label>
+
+                  <div class="config-website-actions quote-grid-full">
+                    <button id="configAnalyzeWebsiteBtn" type="button">Analizar web y proponer configuracion</button>
+                    <div id="configAnalyzeStatus" class="save-status" aria-live="polite"></div>
+                  </div>
+
+                  <label class="quote-grid-full">
+                    Resumen detectado
+                    <textarea id="configBootstrapSummary" rows="6" readonly></textarea>
+                  </label>
+                </div>
+              </section>
+
+              <div id="configSaveStatus" class="save-status" aria-live="polite"></div>
+            </form>
           </section>
-        </section>
-
-        <section id="crm-quote" class="crm-card">
-          <div class="crm-card-header">
-            <h3>Presupuesto</h3>
-            <div class="crm-actions">
-              <button id="quotePreviewBtn" type="button"><span class="action-icon">👁</span><span>Vista previa</span></button>
-              <button id="quotePdfBtn" type="button"><span class="action-icon">📄</span><span>Descargar PDF</span></button>
-              <button id="quoteSendEmailBtn" type="button"><span class="action-icon">✉</span><span>Enviar por email</span></button>
-              <button id="quoteSendWhatsappBtn" type="button"><span class="action-icon">🟢</span><span>Enviar por WhatsApp</span></button>
-              <button id="quoteAutofillBtn" type="button"><span class="action-icon">⚡</span><span>Autorrellenar</span></button>
-              <button id="quoteSaveBtn" type="button"><span class="action-icon">💾</span><span>Guardar borrador</span></button>
-            </div>
-          </div>
-
-          <form id="quoteForm" class="quote-form">
-            <div class="quote-grid">
-              <label>
-                Titulo
-                <input id="quoteTitle" name="title" type="text" />
-              </label>
-
-              <label>
-                Moneda
-                <input id="quoteCurrency" name="currency" type="text" value="EUR" />
-              </label>
-
-              <label>
-                Tipo de precio
-                <select id="quoteBillingType" name="billing_type">
-                  <option value="monthly">Mensual</option>
-                  <option value="one_time">Pago unico</option>
-                  <option value="custom">Personalizado</option>
-                </select>
-              </label>
-
-              <label>
-                Etiqueta del precio
-                <input id="quoteBillingLabel" name="billing_label" type="text" placeholder="Ej. mensual, pago unico, trimestral..." />
-              </label>
-
-              <label>
-                IVA %
-                <input id="quoteTaxRate" name="tax_rate" type="number" min="0" step="0.01" value="21" />
-              </label>
-
-              <label class="quote-grid-full">
-                Resumen
-                <input id="quoteSummary" name="summary" type="text" />
-              </label>
-
-              <label class="quote-grid-full">
-                Alcance
-                <textarea id="quoteScope" name="scope" rows="4"></textarea>
-              </label>
-
-              <label class="quote-grid-full">
-                Mensaje del presupuesto
-                <textarea id="quoteBody" name="body" rows="8"></textarea>
-              </label>
-
-              <label class="quote-grid-full">
-                Supuestos y notas
-                <textarea id="quoteAssumptions" name="assumptions" rows="4"></textarea>
-              </label>
-            </div>
-
-            <section class="quote-items-box">
-              <div class="crm-card-header">
-                <h4>Partidas</h4>
-                <button id="quoteAddItemBtn" type="button">Añadir partida</button>
-              </div>
-              <div id="quoteItemsList" class="quote-items-list"></div>
-            </section>
-
-            <section class="quote-totals">
-              <div class="quote-total-row">
-                <span>Subtotal</span>
-                <strong id="quoteSubtotal">0,00 EUR</strong>
-              </div>
-              <div class="quote-total-row">
-                <span>IVA</span>
-                <strong id="quoteTax">0,00 EUR</strong>
-              </div>
-              <div class="quote-total-row grand">
-                <span>Total</span>
-                <strong id="quoteTotal">0,00 EUR</strong>
-              </div>
-            </section>
-            <div id="quoteSaveStatus" class="save-status" aria-live="polite"></div>
-          </form>
-        </section>
+        </div>
       </div>
     </div>
   </main>

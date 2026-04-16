@@ -14,6 +14,13 @@ const API_BASE = `${window.location.origin}/api/crm`;
 
 const el = {
   refreshBtn: document.getElementById("refreshBtn"),
+  crmViewSalesBtn: document.getElementById("crmViewSalesBtn"),
+  crmViewConfigBtn: document.getElementById("crmViewConfigBtn"),
+  crmViewSales: document.getElementById("crmViewSales"),
+  crmViewConfig: document.getElementById("crmViewConfig"),
+  crmSidebarFilters: document.getElementById("crmSidebarFilters"),
+  crmSidebarFlow: document.getElementById("crmSidebarFlow"),
+  crmSalesLinks: [...document.querySelectorAll(".crm-sales-link")],
   crmBrandEyebrow: document.getElementById("crmBrandEyebrow"),
   crmBrandTitle: document.getElementById("crmBrandTitle"),
   crmSidebarLogo: document.getElementById("crmSidebarLogo"),
@@ -31,6 +38,9 @@ const el = {
   configAnalyzeWebsiteBtn: document.getElementById("configAnalyzeWebsiteBtn"),
   configAnalyzeStatus: document.getElementById("configAnalyzeStatus"),
   configBootstrapSummary: document.getElementById("configBootstrapSummary"),
+  configLogoFile: document.getElementById("configLogoFile"),
+  configLogoPreview: document.getElementById("configLogoPreview"),
+  configLogoClearBtn: document.getElementById("configLogoClearBtn"),
   configLogoUrl: document.getElementById("configLogoUrl"),
   configPublicWhatsappNumber: document.getElementById("configPublicWhatsappNumber"),
   configHumanWhatsappNumber: document.getElementById("configHumanWhatsappNumber"),
@@ -175,6 +185,31 @@ function applyBrandTheme(config = {}) {
     el.crmBrandTitle.textContent = "CRM Comercial";
   }
   document.title = `CRM ${brandName}`;
+}
+
+function updateConfigLogoPreview(value) {
+  const logoUrl = normalizeAssetUrl(value);
+  if (el.configLogoPreview) {
+    el.configLogoPreview.src = logoUrl;
+    el.configLogoPreview.alt = state.appConfig?.brand?.name || "Logo de marca";
+  }
+}
+
+function setMainView(viewName) {
+  const isConfig = viewName === "config";
+  el.crmViewSalesBtn.classList.toggle("is-active", !isConfig);
+  el.crmViewConfigBtn.classList.toggle("is-active", isConfig);
+  el.crmViewSales.classList.toggle("is-active", !isConfig);
+  el.crmViewConfig.classList.toggle("is-active", isConfig);
+  if (el.crmSidebarFilters) {
+    el.crmSidebarFilters.classList.toggle("is-hidden", isConfig);
+  }
+  if (el.crmSidebarFlow) {
+    el.crmSidebarFlow.classList.toggle("is-hidden", isConfig);
+  }
+  for (const link of el.crmSalesLinks) {
+    link.classList.toggle("is-hidden", isConfig);
+  }
 }
 
 function getDateFilterLabel(value) {
@@ -594,6 +629,10 @@ function renderConfig() {
   el.configWebsiteUrl.value = config?.brand?.website_url || "";
   el.configBootstrapUrl.value = config?.brand?.website_url || "";
   el.configLogoUrl.value = config?.brand?.logo_url || "";
+  if (el.configLogoFile) {
+    el.configLogoFile.value = "";
+  }
+  updateConfigLogoPreview(config?.brand?.logo_url || "");
   el.configPrimaryColor.value = config?.brand?.primary_color || "";
   el.configAccentColor.value = config?.brand?.accent_color || "";
   el.configPublicWhatsappNumber.value =
@@ -1203,6 +1242,42 @@ el.configSaveBtn.addEventListener("click", saveConfig);
 el.configAddServiceBtn.addEventListener("click", () => {
   el.configServicesList.appendChild(createServiceEditorItem());
 });
+el.configLogoFile.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    setStatus(el.configSaveStatus, "El logo debe ser una imagen valida.", "error");
+    event.target.value = "";
+    return;
+  }
+
+  const encoded = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen."));
+    reader.readAsDataURL(file);
+  }).catch((error) => {
+    setStatus(el.configSaveStatus, error.message, "error");
+    return "";
+  });
+
+  if (!encoded) return;
+
+  el.configLogoUrl.value = encoded;
+  updateConfigLogoPreview(encoded);
+  setStatus(el.configSaveStatus, "Logo listo para guardar.", "ok");
+});
+el.configLogoClearBtn.addEventListener("click", () => {
+  el.configLogoUrl.value = "";
+  if (el.configLogoFile) {
+    el.configLogoFile.value = "";
+  }
+  updateConfigLogoPreview("");
+  setStatus(el.configSaveStatus, "Logo eliminado de la configuracion actual.", "ok");
+});
+el.crmViewSalesBtn.addEventListener("click", () => setMainView("sales"));
+el.crmViewConfigBtn.addEventListener("click", () => setMainView("config"));
 el.configAnalyzeWebsiteBtn.addEventListener("click", analyzeWebsiteConfig);
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
 el.configTabWebsite.addEventListener("click", () => setConfigTab("website"));
@@ -1262,3 +1337,5 @@ el.quoteBillingType.addEventListener("change", () => {
 Promise.all([loadLeads(), loadConfig()]).catch((error) => {
   el.leadTableBody.innerHTML = `<tr><td colspan="8" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
 });
+
+setMainView("sales");
