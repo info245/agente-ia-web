@@ -45,6 +45,18 @@ textarea {
   gap: 22px;
 }
 
+.crm-shell {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.crm-main {
+  display: grid;
+  gap: 22px;
+}
+
 .crm-topbar,
 .crm-card-header,
 .crm-brand,
@@ -58,7 +70,6 @@ textarea {
 
 .crm-topbar {
   gap: 24px;
-  flex-wrap: wrap;
   padding: 18px 20px;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(191, 208, 234, 0.75);
@@ -79,10 +90,24 @@ textarea {
   letter-spacing: -0.04em;
 }
 
+.crm-eyebrow {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
 .crm-filters {
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.crm-filters-sidebar {
+  display: grid;
+  gap: 12px;
 }
 
 .filter-box {
@@ -182,6 +207,119 @@ textarea {
   padding: 22px;
   box-shadow: var(--shadow);
   backdrop-filter: blur(10px);
+}
+
+.crm-sidebar {
+  position: sticky;
+  top: 24px;
+  display: grid;
+  gap: 20px;
+  padding: 18px;
+  background: linear-gradient(180deg, #4128b9, #5a39d8 40%, #2e2274);
+  color: #fff;
+}
+
+.crm-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.crm-sidebar-logo {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #7d64ff, #5db0ff);
+  color: #fff;
+  font-weight: 900;
+  font-size: 1.35rem;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
+}
+
+.crm-sidebar-kicker {
+  margin: 0 0 4px;
+  color: rgba(255,255,255,0.72);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+}
+
+.crm-sidebar-brand strong {
+  display: block;
+  font-size: 1.15rem;
+}
+
+.crm-sidebar-nav {
+  display: grid;
+  gap: 10px;
+}
+
+.crm-nav-link {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.crm-nav-link:hover {
+  background: rgba(255,255,255,0.16);
+  transform: translateX(2px);
+}
+
+.crm-sidebar-block {
+  display: grid;
+  gap: 12px;
+}
+
+.crm-sidebar-block-title {
+  color: rgba(255,255,255,0.72);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+}
+
+.crm-sidebar .filter-box {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.14);
+  box-shadow: none;
+}
+
+.crm-sidebar .filter-box span,
+.crm-sidebar .filter-box select {
+  color: #fff;
+}
+
+.crm-sidebar-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.crm-mini-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.crm-mini-card span {
+  color: rgba(255,255,255,0.72);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
 }
 
 .crm-summary {
@@ -372,17 +510,21 @@ textarea {
   align-items: stretch;
 }
 
-.crm-grid > .crm-card {
+.crm-panel {
   display: flex;
   flex-direction: column;
-  min-height: 980px;
+  height: 980px;
+  max-height: 980px;
 }
 
 .lead-form {
   display: grid;
   gap: 12px;
   align-content: start;
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .lead-form label,
@@ -539,6 +681,7 @@ textarea {
 }
 
 @media (max-width: 1100px) {
+  .crm-shell,
   .lead-meta,
   .crm-grid,
   .quote-grid,
@@ -546,8 +689,9 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .crm-grid > .crm-card {
-    min-height: auto;
+  .crm-panel {
+    height: auto;
+    max-height: none;
   }
 
   .crm-page {
@@ -557,6 +701,10 @@ textarea {
   .crm-actions {
     justify-content: flex-start;
   }
+
+  .crm-sidebar {
+    position: static;
+  }
 }
 
 @media (max-width: 900px) {
@@ -564,10 +712,6 @@ textarea {
   .crm-card-header,
   .crm-brand {
     align-items: stretch;
-  }
-
-  .crm-filters {
-    width: 100%;
   }
 
   .filter-box {
@@ -606,6 +750,11 @@ textarea {
 
   .filter-box {
     min-width: 100%;
+  }
+
+  .crm-sidebar {
+    padding: 14px;
+    border-radius: 20px;
   }
 
   .lead-table-wrap,
