@@ -160,10 +160,16 @@
                   <textarea id="configPromptAdditions" rows="5"></textarea>
                 </label>
 
-                <label class="quote-grid-full">
-                  Servicios (JSON)
-                  <textarea id="configServicesJson" rows="12"></textarea>
-                </label>
+                <div class="quote-grid-full services-editor">
+                  <div class="services-editor-head">
+                    <div>
+                      <strong>Servicios</strong>
+                      <p>Define lo que vende el agente, tarifas orientativas y URLs de apoyo.</p>
+                    </div>
+                    <button id="configAddServiceBtn" type="button">Añadir servicio</button>
+                  </div>
+                  <div id="configServicesList" class="services-editor-list"></div>
+                </div>
               </div>
             </section>
 

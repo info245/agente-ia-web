@@ -37,7 +37,8 @@ const el = {
   configPrimaryColor: document.getElementById("configPrimaryColor"),
   configAccentColor: document.getElementById("configAccentColor"),
   configPromptAdditions: document.getElementById("configPromptAdditions"),
-  configServicesJson: document.getElementById("configServicesJson"),
+  configServicesList: document.getElementById("configServicesList"),
+  configAddServiceBtn: document.getElementById("configAddServiceBtn"),
   dateFilter: document.getElementById("dateFilter"),
   sourceFilter: document.getElementById("sourceFilter"),
   leadTitle: document.getElementById("leadTitle"),
@@ -125,6 +126,14 @@ function prettyJson(value) {
   }
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 function getDateFilterLabel(value) {
   if (value === "today") return "Hoy";
   if (value === "7d") return "Ultimos 7 dias";
@@ -184,6 +193,86 @@ function getLeadDisplayName(lead) {
   if (lead?.phone) return lead.phone;
   if (lead?.email) return lead.email;
   return "Lead sin nombre";
+}
+
+function createServiceEditorItem(name = "", facts = {}) {
+  const item = document.createElement("article");
+  item.className = "service-item";
+  item.innerHTML = `
+    <div class="service-item-head">
+      <strong>Servicio</strong>
+      <button type="button" class="service-remove-btn">Quitar</button>
+    </div>
+    <div class="service-item-grid">
+      <label>
+        Nombre
+        <input type="text" data-field="name" value="${escapeHtml(name)}" />
+      </label>
+      <label>
+        URL
+        <input type="url" data-field="url" value="${escapeHtml(facts?.url || "")}" />
+      </label>
+      <label>
+        Tarifa mensual orientativa
+        <input type="text" data-field="min_monthly_fee" value="${escapeHtml(facts?.min_monthly_fee || "")}" />
+      </label>
+      <label>
+        Tarifa de proyecto orientativa
+        <input type="text" data-field="min_project_fee" value="${escapeHtml(facts?.min_project_fee || "")}" />
+      </label>
+      <label class="quote-grid-full">
+        Descripcion
+        <textarea rows="4" data-field="description">${escapeHtml(facts?.description || "")}</textarea>
+      </label>
+      <label class="quote-grid-full">
+        Notas comerciales
+        <textarea rows="4" data-field="notes">${escapeHtml(facts?.notes || "")}</textarea>
+      </label>
+    </div>
+  `;
+
+  item
+    .querySelector(".service-remove-btn")
+    .addEventListener("click", () => item.remove());
+
+  return item;
+}
+
+function renderServiceEditor(services = {}) {
+  el.configServicesList.innerHTML = "";
+  const entries = Object.entries(services || {});
+
+  if (!entries.length) {
+    el.configServicesList.appendChild(createServiceEditorItem());
+    return;
+  }
+
+  for (const [name, facts] of entries) {
+    el.configServicesList.appendChild(createServiceEditorItem(name, facts));
+  }
+}
+
+function collectServiceConfig() {
+  const items = [...el.configServicesList.querySelectorAll(".service-item")];
+  const services = {};
+
+  for (const item of items) {
+    const getValue = (field) =>
+      String(item.querySelector(`[data-field="${field}"]`)?.value || "").trim();
+
+    const name = getValue("name");
+    if (!name) continue;
+
+    services[name] = {
+      url: getValue("url"),
+      min_monthly_fee: getValue("min_monthly_fee"),
+      min_project_fee: getValue("min_project_fee"),
+      description: getValue("description"),
+      notes: getValue("notes"),
+    };
+  }
+
+  return services;
 }
 
 function applyLeadFilters() {
@@ -473,7 +562,7 @@ function renderConfig() {
   el.configHandoffTargetChannel.value =
     config?.agent?.handoff_target_channel || "whatsapp";
   el.configPromptAdditions.value = config?.agent?.prompt_additions || "";
-  el.configServicesJson.value = prettyJson(config?.services || {});
+  renderServiceEditor(config?.services || {});
   if (!el.configBootstrapSummary.value.trim()) {
     el.configBootstrapSummary.value = "";
   }
@@ -629,12 +718,7 @@ async function saveConfig() {
   setStatus(el.configSaveStatus, "Guardando configuracion...");
 
   try {
-    let services = {};
-    try {
-      services = JSON.parse(el.configServicesJson.value || "{}");
-    } catch (_error) {
-      throw new Error("El bloque de servicios no es un JSON valido");
-    }
+    const services = collectServiceConfig();
 
     const payload = {
       brand: {
@@ -1072,6 +1156,9 @@ async function sendQuote(via) {
 el.saveBtn.addEventListener("click", saveLead);
 el.refreshBtn.addEventListener("click", loadLeads);
 el.configSaveBtn.addEventListener("click", saveConfig);
+el.configAddServiceBtn.addEventListener("click", () => {
+  el.configServicesList.appendChild(createServiceEditorItem());
+});
 el.configAnalyzeWebsiteBtn.addEventListener("click", analyzeWebsiteConfig);
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
 el.configTabWebsite.addEventListener("click", () => setConfigTab("website"));
