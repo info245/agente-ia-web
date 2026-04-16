@@ -23,6 +23,7 @@ import {
   getLatestQuoteByLeadId,
   upsertLatestQuoteForLead,
   markLatestQuoteAsSent,
+  markLatestQuoteResponse,
 } from "./lib/chatStore.js";
 
 import { mergeLeadData } from "./lib/leadMerge.js";
@@ -42,7 +43,10 @@ import {
   buildMemoryPatch,
   buildLeadMemoryContext,
 } from "./lib/memoryUtils.js";
-import { renderQuotePreviewHtml } from "./lib/quoteTemplate.js";
+import {
+  renderQuotePreviewHtml,
+  renderQuoteResponseHtml,
+} from "./lib/quoteTemplate.js";
 import { renderHtmlToPdfBuffer } from "./lib/htmlPdf.js";
 import {
   extractFirstUrlFromText,
@@ -79,6 +83,8 @@ const WHATSAPP_APP_SECRET =
   process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET || "";
 const TASK_SECRET = process.env.TASK_SECRET || "";
 const INTEGRATIONS_SECRET = process.env.INTEGRATIONS_SECRET || "";
+const QUOTE_RESPONSE_SECRET =
+  process.env.QUOTE_RESPONSE_SECRET || TASK_SECRET || INTEGRATIONS_SECRET || "";
 const WHATSAPP_FOLLOWUP_HOURS = Number(process.env.WHATSAPP_FOLLOWUP_HOURS || 10);
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
@@ -1374,6 +1380,38 @@ function buildQuoteFileName(lead, quote) {
   return `${safeTitle}.pdf`;
 }
 
+function getQuoteResponseSigningSecret() {
+  return QUOTE_RESPONSE_SECRET || "tmglobal-quote-response-fallback";
+}
+
+function buildQuoteResponseToken({ leadId, quoteId, quoteUpdatedAt }) {
+  const base = [String(leadId || ""), String(quoteId || ""), String(quoteUpdatedAt || "")].join(":");
+  return crypto
+    .createHmac("sha256", getQuoteResponseSigningSecret())
+    .update(base)
+    .digest("hex");
+}
+
+function isValidQuoteResponseToken({ leadId, quoteId, quoteUpdatedAt, token }) {
+  const safeToken = String(token || "").trim();
+  if (!safeToken) return false;
+
+  const expected = buildQuoteResponseToken({ leadId, quoteId, quoteUpdatedAt });
+  const expectedBuffer = Buffer.from(expected, "utf8");
+  const tokenBuffer = Buffer.from(safeToken, "utf8");
+
+  if (expectedBuffer.length !== tokenBuffer.length) return false;
+  return crypto.timingSafeEqual(expectedBuffer, tokenBuffer);
+}
+
+function buildQuoteResponseUrl({ baseUrl, leadId, action, token }) {
+  const params = new URLSearchParams({
+    action: String(action || ""),
+    token: String(token || ""),
+  });
+  return `${baseUrl}/crm/quotes/${leadId}/respond?${params.toString()}`;
+}
+
 function getWhatsAppTextFromMessage(message) {
   if (!message) return null;
 
@@ -2333,15 +2371,138 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
 
     const quote = await getLatestQuoteByLeadId(req.params.leadId);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const responseToken = quote
+      ? buildQuoteResponseToken({
+          leadId: lead.id,
+          quoteId: quote.id,
+          quoteUpdatedAt: quote.updated_at || quote.created_at || "",
+        })
+      : "";
+    const acceptUrl = quote
+      ? buildQuoteResponseUrl({
+          baseUrl,
+          leadId: lead.id,
+          action: "accept",
+          token: responseToken,
+        })
+      : "";
+    const rejectUrl = quote
+      ? buildQuoteResponseUrl({
+          baseUrl,
+          leadId: lead.id,
+          action: "reject",
+          token: responseToken,
+        })
+      : "";
+    const humanAgentUrl = quote
+      ? buildQuoteResponseUrl({
+          baseUrl,
+          leadId: lead.id,
+          action: "human",
+          token: responseToken,
+        })
+      : buildHumanAgentWhatsAppUrl(lead?.interest_service || "");
     const html = renderQuotePreviewHtml({
       lead,
       quote,
       logoUrl: `${baseUrl}/crm/assets/tmedia-global-logo.png`,
       autoPrint: req.query.print === "1",
+      acceptUrl,
+      rejectUrl,
+      humanAgentUrl,
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(html);
   } catch (error) {
+    return res.status(500).send(error.message);
+  }
+});
+
+app.get("/crm/quotes/:leadId/respond", async (req, res) => {
+  try {
+    const action = String(req.query.action || "").trim().toLowerCase();
+    if (!["accept", "reject", "human"].includes(action)) {
+      return res.status(400).send("Accion no valida");
+    }
+
+    const leads = await listCrmLeads(500);
+    const lead =
+      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+
+    if (!lead) {
+      return res.status(404).send("Lead no encontrado");
+    }
+
+    const quote = await getLatestQuoteByLeadId(req.params.leadId);
+    if (!quote) {
+      return res.status(404).send("No hay propuesta disponible");
+    }
+
+    const token = String(req.query.token || "").trim();
+    const validToken = isValidQuoteResponseToken({
+      leadId: lead.id,
+      quoteId: quote.id,
+      quoteUpdatedAt: quote.updated_at || quote.created_at || "",
+      token,
+    });
+
+    if (!validToken) {
+      return res.status(403).send("Token de propuesta no valido");
+    }
+
+    const humanAgentUrl = buildHumanAgentWhatsAppUrl(lead?.interest_service || "");
+    const previewUrl = `${req.protocol}://${req.get("host")}/crm/quotes/${lead.id}/preview`;
+
+    if (action === "human") {
+      await trackConversationEvent({
+        conversation_id: lead.conversation_id,
+        event_type: "quote_human_agent_requested",
+        channel: lead?.conversations?.channel || "crm_quote",
+        external_user_id: lead?.conversations?.external_user_id || lead?.email || lead?.phone || null,
+        payload: {
+          quote_id: quote.id,
+          quote_status: quote.status || null,
+        },
+      });
+
+      return res.redirect(humanAgentUrl);
+    }
+
+    const response = await markLatestQuoteResponse(
+      lead.id,
+      action === "accept" ? "accepted" : "rejected"
+    );
+
+    await trackConversationEvent({
+      conversation_id: lead.conversation_id,
+      event_type: "quote_response_received",
+      channel: lead?.conversations?.channel || "crm_quote",
+      external_user_id: lead?.conversations?.external_user_id || lead?.email || lead?.phone || null,
+      payload: {
+        action: response.action,
+        quote_id: quote.id,
+        lead_id: lead.id,
+      },
+    });
+
+    const updatedLead = {
+      ...lead,
+      quote_status: response.lead?.quote_status || lead.quote_status,
+      crm_status: response.lead?.crm_status || lead.crm_status,
+    };
+
+    const html = renderQuoteResponseHtml({
+      action: response.action,
+      lead: updatedLead,
+      quote: response.quote,
+      humanAgentUrl,
+      redirectUrl: previewUrl,
+    });
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(200).send(html);
+  } catch (error) {
+    console.log("crm quote respond error", error);
     return res.status(500).send(error.message);
   }
 });

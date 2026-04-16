@@ -549,6 +549,69 @@ export async function markLatestQuoteAsSent(leadId, sentVia) {
   return data;
 }
 
+export async function markLatestQuoteResponse(leadId, action) {
+  const safeLeadId = clean(leadId);
+  const safeAction = clean(action);
+
+  if (!safeLeadId) {
+    throw new Error("markLatestQuoteResponse: leadId es obligatorio");
+  }
+
+  if (!["accepted", "rejected"].includes(safeAction)) {
+    throw new Error("markLatestQuoteResponse: accion no valida");
+  }
+
+  const current = await getLatestQuoteByLeadId(safeLeadId);
+  if (!current) {
+    throw new Error("No hay presupuesto guardado para este lead");
+  }
+
+  const respondedAt = new Date().toISOString();
+  const nextLeadState =
+    safeAction === "accepted"
+      ? { quote_status: "accepted", crm_status: "ganado" }
+      : { quote_status: "rejected", crm_status: "perdido" };
+
+  const previousQuoteState = {
+    status: current.status,
+    updated_at: current.updated_at,
+  };
+
+  const { data: updatedQuote, error: quoteError } = await supabase
+    .from("quotes")
+    .update({
+      status: safeAction,
+      updated_at: respondedAt,
+    })
+    .eq("id", current.id)
+    .select()
+    .single();
+
+  if (quoteError) throw quoteError;
+
+  const { data: updatedLead, error: leadError } = await supabase
+    .from("leads")
+    .update(nextLeadState)
+    .eq("id", safeLeadId)
+    .select()
+    .single();
+
+  if (leadError) {
+    await supabase
+      .from("quotes")
+      .update(previousQuoteState)
+      .eq("id", current.id);
+    throw leadError;
+  }
+
+  return {
+    quote: updatedQuote,
+    lead: updatedLead,
+    action: safeAction,
+    responded_at: respondedAt,
+  };
+}
+
 export async function upsertLeadFromConversation(lead = {}) {
   const safeConversationId = clean(lead.conversation_id);
   if (!safeConversationId) {

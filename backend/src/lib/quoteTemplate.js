@@ -15,7 +15,15 @@ function formatMoney(value, currency = "EUR") {
   }).format(amount);
 }
 
-export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", autoPrint = false } = {}) {
+export function renderQuotePreviewHtml({
+  lead = {},
+  quote = {},
+  logoUrl = "",
+  autoPrint = false,
+  acceptUrl = "",
+  rejectUrl = "",
+  humanAgentUrl = "",
+} = {}) {
   const content = quote?.content_json || {};
   const items = Array.isArray(content.items) ? content.items : [];
   const currency = quote?.currency || "EUR";
@@ -36,11 +44,7 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       : billingType === "custom"
       ? "Personalizado"
       : "Mensual");
-  const humanWhatsAppNumber = "34614149270";
-  const humanWhatsAppText = `Hola, vengo de la propuesta de ${lead?.interest_service || "TMedia Global"} y quiero hablar con un agente humano.`;
-  const humanWhatsAppUrl = `https://wa.me/${humanWhatsAppNumber}?text=${encodeURIComponent(
-    humanWhatsAppText
-  )}`;
+  const quoteStatus = String(quote?.status || "draft").trim().toLowerCase();
 
   const itemsRows = items.length
     ? items
@@ -368,6 +372,33 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       font-weight: 700;
       box-shadow: 0 10px 24px rgba(31, 170, 89, 0.18);
     }
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .cta-button.secondary {
+      background: #fff;
+      color: #482c89;
+      border: 1px solid #d6c4ff;
+      box-shadow: none;
+    }
+    .cta-button.reject {
+      background: #fff4f1;
+      color: #a83e2e;
+      border: 1px solid #efc0b8;
+      box-shadow: none;
+    }
+    .response-banner {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid #d7c7ff;
+      background: linear-gradient(180deg, #f7f1ff, #f0e7ff);
+      color: #492b89;
+      font-weight: 700;
+    }
     @media print {
       html {
         -webkit-print-color-adjust: exact;
@@ -616,8 +647,30 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       <h2>Mensaje de la propuesta</h2>
       <div class="copy">${escapeHtml(content.body || "")}</div>
       <div class="cta-box">
-        <p>Si prefieres resolver dudas o comentar la propuesta con una persona, puedes contactar directamente con un agente humano por WhatsApp.</p>
-        <a class="cta-button" href="${escapeHtml(humanWhatsAppUrl)}" target="_blank" rel="noopener noreferrer">Contactar con un agente humano</a>
+        <p>Si te encaja, puedes aceptar la propuesta desde aqui. Si no te encaja ahora, tambien puedes indicarlo y dejaremos el CRM actualizado. Y si prefieres hablarlo antes, tienes acceso directo a un agente humano.</p>
+        ${
+          quoteStatus === "accepted"
+            ? `<div class="response-banner">Esta propuesta ya fue aceptada.</div>`
+            : quoteStatus === "rejected"
+            ? `<div class="response-banner">Esta propuesta fue marcada como no encaja ahora.</div>`
+            : `<div class="cta-row">
+                ${
+                  acceptUrl
+                    ? `<a class="cta-button" href="${escapeHtml(acceptUrl)}">Aceptar propuesta</a>`
+                    : ""
+                }
+                ${
+                  rejectUrl
+                    ? `<a class="cta-button reject" href="${escapeHtml(rejectUrl)}">No me encaja ahora</a>`
+                    : ""
+                }
+                ${
+                  humanAgentUrl
+                    ? `<a class="cta-button secondary" href="${escapeHtml(humanAgentUrl)}" target="_blank" rel="noopener noreferrer">Hablar con un agente</a>`
+                    : ""
+                }
+              </div>`
+        }
       </div>
     </section>
 
@@ -637,6 +690,189 @@ export function renderQuotePreviewHtml({ lead = {}, quote = {}, logoUrl = "", au
       setTimeout(() => window.print(), 250);
     });
   </script>` : ""}
+</body>
+</html>`;
+}
+
+export function renderQuoteResponseHtml({
+  action = "",
+  lead = {},
+  quote = {},
+  humanAgentUrl = "",
+  redirectUrl = "",
+} = {}) {
+  const safeAction = String(action || "").trim().toLowerCase();
+  const accepted = safeAction === "accepted";
+  const title = accepted ? "Propuesta aceptada" : "Respuesta registrada";
+  const subtitle = accepted
+    ? "Hemos registrado que quieres seguir adelante con esta propuesta."
+    : "Hemos registrado que ahora no te encaja esta propuesta.";
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root {
+      --bg: #f3f6ff;
+      --paper: #ffffff;
+      --text: #112145;
+      --muted: #61719a;
+      --line: #d8e1fb;
+      --accent: ${accepted ? "#1faa59" : "#ff7b54"};
+      --accent-soft: ${accepted ? "#edf9f2" : "#fff3ee"};
+      --accent-border: ${accepted ? "#bde7cb" : "#ffd5c6"};
+      --btn: #1a3e92;
+      --btnText: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at top left, rgba(127,84,255,0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(255,93,109,0.12), transparent 28%),
+        linear-gradient(180deg, #f7faff, var(--bg));
+      color: var(--text);
+      font-family: Arial, sans-serif;
+    }
+    .card {
+      width: min(760px, 100%);
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      box-shadow: 0 18px 40px rgba(24, 39, 84, 0.1);
+      overflow: hidden;
+    }
+    .hero {
+      padding: 28px 30px 20px;
+      background: linear-gradient(135deg, #132b73, #2d4faa 52%, #6b5cff);
+      color: #fff;
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      opacity: 0.8;
+      font-weight: 700;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 2rem;
+      line-height: 1.1;
+    }
+    .hero p {
+      margin: 0;
+      line-height: 1.6;
+      opacity: 0.94;
+    }
+    .body {
+      padding: 28px 30px 30px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-border);
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 18px;
+    }
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin: 22px 0;
+    }
+    .detail-card {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px 16px;
+      background: #fbfcff;
+    }
+    .detail-card strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 18px;
+      border-radius: 999px;
+      background: var(--btn);
+      color: var(--btnText);
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .button.secondary {
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+    @media (max-width: 640px) {
+      .detail-grid {
+        grid-template-columns: 1fr;
+      }
+      h1 {
+        font-size: 1.65rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <article class="card">
+    <header class="hero">
+      <div class="eyebrow">TMedia Global</div>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${escapeHtml(subtitle)}</p>
+    </header>
+    <div class="body">
+      <div class="badge">${accepted ? "Seguimos adelante" : "Respuesta guardada en CRM"}</div>
+      <p>Gracias${lead?.name ? `, ${escapeHtml(lead.name)}` : ""}. Hemos actualizado esta propuesta y el estado del lead en nuestro CRM para que el siguiente paso quede claro tambien por dentro.</p>
+      <div class="detail-grid">
+        <div class="detail-card">
+          <strong>Servicio</strong>
+          <span>${escapeHtml(lead?.interest_service || "-")}</span>
+        </div>
+        <div class="detail-card">
+          <strong>Propuesta</strong>
+          <span>${escapeHtml(quote?.title || "Propuesta comercial")}</span>
+        </div>
+      </div>
+      <div class="actions">
+        ${
+          humanAgentUrl
+            ? `<a class="button" href="${escapeHtml(humanAgentUrl)}" target="_blank" rel="noopener noreferrer">Hablar con un agente</a>`
+            : ""
+        }
+        ${
+          redirectUrl
+            ? `<a class="button secondary" href="${escapeHtml(redirectUrl)}">Volver a la propuesta</a>`
+            : ""
+        }
+      </div>
+    </div>
+  </article>
 </body>
 </html>`;
 }
