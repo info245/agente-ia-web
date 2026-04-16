@@ -39,6 +39,7 @@
           <summary id="crmMobileControlsSummary" class="crm-mobile-controls-summary">Menu rapido y filtros</summary>
           <div class="crm-mobile-controls-body">
             <nav class="crm-sidebar-nav">
+              <button id="crmViewAdminBtn" type="button" class="crm-nav-link">Superadmin</button>
               <button id="crmViewSalesBtn" type="button" class="crm-nav-link is-active">CRM comercial</button>
               <button id="crmViewConfigBtn" type="button" class="crm-nav-link">Configuracion del agente</button>
               <a href="#crm-analytics" class="crm-nav-link crm-sales-link">Analitica comercial</a>
@@ -99,6 +100,18 @@
       </aside>
 
       <div class="crm-main">
+        <div id="crmViewAdmin" class="crm-view">
+          <section id="crm-admin" class="crm-card crm-admin-card">
+            <div class="crm-card-header">
+              <div>
+                <h3>Superadmin</h3>
+                <p class="crm-section-copy">Vision de cuentas, planes, actividad y acceso rapido a cada espacio cliente.</p>
+              </div>
+            </div>
+            <div id="adminOverviewGrid" class="admin-overview-grid"></div>
+          </section>
+        </div>
+
         <div id="crmViewSales" class="crm-view is-active">
           <section id="crm-analytics" class="crm-card crm-analytics">
             <details id="crmAnalyticsAccordion" class="crm-analytics-accordion" open>
@@ -556,6 +569,13 @@
                       </div>
                       <em id="configWhatsappStatusBadge">Pendiente</em>
                     </div>
+                    <div class="config-integration-tools">
+                      <button id="configValidateWhatsappBtn" type="button" class="crm-secondary-btn">Comprobar conexion</button>
+                      <div class="config-integration-meta">
+                        <span id="configWhatsappValidationMessage">Sin validar todavia</span>
+                        <small id="configWhatsappLastValidated">Ultima validacion: -</small>
+                      </div>
+                    </div>
 
                     <div class="quote-grid">
                       <label>
@@ -592,6 +612,13 @@
                         <strong>Meta y Google</strong>
                       </div>
                       <em>Entrada unificada</em>
+                    </div>
+                    <div class="config-integration-tools">
+                      <button id="configValidateLeadFormsBtn" type="button" class="crm-secondary-btn">Comprobar conexion</button>
+                      <div class="config-integration-meta">
+                        <span id="configLeadFormsValidationMessage">Sin validar todavia</span>
+                        <small id="configLeadFormsLastValidated">Ultima validacion: -</small>
+                      </div>
                     </div>
 
                     <div class="quote-grid">
@@ -640,6 +667,13 @@
                       </div>
                       <em>Proveedor de salida</em>
                     </div>
+                    <div class="config-integration-tools">
+                      <button id="configValidateEmailBtn" type="button" class="crm-secondary-btn">Comprobar conexion</button>
+                      <div class="config-integration-meta">
+                        <span id="configEmailValidationMessage">Sin validar todavia</span>
+                        <small id="configEmailLastValidated">Ultima validacion: -</small>
+                      </div>
+                    </div>
 
                     <div class="quote-grid">
                       <label>
@@ -672,6 +706,13 @@
                         <strong>Orquestacion y herramientas</strong>
                       </div>
                       <em>Backoffice tecnico</em>
+                    </div>
+                    <div class="config-integration-tools">
+                      <button id="configValidateAutomationsBtn" type="button" class="crm-secondary-btn">Comprobar conexion</button>
+                      <div class="config-integration-meta">
+                        <span id="configAutomationsValidationMessage">Sin validar todavia</span>
+                        <small id="configAutomationsLastValidated">Ultima validacion: -</small>
+                      </div>
                     </div>
 
                     <div class="quote-grid">

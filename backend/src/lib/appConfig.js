@@ -24,6 +24,11 @@ export const DEFAULT_APP_CONFIG = {
       phone_number_id: "",
       business_account_id: "",
       status_label: "Pendiente de conectar",
+      validation: {
+        status: "pending",
+        last_validated_at: "",
+        message: "Sin validar todavia",
+      },
     },
     lead_forms: {
       meta_source: "google_sheets",
@@ -31,16 +36,31 @@ export const DEFAULT_APP_CONFIG = {
       sheet_document: "",
       sheet_tabs: "",
       webhook_url: "",
+      validation: {
+        status: "pending",
+        last_validated_at: "",
+        message: "Sin validar todavia",
+      },
     },
     email: {
       provider: "smtp",
       from_email: "",
       reply_to_email: "",
+      validation: {
+        status: "pending",
+        last_validated_at: "",
+        message: "Sin validar todavia",
+      },
     },
     automations: {
       platform: "n8n",
       workspace_url: "",
       notes: "",
+      validation: {
+        status: "pending",
+        last_validated_at: "",
+        message: "Sin validar todavia",
+      },
     },
   },
   services: {
@@ -151,6 +171,16 @@ function sanitizeServices(services = {}) {
   return result;
 }
 
+function sanitizeValidation(value = {}, defaults = {}) {
+  return {
+    status: cleanString(value?.status) || cleanString(defaults?.status) || "pending",
+    last_validated_at:
+      cleanString(value?.last_validated_at) ||
+      cleanString(defaults?.last_validated_at),
+    message: cleanString(value?.message) || cleanString(defaults?.message),
+  };
+}
+
 export function sanitizeAppConfig(input = {}) {
   const services = sanitizeServices(input?.services);
 
@@ -202,6 +232,10 @@ export function sanitizeAppConfig(input = {}) {
         status_label:
           cleanString(input?.integrations?.whatsapp?.status_label) ||
           DEFAULT_APP_CONFIG.integrations.whatsapp.status_label,
+        validation: sanitizeValidation(
+          input?.integrations?.whatsapp?.validation,
+          DEFAULT_APP_CONFIG.integrations.whatsapp.validation
+        ),
       },
       lead_forms: {
         meta_source:
@@ -215,6 +249,10 @@ export function sanitizeAppConfig(input = {}) {
         ),
         sheet_tabs: cleanString(input?.integrations?.lead_forms?.sheet_tabs),
         webhook_url: cleanString(input?.integrations?.lead_forms?.webhook_url),
+        validation: sanitizeValidation(
+          input?.integrations?.lead_forms?.validation,
+          DEFAULT_APP_CONFIG.integrations.lead_forms.validation
+        ),
       },
       email: {
         provider:
@@ -223,6 +261,10 @@ export function sanitizeAppConfig(input = {}) {
         from_email: cleanString(input?.integrations?.email?.from_email),
         reply_to_email: cleanString(
           input?.integrations?.email?.reply_to_email
+        ),
+        validation: sanitizeValidation(
+          input?.integrations?.email?.validation,
+          DEFAULT_APP_CONFIG.integrations.email.validation
         ),
       },
       automations: {
@@ -233,6 +275,10 @@ export function sanitizeAppConfig(input = {}) {
           input?.integrations?.automations?.workspace_url
         ),
         notes: cleanString(input?.integrations?.automations?.notes),
+        validation: sanitizeValidation(
+          input?.integrations?.automations?.validation,
+          DEFAULT_APP_CONFIG.integrations.automations.validation
+        ),
       },
     },
     services: Object.keys(services).length

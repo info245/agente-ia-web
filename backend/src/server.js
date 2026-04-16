@@ -1496,6 +1496,59 @@ function resolvePublicAssetUrl(baseUrl, assetUrl) {
   return `${baseUrl}/${raw.replace(/^\.?\//, "")}`;
 }
 
+function buildValidationResult(status = "pending", message = "", checkedAt = new Date().toISOString()) {
+  return {
+    status,
+    last_validated_at: checkedAt,
+    message,
+  };
+}
+
+function validateIntegrationConfig(type, config = {}) {
+  const checkedAt = new Date().toISOString();
+  const integrations = config?.integrations || {};
+
+  if (type === "whatsapp") {
+    const item = integrations.whatsapp || {};
+    if (item.provider === "manual") {
+      return buildValidationResult("warning", "Canal manual: sin comprobacion automatica.", checkedAt);
+    }
+    if (!item.phone_number_id || !item.business_account_id) {
+      return buildValidationResult("pending", "Faltan Phone Number ID o Business Account ID.", checkedAt);
+    }
+    return buildValidationResult("connected", `WhatsApp listo con ${item.provider || "provider"}.`, checkedAt);
+  }
+
+  if (type === "lead_forms") {
+    const item = integrations.lead_forms || {};
+    if (!item.meta_source && !item.google_source) {
+      return buildValidationResult("pending", "No hay fuentes de leads definidas.", checkedAt);
+    }
+    if (!item.sheet_document && !item.webhook_url) {
+      return buildValidationResult("pending", "Falta documento de Sheets o webhook principal.", checkedAt);
+    }
+    return buildValidationResult("connected", "Lead forms configurados para entrada unificada.", checkedAt);
+  }
+
+  if (type === "email") {
+    const item = integrations.email || {};
+    if (!item.from_email) {
+      return buildValidationResult("pending", "Falta el email de salida.", checkedAt);
+    }
+    return buildValidationResult("connected", `Email listo con proveedor ${item.provider || "smtp"}.`, checkedAt);
+  }
+
+  if (type === "automations") {
+    const item = integrations.automations || {};
+    if (!item.workspace_url) {
+      return buildValidationResult("pending", "Falta la URL del workspace de automatizacion.", checkedAt);
+    }
+    return buildValidationResult("connected", `Automatizaciones listas en ${item.platform || "n8n"}.`, checkedAt);
+  }
+
+  return buildValidationResult("pending", "Tipo de integracion no reconocido.", checkedAt);
+}
+
 function getWhatsAppTextFromMessage(message) {
   if (!message) return null;
 
@@ -2449,6 +2502,50 @@ app.get("/api/admin/accounts", async (req, res) => {
   }
 });
 
+app.get("/api/admin/overview", async (req, res) => {
+  try {
+    const accounts = await listAccounts();
+
+    const overview = await Promise.all(
+      accounts.map(async (account) => {
+        const [config, leads] = await Promise.all([
+          getAppConfig({ accountId: account.id }).catch(() => null),
+          listCrmLeads({ limit: 500, accountId: account.id }).catch(() => []),
+        ]);
+
+        const quotesSent = (leads || []).filter((lead) =>
+          ["sent", "accepted", "rejected"].includes(String(lead?.quote_status || ""))
+        ).length;
+        const quotesAccepted = (leads || []).filter(
+          (lead) => String(lead?.quote_status || "") === "accepted"
+        ).length;
+        const lastLeadAt = (leads || [])
+          .map((lead) => lead?.created_at)
+          .filter(Boolean)
+          .sort()
+          .slice(-1)[0] || null;
+
+        return {
+          ...account,
+          brand_name: config?.brand?.name || account.name,
+          brand_logo_url: config?.brand?.logo_url || "",
+          primary_color: config?.brand?.primary_color || "#6d41f3",
+          totals: {
+            leads: leads.length,
+            quotes_sent: quotesSent,
+            quotes_accepted: quotesAccepted,
+          },
+          last_activity_at: lastLeadAt,
+        };
+      })
+    );
+
+    res.json({ ok: true, accounts: overview });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/api/crm/config", async (_req, res) => {
   try {
     const account = await resolveRequestAccount(_req);
@@ -2573,6 +2670,42 @@ app.post("/api/crm/config/bootstrap-site", async (req, res) => {
       ok: true,
       snapshot,
       suggested_config: suggestedConfig,
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/integrations/validate", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const type = String(req.body?.type || "").trim();
+    if (!type) {
+      return res.status(400).json({ ok: false, error: "type es obligatorio" });
+    }
+
+    const currentConfig = await getAppConfig({ accountId: account.id });
+    const validation = validateIntegrationConfig(type, currentConfig);
+
+    const nextConfig = {
+      ...currentConfig,
+      integrations: {
+        ...(currentConfig?.integrations || {}),
+        [type]: {
+          ...(currentConfig?.integrations?.[type] || {}),
+          validation,
+        },
+      },
+    };
+
+    const saved = await saveAppConfig(nextConfig, { accountId: account.id });
+
+    res.json({
+      ok: true,
+      type,
+      validation,
+      config: saved,
+      account,
     });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });

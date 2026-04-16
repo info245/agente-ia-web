@@ -1,6 +1,7 @@
 const state = {
   accounts: [],
   activeAccountId: null,
+  adminOverview: [],
   leads: [],
   filteredLeads: [],
   selectedLead: null,
@@ -20,8 +21,10 @@ const el = {
   accountSelect: document.getElementById("accountSelect"),
   accountPlanBadge: document.getElementById("accountPlanBadge"),
   refreshBtn: document.getElementById("refreshBtn"),
+  crmViewAdminBtn: document.getElementById("crmViewAdminBtn"),
   crmViewSalesBtn: document.getElementById("crmViewSalesBtn"),
   crmViewConfigBtn: document.getElementById("crmViewConfigBtn"),
+  crmViewAdmin: document.getElementById("crmViewAdmin"),
   crmViewSales: document.getElementById("crmViewSales"),
   crmViewConfig: document.getElementById("crmViewConfig"),
   crmMobileControls: document.getElementById("crmMobileControls"),
@@ -70,19 +73,32 @@ const el = {
   configWhatsappPhoneNumberId: document.getElementById("configWhatsappPhoneNumberId"),
   configWhatsappBusinessAccountId: document.getElementById("configWhatsappBusinessAccountId"),
   configWhatsappStatusBadge: document.getElementById("configWhatsappStatusBadge"),
+  configValidateWhatsappBtn: document.getElementById("configValidateWhatsappBtn"),
+  configWhatsappValidationMessage: document.getElementById("configWhatsappValidationMessage"),
+  configWhatsappLastValidated: document.getElementById("configWhatsappLastValidated"),
   configMetaLeadSource: document.getElementById("configMetaLeadSource"),
   configGoogleLeadSource: document.getElementById("configGoogleLeadSource"),
   configLeadSheetDocument: document.getElementById("configLeadSheetDocument"),
   configLeadSheetTabs: document.getElementById("configLeadSheetTabs"),
   configLeadWebhookUrl: document.getElementById("configLeadWebhookUrl"),
+  configValidateLeadFormsBtn: document.getElementById("configValidateLeadFormsBtn"),
+  configLeadFormsValidationMessage: document.getElementById("configLeadFormsValidationMessage"),
+  configLeadFormsLastValidated: document.getElementById("configLeadFormsLastValidated"),
   configEmailProvider: document.getElementById("configEmailProvider"),
   configEmailFromAddress: document.getElementById("configEmailFromAddress"),
   configEmailReplyTo: document.getElementById("configEmailReplyTo"),
+  configValidateEmailBtn: document.getElementById("configValidateEmailBtn"),
+  configEmailValidationMessage: document.getElementById("configEmailValidationMessage"),
+  configEmailLastValidated: document.getElementById("configEmailLastValidated"),
   configAutomationPlatform: document.getElementById("configAutomationPlatform"),
   configAutomationWorkspaceUrl: document.getElementById("configAutomationWorkspaceUrl"),
   configAutomationNotes: document.getElementById("configAutomationNotes"),
+  configValidateAutomationsBtn: document.getElementById("configValidateAutomationsBtn"),
+  configAutomationsValidationMessage: document.getElementById("configAutomationsValidationMessage"),
+  configAutomationsLastValidated: document.getElementById("configAutomationsLastValidated"),
   configServicesList: document.getElementById("configServicesList"),
   configAddServiceBtn: document.getElementById("configAddServiceBtn"),
+  adminOverviewGrid: document.getElementById("adminOverviewGrid"),
   dateFilter: document.getElementById("dateFilter"),
   sourceFilter: document.getElementById("sourceFilter"),
   serviceFilter: document.getElementById("serviceFilter"),
@@ -267,31 +283,99 @@ function updateConfigLogoPreview(value) {
   }
 }
 
+function fmtShortDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "-"
+    : date.toLocaleString("es-ES", {
+        dateStyle: "short",
+        timeStyle: "short",
+      });
+}
+
+function getValidationTone(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "connected") return "ok";
+  if (normalized === "warning") return "warning";
+  return "pending";
+}
+
+function renderIntegrationValidation(type, validation = {}, badgeText = "") {
+  const tone = getValidationTone(validation?.status);
+  const fallbackMessage = validation?.message || "Sin validar todavia";
+  const lastValidated = validation?.last_validated_at
+    ? `Ultima validacion: ${fmtShortDate(validation.last_validated_at)}`
+    : "Ultima validacion: -";
+
+  const map = {
+    whatsapp: {
+      badge: el.configWhatsappStatusBadge,
+      message: el.configWhatsappValidationMessage,
+      timestamp: el.configWhatsappLastValidated,
+    },
+    lead_forms: {
+      badge: null,
+      message: el.configLeadFormsValidationMessage,
+      timestamp: el.configLeadFormsLastValidated,
+    },
+    email: {
+      badge: null,
+      message: el.configEmailValidationMessage,
+      timestamp: el.configEmailLastValidated,
+    },
+    automations: {
+      badge: null,
+      message: el.configAutomationsValidationMessage,
+      timestamp: el.configAutomationsLastValidated,
+    },
+  };
+
+  const target = map[type];
+  if (!target) return;
+
+  if (target.badge) {
+    target.badge.textContent = badgeText || validation?.status || "Pendiente";
+    target.badge.dataset.tone = tone;
+  }
+  if (target.message) {
+    target.message.textContent = fallbackMessage;
+    target.message.dataset.tone = tone;
+  }
+  if (target.timestamp) {
+    target.timestamp.textContent = lastValidated;
+  }
+}
+
 function setMainView(viewName) {
+  const isAdmin = viewName === "admin";
   const isConfig = viewName === "config";
+  const isSales = !isConfig && !isAdmin;
   const isMobile = window.matchMedia("(max-width: 980px)").matches;
 
-  el.crmViewSalesBtn.classList.toggle("is-active", !isConfig);
+  el.crmViewAdminBtn.classList.toggle("is-active", isAdmin);
+  el.crmViewSalesBtn.classList.toggle("is-active", isSales);
   el.crmViewConfigBtn.classList.toggle("is-active", isConfig);
-  el.crmViewSales.classList.toggle("is-active", !isConfig);
+  el.crmViewAdmin.classList.toggle("is-active", isAdmin);
+  el.crmViewSales.classList.toggle("is-active", isSales);
   el.crmViewConfig.classList.toggle("is-active", isConfig);
   if (el.crmMobileBottomNav) {
-    el.crmMobileBottomNav.classList.toggle("is-hidden", isConfig);
+    el.crmMobileBottomNav.classList.toggle("is-hidden", isConfig || isAdmin);
   }
   if (el.crmMobileControls) {
-    el.crmMobileControls.classList.toggle("is-hidden", isMobile);
+    el.crmMobileControls.classList.toggle("is-hidden", isMobile || isAdmin);
   }
   if (el.crmSidebar) {
-    el.crmSidebar.classList.toggle("is-mobile-sales-hidden", isMobile);
+    el.crmSidebar.classList.toggle("is-mobile-sales-hidden", isMobile && isSales);
   }
   if (el.crmSidebarFilters) {
-    el.crmSidebarFilters.classList.toggle("is-hidden", isConfig);
+    el.crmSidebarFilters.classList.toggle("is-hidden", isConfig || isAdmin);
   }
   if (el.crmSidebarFlow) {
-    el.crmSidebarFlow.classList.toggle("is-hidden", isConfig);
+    el.crmSidebarFlow.classList.toggle("is-hidden", isConfig || isAdmin);
   }
   for (const link of el.crmSalesLinks) {
-    link.classList.toggle("is-hidden", isConfig);
+    link.classList.toggle("is-hidden", isConfig || isAdmin);
   }
 }
 
@@ -437,6 +521,61 @@ function renderAccounts() {
   }
 }
 
+function renderAdminOverview() {
+  if (!el.adminOverviewGrid) return;
+
+  const accounts = state.adminOverview || [];
+  if (!accounts.length) {
+    el.adminOverviewGrid.innerHTML = '<div class="empty">Todavia no hay cuentas registradas.</div>';
+    return;
+  }
+
+  el.adminOverviewGrid.innerHTML = accounts
+    .map((account) => {
+      const isActive = String(account.id) === String(state.activeAccountId);
+      const logoUrl = normalizeAssetUrl(account.brand_logo_url);
+      return `
+        <article class="admin-account-card ${isActive ? "is-active" : ""}">
+          <div class="admin-account-head">
+            <div class="admin-account-brand">
+              <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(account.brand_name || account.name)}" />
+              <div>
+                <span>${escapeHtml(account.slug || account.id)}</span>
+                <strong>${escapeHtml(account.brand_name || account.name)}</strong>
+              </div>
+            </div>
+            <div class="admin-account-badges">
+              <span class="pill">${escapeHtml(account.plan || "trial")}</span>
+              <span class="pill">${escapeHtml(account.status || "active")}</span>
+            </div>
+          </div>
+          <div class="admin-account-metrics">
+            <div><span>Leads</span><strong>${Number(account?.totals?.leads || 0)}</strong></div>
+            <div><span>Enviadas</span><strong>${Number(account?.totals?.quotes_sent || 0)}</strong></div>
+            <div><span>Aceptadas</span><strong>${Number(account?.totals?.quotes_accepted || 0)}</strong></div>
+          </div>
+          <div class="admin-account-footer">
+            <small>Ultima actividad: ${fmtShortDate(account.last_activity_at)}</small>
+            <div class="admin-account-actions">
+              <button type="button" class="crm-secondary-btn" data-open-account="${escapeHtml(account.id)}" data-open-view="config">Configurar</button>
+              <button type="button" class="crm-primary-inline-btn" data-open-account="${escapeHtml(account.id)}" data-open-view="sales">Abrir CRM</button>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  el.adminOverviewGrid.querySelectorAll("[data-open-account]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const accountId = button.getAttribute("data-open-account");
+      const view = button.getAttribute("data-open-view") || "sales";
+      await handleAccountChange(accountId);
+      setMainView(view);
+    });
+  });
+}
+
 async function loadAccounts() {
   const requestedAccountId = getRequestedAccountId();
   const params = new URLSearchParams();
@@ -461,6 +600,12 @@ async function loadAccounts() {
   renderAccounts();
 }
 
+async function loadAdminOverview() {
+  const data = await fetchJson(`${window.location.origin}/api/admin/overview`);
+  state.adminOverview = data.accounts || [];
+  renderAdminOverview();
+}
+
 async function handleAccountChange(nextAccountId) {
   state.activeAccountId = String(nextAccountId || "").trim();
   setStoredAccountId(state.activeAccountId);
@@ -474,7 +619,7 @@ async function handleAccountChange(nextAccountId) {
   window.history.replaceState({}, "", url);
 
   renderAccounts();
-  await Promise.all([loadLeads(), loadConfig()]);
+  await Promise.all([loadLeads(), loadConfig(), loadAdminOverview()]);
 }
 
 function looksGenericName(value) {
@@ -940,6 +1085,23 @@ function renderConfig() {
     el.configWhatsappStatusBadge.textContent =
       config?.integrations?.whatsapp?.status_label || "Pendiente";
   }
+  renderIntegrationValidation(
+    "whatsapp",
+    config?.integrations?.whatsapp?.validation || {},
+    config?.integrations?.whatsapp?.status_label || "Pendiente"
+  );
+  renderIntegrationValidation(
+    "lead_forms",
+    config?.integrations?.lead_forms?.validation || {}
+  );
+  renderIntegrationValidation(
+    "email",
+    config?.integrations?.email?.validation || {}
+  );
+  renderIntegrationValidation(
+    "automations",
+    config?.integrations?.automations?.validation || {}
+  );
   renderServiceEditor(config?.services || {});
   if (!el.configBootstrapSummary.value.trim()) {
     el.configBootstrapSummary.value = "";
@@ -1132,6 +1294,7 @@ async function saveConfig() {
           status_label: el.configWhatsappStatusLabel.value,
           phone_number_id: el.configWhatsappPhoneNumberId.value,
           business_account_id: el.configWhatsappBusinessAccountId.value,
+          validation: state.appConfig?.integrations?.whatsapp?.validation || {},
         },
         lead_forms: {
           meta_source: el.configMetaLeadSource.value,
@@ -1139,16 +1302,19 @@ async function saveConfig() {
           sheet_document: el.configLeadSheetDocument.value,
           sheet_tabs: el.configLeadSheetTabs.value,
           webhook_url: el.configLeadWebhookUrl.value,
+          validation: state.appConfig?.integrations?.lead_forms?.validation || {},
         },
         email: {
           provider: el.configEmailProvider.value,
           from_email: el.configEmailFromAddress.value,
           reply_to_email: el.configEmailReplyTo.value,
+          validation: state.appConfig?.integrations?.email?.validation || {},
         },
         automations: {
           platform: el.configAutomationPlatform.value,
           workspace_url: el.configAutomationWorkspaceUrl.value,
           notes: el.configAutomationNotes.value,
+          validation: state.appConfig?.integrations?.automations?.validation || {},
         },
       },
       services,
@@ -1236,6 +1402,30 @@ async function analyzeWebsiteConfig() {
   } finally {
     el.configAnalyzeWebsiteBtn.disabled = false;
     el.configAnalyzeWebsiteBtn.classList.remove("is-busy");
+  }
+}
+
+async function validateIntegration(type, button) {
+  if (!type) return;
+  button.disabled = true;
+  button.classList.add("is-busy");
+  setStatus(el.configSaveStatus, `Comprobando ${type}...`);
+
+  try {
+    const data = await fetchJson(`${API_BASE}/integrations/validate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type }),
+    });
+
+    state.appConfig = data.config || state.appConfig;
+    renderConfig();
+    setStatus(el.configSaveStatus, `Integracion ${type} validada.`, "ok");
+  } catch (error) {
+    setStatus(el.configSaveStatus, `No se pudo validar ${type}: ${error.message}`, "error");
+  } finally {
+    button.disabled = false;
+    button.classList.remove("is-busy");
   }
 }
 
@@ -1636,6 +1826,7 @@ el.configLogoClearBtn.addEventListener("click", () => {
   setStatus(el.configSaveStatus, "Logo eliminado de la configuracion actual.", "ok");
 });
 el.crmViewSalesBtn.addEventListener("click", () => setMainView("sales"));
+el.crmViewAdminBtn?.addEventListener("click", () => setMainView("admin"));
 el.crmViewConfigBtn.addEventListener("click", () => setMainView("config"));
 el.configBackBtn?.addEventListener("click", () => setMainView("sales"));
 el.crmSalesLinks.forEach((link) =>
@@ -1646,6 +1837,18 @@ el.crmSalesLinks.forEach((link) =>
   })
 );
 el.configAnalyzeWebsiteBtn.addEventListener("click", analyzeWebsiteConfig);
+el.configValidateWhatsappBtn?.addEventListener("click", () =>
+  validateIntegration("whatsapp", el.configValidateWhatsappBtn)
+);
+el.configValidateLeadFormsBtn?.addEventListener("click", () =>
+  validateIntegration("lead_forms", el.configValidateLeadFormsBtn)
+);
+el.configValidateEmailBtn?.addEventListener("click", () =>
+  validateIntegration("email", el.configValidateEmailBtn)
+);
+el.configValidateAutomationsBtn?.addEventListener("click", () =>
+  validateIntegration("automations", el.configValidateAutomationsBtn)
+);
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
 el.configTabIntegrations.addEventListener("click", () => setConfigTab("integrations"));
 el.configTabWebsite.addEventListener("click", () => setConfigTab("website"));
@@ -1700,7 +1903,7 @@ window.addEventListener("resize", syncMobileAdaptiveUi);
 
 async function bootstrapCrm() {
   await loadAccounts();
-  await Promise.all([loadLeads(), loadConfig()]);
+  await Promise.all([loadLeads(), loadConfig(), loadAdminOverview()]);
 }
 
 bootstrapCrm().catch((error) => {

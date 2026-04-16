@@ -11,13 +11,15 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
-create policy if not exists "Public read for CRM brand assets"
+drop policy if exists "Public read for CRM brand assets" on storage.objects;
+create policy "Public read for CRM brand assets"
 on storage.objects
 for select
 to public
 using (bucket_id = 'crm-brand-assets');
 
-create policy if not exists "Service role manages CRM brand assets"
+drop policy if exists "Service role manages CRM brand assets" on storage.objects;
+create policy "Service role manages CRM brand assets"
 on storage.objects
 for all
 to service_role
