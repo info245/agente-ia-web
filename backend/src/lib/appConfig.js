@@ -63,6 +63,96 @@ export const DEFAULT_APP_CONFIG = {
       },
     },
   },
+  message_templates: {
+    whatsapp_first_contact: {
+      channel: "whatsapp",
+      label: "Primer contacto por WhatsApp",
+      subject: "",
+      body:
+        "Hola {nombre}, soy parte del equipo de {marca}. He revisado tu interes en {servicio} y te escribo para ayudarte a dar el siguiente paso con contexto real. Si quieres, seguimos por aqui y te oriento segun tu caso.",
+    },
+    email_first_contact: {
+      channel: "email",
+      label: "Primer contacto por email",
+      subject: "Seguimos con tu consulta sobre {servicio}",
+      body:
+        "Hola {nombre},\n\nGracias por escribirnos a {marca}. Hemos revisado tu interes en {servicio} y queremos ayudarte a aterrizar una propuesta clara y accionable.\n\nSi te viene bien, respondeme a este correo y seguimos contigo.\n\nUn saludo,\n{marca}",
+    },
+    quote_whatsapp: {
+      channel: "whatsapp",
+      label: "Envio de propuesta por WhatsApp",
+      subject: "",
+      body:
+        "Hola {nombre}, te comparto aqui tu propuesta de {servicio}: {link_presupuesto}. Si quieres, la vemos juntos y resolvemos dudas antes de decidir.",
+    },
+    quote_email: {
+      channel: "email",
+      label: "Envio de propuesta por email",
+      subject: "Tu propuesta de {servicio} ya esta lista",
+      body:
+        "Hola {nombre},\n\nTe comparto tu propuesta de {servicio}: {link_presupuesto}\n\nSi quieres comentarla con un agente, tambien puedes escribirnos por WhatsApp: {whatsapp_humano}.\n\nUn saludo,\n{marca}",
+    },
+    recovery_whatsapp: {
+      channel: "whatsapp",
+      label: "Recuperacion por WhatsApp",
+      subject: "",
+      body:
+        "Hola {nombre}, retomo este hilo porque creo que aun podemos ayudarte con {servicio}. Si quieres, te dejo aqui una recomendacion concreta para tu caso y vemos si tiene sentido avanzar.",
+    },
+    recovery_email: {
+      channel: "email",
+      label: "Recuperacion por email",
+      subject: "Seguimos disponibles para ayudarte con {servicio}",
+      body:
+        "Hola {nombre},\n\nRetomo el contacto porque creo que aun hay recorrido para ayudarte con {servicio}. Si te encaja, podemos retomar la conversacion y proponerte un siguiente paso muy concreto.\n\nQuedo pendiente,\n{marca}",
+    },
+  },
+  automation_flows: {
+    lead_recovery: {
+      label: "Recuperacion de leads",
+      description:
+        "Secuencia automatica para leads que no responden despues del primer contacto.",
+      enabled: true,
+      steps: [
+        {
+          delay_value: "24",
+          delay_unit: "hours",
+          channel: "whatsapp",
+          template_key: "recovery_whatsapp",
+          active: true,
+        },
+        {
+          delay_value: "48",
+          delay_unit: "hours",
+          channel: "email",
+          template_key: "recovery_email",
+          active: true,
+        },
+      ],
+    },
+    quote_followup: {
+      label: "Seguimiento de propuesta",
+      description:
+        "Secuencia automatica para presupuestos enviados que siguen sin respuesta.",
+      enabled: true,
+      steps: [
+        {
+          delay_value: "24",
+          delay_unit: "hours",
+          channel: "whatsapp",
+          template_key: "quote_whatsapp",
+          active: true,
+        },
+        {
+          delay_value: "72",
+          delay_unit: "hours",
+          channel: "email",
+          template_key: "quote_email",
+          active: true,
+        },
+      ],
+    },
+  },
   services: {
     "Google Ads": {
       min_monthly_fee: "250 € + IVA",
@@ -181,8 +271,80 @@ function sanitizeValidation(value = {}, defaults = {}) {
   };
 }
 
+function sanitizeMessageTemplates(value = {}) {
+  const defaults = DEFAULT_APP_CONFIG.message_templates || {};
+  const result = {};
+
+  for (const [key, templateDefaults] of Object.entries(defaults)) {
+    const incoming = value?.[key] || {};
+    result[key] = {
+      channel:
+        cleanString(incoming?.channel) ||
+        cleanString(templateDefaults?.channel) ||
+        "email",
+      label:
+        cleanString(incoming?.label) ||
+        cleanString(templateDefaults?.label) ||
+        key,
+      subject:
+        cleanString(incoming?.subject) ||
+        cleanString(templateDefaults?.subject),
+      body:
+        cleanString(incoming?.body) ||
+        cleanString(templateDefaults?.body),
+    };
+  }
+
+  return result;
+}
+
+function sanitizeAutomationSteps(steps = []) {
+  if (!Array.isArray(steps)) return [];
+
+  return steps
+    .map((step) => ({
+      delay_value: cleanString(step?.delay_value) || "24",
+      delay_unit: cleanString(step?.delay_unit) || "hours",
+      channel: cleanString(step?.channel) || "whatsapp",
+      template_key: cleanString(step?.template_key),
+      active: step?.active !== false,
+    }))
+    .filter((step) => step.template_key);
+}
+
+function sanitizeAutomationFlows(value = {}) {
+  const defaults = DEFAULT_APP_CONFIG.automation_flows || {};
+  const result = {};
+
+  for (const [key, flowDefaults] of Object.entries(defaults)) {
+    const incoming = value?.[key] || {};
+    result[key] = {
+      label:
+        cleanString(incoming?.label) ||
+        cleanString(flowDefaults?.label) ||
+        key,
+      description:
+        cleanString(incoming?.description) ||
+        cleanString(flowDefaults?.description),
+      enabled:
+        typeof incoming?.enabled === "boolean"
+          ? incoming.enabled
+          : flowDefaults?.enabled !== false,
+      steps: sanitizeAutomationSteps(
+        Array.isArray(incoming?.steps) && incoming.steps.length
+          ? incoming.steps
+          : flowDefaults?.steps || []
+      ),
+    };
+  }
+
+  return result;
+}
+
 export function sanitizeAppConfig(input = {}) {
   const services = sanitizeServices(input?.services);
+  const message_templates = sanitizeMessageTemplates(input?.message_templates);
+  const automation_flows = sanitizeAutomationFlows(input?.automation_flows);
 
   return {
     brand: {
@@ -281,6 +443,8 @@ export function sanitizeAppConfig(input = {}) {
         ),
       },
     },
+    message_templates,
+    automation_flows,
     services: Object.keys(services).length
       ? services
       : getDefaultAppConfig().services,

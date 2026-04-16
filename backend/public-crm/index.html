@@ -558,6 +558,8 @@
             <form id="configForm" class="config-form">
               <div class="config-tabs">
                 <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">General</button>
+                <button id="configTabMessages" type="button" class="config-tab" data-config-tab="messages">Mensajes</button>
+                <button id="configTabAutomations" type="button" class="config-tab" data-config-tab="automations">Automatizaciones</button>
                 <button id="configTabIntegrations" type="button" class="config-tab" data-config-tab="integrations">Integraciones</button>
                 <button id="configTabWebsite" type="button" class="config-tab" data-config-tab="website">Desde web</button>
               </div>
@@ -650,6 +652,24 @@
                     <div id="configServicesList" class="services-editor-list"></div>
                   </div>
                 </div>
+              </section>
+
+              <section id="configPanelMessages" class="config-panel" data-config-panel="messages">
+                <div class="config-section-intro">
+                  <strong>Plantillas por canal</strong>
+                  <p>Define el tono y el copy de emails y WhatsApp para cada momento comercial. Las variables se rellenan en envio: <code>{nombre}</code>, <code>{servicio}</code>, <code>{empresa}</code>, <code>{link_presupuesto}</code>, <code>{whatsapp_humano}</code>.</p>
+                </div>
+
+                <div id="configMessageTemplatesList" class="message-template-grid"></div>
+              </section>
+
+              <section id="configPanelAutomations" class="config-panel" data-config-panel="automations">
+                <div class="config-section-intro">
+                  <strong>Recuperacion y seguimiento automatico</strong>
+                  <p>Configura secuencias para recuperar leads frios y seguir propuestas sin depender de tareas manuales. Cada paso define tiempo, canal y plantilla asociada.</p>
+                </div>
+
+                <div id="configAutomationFlowsList" class="automation-flow-list"></div>
               </section>
 
               <section id="configPanelIntegrations" class="config-panel" data-config-panel="integrations">

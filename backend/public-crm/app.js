@@ -17,6 +17,15 @@ const state = {
 const LEAD_PAGE_SIZE = 15;
 const API_BASE = `${window.location.origin}/api/crm`;
 const ACCOUNT_STORAGE_KEY = "crmActiveAccountId";
+const MESSAGE_TEMPLATE_ORDER = [
+  "whatsapp_first_contact",
+  "email_first_contact",
+  "quote_whatsapp",
+  "quote_email",
+  "recovery_whatsapp",
+  "recovery_email",
+];
+const AUTOMATION_FLOW_ORDER = ["lead_recovery", "quote_followup"];
 
 const el = {
   crmPage: document.querySelector(".crm-page"),
@@ -62,9 +71,13 @@ const el = {
   configSaveBtn: document.getElementById("configSaveBtn"),
   configSaveStatus: document.getElementById("configSaveStatus"),
   configTabGeneral: document.getElementById("configTabGeneral"),
+  configTabMessages: document.getElementById("configTabMessages"),
+  configTabAutomations: document.getElementById("configTabAutomations"),
   configTabIntegrations: document.getElementById("configTabIntegrations"),
   configTabWebsite: document.getElementById("configTabWebsite"),
   configPanelGeneral: document.getElementById("configPanelGeneral"),
+  configPanelMessages: document.getElementById("configPanelMessages"),
+  configPanelAutomations: document.getElementById("configPanelAutomations"),
   configPanelIntegrations: document.getElementById("configPanelIntegrations"),
   configPanelWebsite: document.getElementById("configPanelWebsite"),
   configBrandName: document.getElementById("configBrandName"),
@@ -114,6 +127,8 @@ const el = {
   configValidateAutomationsBtn: document.getElementById("configValidateAutomationsBtn"),
   configAutomationsValidationMessage: document.getElementById("configAutomationsValidationMessage"),
   configAutomationsLastValidated: document.getElementById("configAutomationsLastValidated"),
+  configMessageTemplatesList: document.getElementById("configMessageTemplatesList"),
+  configAutomationFlowsList: document.getElementById("configAutomationFlowsList"),
   configServicesList: document.getElementById("configServicesList"),
   configAddServiceBtn: document.getElementById("configAddServiceBtn"),
   adminOverviewGrid: document.getElementById("adminOverviewGrid"),
@@ -1039,6 +1054,241 @@ function collectServiceConfig() {
   return services;
 }
 
+function getTemplateOptionsMarkup(selected = "") {
+  const templates = state.appConfig?.message_templates || {};
+  return MESSAGE_TEMPLATE_ORDER.map((key) => {
+    const template = templates[key] || {};
+    const label = template.label || key;
+    return `<option value="${escapeHtml(key)}"${selected === key ? " selected" : ""}>${escapeHtml(label)}</option>`;
+  }).join("");
+}
+
+function createMessageTemplateCard(key, template = {}) {
+  const card = document.createElement("article");
+  card.className = "message-template-card";
+  card.dataset.templateKey = key;
+
+  const channel = template.channel || "email";
+  const isEmail = channel === "email";
+  card.innerHTML = `
+    <div class="message-template-head">
+      <div>
+        <span>${escapeHtml(channel)}</span>
+        <strong>${escapeHtml(template.label || key)}</strong>
+      </div>
+      <em>${escapeHtml(key)}</em>
+    </div>
+    <div class="message-template-fields">
+      <label>
+        Etiqueta interna
+        <input type="text" data-field="label" value="${escapeHtml(template.label || "")}" />
+      </label>
+      <label>
+        Canal
+        <select data-field="channel">
+          <option value="whatsapp"${channel === "whatsapp" ? " selected" : ""}>whatsapp</option>
+          <option value="email"${isEmail ? " selected" : ""}>email</option>
+        </select>
+      </label>
+      <label class="quote-grid-full${isEmail ? "" : " is-hidden"}" data-role="subject">
+        Asunto
+        <input type="text" data-field="subject" value="${escapeHtml(template.subject || "")}" />
+      </label>
+      <label class="quote-grid-full">
+        Cuerpo del mensaje
+        <textarea rows="6" data-field="body">${escapeHtml(template.body || "")}</textarea>
+      </label>
+    </div>
+  `;
+
+  const channelSelect = card.querySelector('[data-field="channel"]');
+  const subjectRow = card.querySelector('[data-role="subject"]');
+  channelSelect?.addEventListener("change", () => {
+    subjectRow?.classList.toggle("is-hidden", channelSelect.value !== "email");
+  });
+
+  return card;
+}
+
+function renderMessageTemplates(templates = {}) {
+  if (!el.configMessageTemplatesList) return;
+  el.configMessageTemplatesList.innerHTML = "";
+
+  for (const key of MESSAGE_TEMPLATE_ORDER) {
+    el.configMessageTemplatesList.appendChild(
+      createMessageTemplateCard(key, templates?.[key] || {})
+    );
+  }
+}
+
+function collectMessageTemplates() {
+  const cards = [...(el.configMessageTemplatesList?.querySelectorAll(".message-template-card") || [])];
+  const templates = {};
+
+  for (const card of cards) {
+    const key = card.dataset.templateKey;
+    if (!key) continue;
+    const getValue = (field) =>
+      String(card.querySelector(`[data-field="${field}"]`)?.value || "").trim();
+
+    templates[key] = {
+      label: getValue("label"),
+      channel: getValue("channel") || "email",
+      subject: getValue("subject"),
+      body: getValue("body"),
+    };
+  }
+
+  return templates;
+}
+
+function createAutomationStepItem(step = {}) {
+  const item = document.createElement("div");
+  item.className = "automation-step-item";
+  const delayValue = step.delay_value || "24";
+  const delayUnit = step.delay_unit || "hours";
+  const channel = step.channel || "whatsapp";
+  const templateKey = step.template_key || "";
+  const active = step.active !== false;
+
+  item.innerHTML = `
+    <div class="automation-step-head">
+      <strong>Paso automatico</strong>
+      <button type="button" class="service-remove-btn automation-step-remove">Quitar</button>
+    </div>
+    <div class="automation-step-grid">
+      <label>
+        Espera
+        <input type="number" min="0" step="1" data-field="delay_value" value="${escapeHtml(delayValue)}" />
+      </label>
+      <label>
+        Unidad
+        <select data-field="delay_unit">
+          <option value="minutes"${delayUnit === "minutes" ? " selected" : ""}>minutos</option>
+          <option value="hours"${delayUnit === "hours" ? " selected" : ""}>horas</option>
+          <option value="days"${delayUnit === "days" ? " selected" : ""}>dias</option>
+        </select>
+      </label>
+      <label>
+        Canal
+        <select data-field="channel">
+          <option value="whatsapp"${channel === "whatsapp" ? " selected" : ""}>whatsapp</option>
+          <option value="email"${channel === "email" ? " selected" : ""}>email</option>
+        </select>
+      </label>
+      <label>
+        Plantilla
+        <select data-field="template_key">${getTemplateOptionsMarkup(templateKey)}</select>
+      </label>
+      <label class="automation-step-toggle">
+        <input type="checkbox" data-field="active"${active ? " checked" : ""} />
+        <span>Paso activo</span>
+      </label>
+    </div>
+  `;
+
+  item
+    .querySelector(".automation-step-remove")
+    ?.addEventListener("click", () => item.remove());
+
+  return item;
+}
+
+function createAutomationFlowCard(key, flow = {}) {
+  const card = document.createElement("article");
+  card.className = "automation-flow-card";
+  card.dataset.flowKey = key;
+
+  card.innerHTML = `
+    <div class="automation-flow-head">
+      <div>
+        <span>Flujo</span>
+        <strong>${escapeHtml(flow.label || key)}</strong>
+      </div>
+      <label class="automation-flow-toggle">
+        <input type="checkbox" data-field="enabled"${flow.enabled !== false ? " checked" : ""} />
+        <span>Activo</span>
+      </label>
+    </div>
+    <p class="automation-flow-copy">${escapeHtml(flow.description || "")}</p>
+    <div class="automation-flow-fields">
+      <label>
+        Nombre visible
+        <input type="text" data-field="label" value="${escapeHtml(flow.label || "")}" />
+      </label>
+      <label class="quote-grid-full">
+        Descripcion
+        <textarea rows="3" data-field="description">${escapeHtml(flow.description || "")}</textarea>
+      </label>
+    </div>
+    <div class="automation-flow-steps-head">
+      <strong>Pasos</strong>
+      <button type="button" class="crm-secondary-btn automation-add-step-btn">Añadir paso</button>
+    </div>
+    <div class="automation-steps-list"></div>
+  `;
+
+  const stepsList = card.querySelector(".automation-steps-list");
+  const steps = Array.isArray(flow.steps) && flow.steps.length ? flow.steps : [];
+  for (const step of steps) {
+    stepsList?.appendChild(createAutomationStepItem(step));
+  }
+
+  card
+    .querySelector(".automation-add-step-btn")
+    ?.addEventListener("click", () => {
+      stepsList?.appendChild(createAutomationStepItem());
+    });
+
+  return card;
+}
+
+function renderAutomationFlows(flows = {}) {
+  if (!el.configAutomationFlowsList) return;
+  el.configAutomationFlowsList.innerHTML = "";
+
+  for (const key of AUTOMATION_FLOW_ORDER) {
+    el.configAutomationFlowsList.appendChild(
+      createAutomationFlowCard(key, flows?.[key] || {})
+    );
+  }
+}
+
+function collectAutomationFlows() {
+  const cards = [...(el.configAutomationFlowsList?.querySelectorAll(".automation-flow-card") || [])];
+  const flows = {};
+
+  for (const card of cards) {
+    const key = card.dataset.flowKey;
+    if (!key) continue;
+
+    const getValue = (field) =>
+      String(card.querySelector(`[data-field="${field}"]`)?.value || "").trim();
+
+    const steps = [...card.querySelectorAll(".automation-step-item")].map((item) => {
+      const value = (field) =>
+        String(item.querySelector(`[data-field="${field}"]`)?.value || "").trim();
+
+      return {
+        delay_value: value("delay_value"),
+        delay_unit: value("delay_unit"),
+        channel: value("channel"),
+        template_key: value("template_key"),
+        active: Boolean(item.querySelector('[data-field="active"]')?.checked),
+      };
+    }).filter((step) => step.template_key);
+
+    flows[key] = {
+      label: getValue("label"),
+      description: getValue("description"),
+      enabled: Boolean(card.querySelector('[data-field="enabled"]')?.checked),
+      steps,
+    };
+  }
+
+  return flows;
+}
+
 function applyLeadFilters() {
   const source = el.sourceFilter.value;
   const dateRange = el.dateFilter.value;
@@ -1416,6 +1666,8 @@ function renderConfig() {
     "automations",
     config?.integrations?.automations?.validation || {}
   );
+  renderMessageTemplates(config?.message_templates || {});
+  renderAutomationFlows(config?.automation_flows || {});
   renderServiceEditor(config?.services || {});
   if (!el.configBootstrapSummary.value.trim()) {
     el.configBootstrapSummary.value = "";
@@ -1424,12 +1676,18 @@ function renderConfig() {
 
 function setConfigTab(tabName) {
   const isGeneral = tabName === "general";
+  const isMessages = tabName === "messages";
+  const isAutomations = tabName === "automations";
   const isIntegrations = tabName === "integrations";
   const isWebsite = tabName === "website";
   el.configTabGeneral.classList.toggle("is-active", isGeneral);
+  el.configTabMessages.classList.toggle("is-active", isMessages);
+  el.configTabAutomations.classList.toggle("is-active", isAutomations);
   el.configTabIntegrations.classList.toggle("is-active", isIntegrations);
   el.configTabWebsite.classList.toggle("is-active", isWebsite);
   el.configPanelGeneral.classList.toggle("is-active", isGeneral);
+  el.configPanelMessages.classList.toggle("is-active", isMessages);
+  el.configPanelAutomations.classList.toggle("is-active", isAutomations);
   el.configPanelIntegrations.classList.toggle("is-active", isIntegrations);
   el.configPanelWebsite.classList.toggle("is-active", isWebsite);
 }
@@ -1582,6 +1840,8 @@ async function saveConfig() {
 
   try {
     const services = collectServiceConfig();
+    const message_templates = collectMessageTemplates();
+    const automation_flows = collectAutomationFlows();
 
     const payload = {
       brand: {
@@ -1631,6 +1891,8 @@ async function saveConfig() {
           validation: state.appConfig?.integrations?.automations?.validation || {},
         },
       },
+      message_templates,
+      automation_flows,
       services,
     };
 
@@ -2173,6 +2435,8 @@ el.configValidateAutomationsBtn?.addEventListener("click", () =>
   validateIntegration("automations", el.configValidateAutomationsBtn)
 );
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
+el.configTabMessages?.addEventListener("click", () => setConfigTab("messages"));
+el.configTabAutomations?.addEventListener("click", () => setConfigTab("automations"));
 el.configTabIntegrations.addEventListener("click", () => setConfigTab("integrations"));
 el.configTabWebsite.addEventListener("click", () => setConfigTab("website"));
 el.dateFilter.addEventListener("change", () => handleDateFilterChange(el.dateFilter.value));
