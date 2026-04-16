@@ -301,20 +301,26 @@ textarea {
 }
 
 .crm-sidebar .filter-box {
-  background: rgba(255,255,255,0.96);
+  background: rgba(255,255,255,0.14);
   border-color: rgba(255,255,255,0.22);
   box-shadow: 0 10px 24px rgba(22, 16, 68, 0.18);
+  backdrop-filter: blur(12px);
 }
 
 .crm-sidebar .filter-box span {
-  color: #5f7192;
+  color: rgba(255,255,255,0.76);
 }
 
 .crm-sidebar .filter-box select {
-  color: var(--text);
-  background: #fff;
+  color: #0f2147;
+  background: transparent;
   border: 0;
   appearance: auto;
+}
+
+.crm-sidebar .filter-box select option {
+  color: #0f2147;
+  background: #ffffff;
 }
 
 .crm-sidebar-stack {
