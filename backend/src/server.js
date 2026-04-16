@@ -18,6 +18,7 @@ import {
   findLatestWebLeadByContact,
   findConversationEventByHandoffCode,
   listCrmLeads,
+  getCrmAnalytics,
   listWhatsAppLeadsForFollowUp,
   updateLeadCrmFields,
   getLatestQuoteByLeadId,
@@ -2313,6 +2314,20 @@ app.get("/api/crm/leads", async (req, res) => {
     );
 
     res.json({ ok: true, leads: enriched });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/crm/analytics", async (req, res) => {
+  try {
+    const analytics = await getCrmAnalytics({
+      channel: req.query.channel || "all",
+      dateRange: req.query.date_range || "all",
+      limit: 2000,
+    });
+
+    res.json({ ok: true, analytics });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }

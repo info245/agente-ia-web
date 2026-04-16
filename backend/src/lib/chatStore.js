@@ -258,6 +258,49 @@ function normalizePhone(value) {
   return digits;
 }
 
+function normalizeTextValue(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getAnalyticsStartDate(dateRange = "all") {
+  const range = normalizeTextValue(dateRange);
+  const now = new Date();
+
+  if (range === "today") {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+  if (range === "7d") {
+    return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  }
+  if (range === "30d") {
+    return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
+
+  return null;
+}
+
+function isOnOrAfter(dateValue, startDate) {
+  if (!startDate) return true;
+  const sample = new Date(dateValue);
+  if (Number.isNaN(sample.getTime())) return false;
+  return sample.getTime() >= startDate.getTime();
+}
+
+function formatAverageMinutes(minutes) {
+  if (!Number.isFinite(minutes) || minutes <= 0) return "-";
+  if (minutes < 60) return `${Math.round(minutes)} min`;
+
+  const hours = minutes / 60;
+  if (hours < 24) return `${hours.toFixed(1)} h`;
+
+  const days = hours / 24;
+  return `${days.toFixed(1)} d`;
+}
+
 export async function getConversationMessages(conversation_id, limit = 30) {
   const safeConversationId = clean(conversation_id);
   if (!safeConversationId) {
@@ -382,6 +425,200 @@ export async function findLatestWebLeadByContact({
   });
 
   return matched || null;
+}
+
+export async function getCrmAnalytics({
+  channel = "all",
+  dateRange = "all",
+  limit = 1000,
+} = {}) {
+  const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 1000;
+  const safeChannel = normalizeTextValue(channel);
+  const startDate = getAnalyticsStartDate(dateRange);
+
+  const leads = await listCrmLeads(safeLimit);
+  const filteredLeads = (leads || []).filter((lead) => {
+    const leadChannel = normalizeTextValue(lead?.conversations?.channel || "web");
+    const channelOk = safeChannel === "all" || leadChannel === safeChannel;
+    const dateOk = isOnOrAfter(lead?.created_at, startDate);
+    return channelOk && dateOk;
+  });
+
+  const leadIds = filteredLeads.map((lead) => lead.id).filter(Boolean);
+  const conversationIds = filteredLeads
+    .map((lead) => lead.conversation_id)
+    .filter(Boolean);
+
+  let quotes = [];
+  if (leadIds.length) {
+    const { data, error } = await supabase
+      .from("quotes")
+      .select("id, lead_id, status, sent_at, updated_at, created_at")
+      .in("lead_id", leadIds)
+      .order("created_at", { ascending: false })
+      .limit(5000);
+
+    if (error) {
+      const message = String(error.message || "").toLowerCase();
+      if (!message.includes("quotes") && !message.includes("does not exist")) {
+        throw error;
+      }
+    } else {
+      quotes = data || [];
+    }
+  }
+
+  let assistantMessages = [];
+  if (conversationIds.length) {
+    const { data, error } = await supabase
+      .from("messages")
+      .select("conversation_id, role, created_at")
+      .in("conversation_id", conversationIds)
+      .eq("role", "assistant")
+      .order("created_at", { ascending: true })
+      .limit(10000);
+
+    if (!error) {
+      assistantMessages = data || [];
+    }
+  }
+
+  let events = [];
+  if (conversationIds.length) {
+    const { data, error } = await supabase
+      .from("conversation_events")
+      .select("conversation_id, event_type, payload, created_at")
+      .in("conversation_id", conversationIds)
+      .in("event_type", [
+        "channel_handoff_offer",
+        "external_lead_autostart",
+        "quote_response_received",
+        "quote_human_agent_requested",
+      ])
+      .order("created_at", { ascending: false })
+      .limit(10000);
+
+    if (!error) {
+      events = data || [];
+    }
+  }
+
+  const firstAssistantByConversation = new Map();
+  for (const message of assistantMessages) {
+    if (!firstAssistantByConversation.has(message.conversation_id)) {
+      firstAssistantByConversation.set(message.conversation_id, message);
+    }
+  }
+
+  const leadIdByConversation = new Map(
+    filteredLeads.map((lead) => [lead.conversation_id, lead.id])
+  );
+
+  const whatsappLeadIds = new Set();
+  for (const lead of filteredLeads) {
+    if (
+      normalizeTextValue(lead?.preferred_contact_channel) === "whatsapp" ||
+      normalizeTextValue(lead?.conversations?.channel) === "whatsapp"
+    ) {
+      whatsappLeadIds.add(lead.id);
+    }
+  }
+
+  for (const event of events) {
+    const leadId = leadIdByConversation.get(event?.conversation_id);
+    if (!leadId) continue;
+
+    const eventType = normalizeTextValue(event?.event_type);
+    const targetChannel = normalizeTextValue(event?.payload?.target_channel);
+    const via = normalizeTextValue(event?.payload?.via);
+
+    if (
+      (eventType === "channel_handoff_offer" && targetChannel === "whatsapp") ||
+      (eventType === "external_lead_autostart" && via === "whatsapp")
+    ) {
+      whatsappLeadIds.add(leadId);
+    }
+  }
+
+  const quoteByLead = new Map();
+  for (const quote of quotes) {
+    if (!quoteByLead.has(quote.lead_id)) {
+      quoteByLead.set(quote.lead_id, quote);
+    }
+  }
+
+  const proposalsSent = Array.from(quoteByLead.values()).filter((quote) => {
+    const status = normalizeTextValue(quote?.status);
+    return !!quote?.sent_at || ["sent", "accepted", "rejected"].includes(status);
+  }).length;
+
+  const proposalsAccepted = Array.from(quoteByLead.values()).filter(
+    (quote) => normalizeTextValue(quote?.status) === "accepted"
+  ).length;
+
+  const responseSamples = filteredLeads
+    .map((lead) => {
+      const firstAssistant = firstAssistantByConversation.get(lead.conversation_id);
+      if (!firstAssistant?.created_at || !lead?.created_at) return null;
+
+      const createdAt = new Date(lead.created_at).getTime();
+      const answeredAt = new Date(firstAssistant.created_at).getTime();
+      if (!Number.isFinite(createdAt) || !Number.isFinite(answeredAt) || answeredAt < createdAt) {
+        return null;
+      }
+
+      return (answeredAt - createdAt) / 60000;
+    })
+    .filter((value) => Number.isFinite(value));
+
+  const averageResponseMinutes = responseSamples.length
+    ? responseSamples.reduce((sum, value) => sum + value, 0) / responseSamples.length
+    : null;
+
+  const channelBreakdown = Object.entries(
+    filteredLeads.reduce((acc, lead) => {
+      const key = lead?.conversations?.channel || "web";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {})
+  )
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+
+  const sourceBreakdown = Object.entries(
+    filteredLeads.reduce((acc, lead) => {
+      const key = lead?.source_platform || "sin_fuente";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {})
+  )
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value);
+
+  const acceptanceRate = proposalsSent
+    ? Math.round((proposalsAccepted / proposalsSent) * 100)
+    : 0;
+
+  return {
+    generated_at: new Date().toISOString(),
+    filters: {
+      channel: safeChannel || "all",
+      date_range: normalizeTextValue(dateRange) || "all",
+    },
+    totals: {
+      leads_generated: filteredLeads.length,
+      passed_to_whatsapp: whatsappLeadIds.size,
+      quotes_sent: proposalsSent,
+      quotes_accepted: proposalsAccepted,
+      average_response_minutes: averageResponseMinutes,
+      average_response_label: formatAverageMinutes(averageResponseMinutes),
+      acceptance_rate: acceptanceRate,
+    },
+    breakdowns: {
+      channel: channelBreakdown,
+      source: sourceBreakdown,
+    },
+  };
 }
 
 export async function updateLeadCrmFields(leadId, patch = {}) {

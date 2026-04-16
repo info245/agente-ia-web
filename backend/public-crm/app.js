@@ -5,6 +5,7 @@ const state = {
   selectedQuote: null,
   leadPage: 0,
   quoteItems: [],
+  analytics: null,
 };
 
 const LEAD_PAGE_SIZE = 15;
@@ -17,6 +18,15 @@ const el = {
   leadTitle: document.getElementById("leadTitle"),
   leadChannel: document.getElementById("leadChannel"),
   leadMeta: document.getElementById("leadMeta"),
+  analyticsRangeLabel: document.getElementById("analyticsRangeLabel"),
+  analyticsLeadsGenerated: document.getElementById("analyticsLeadsGenerated"),
+  analyticsPassedWhatsapp: document.getElementById("analyticsPassedWhatsapp"),
+  analyticsQuotesSent: document.getElementById("analyticsQuotesSent"),
+  analyticsQuotesAccepted: document.getElementById("analyticsQuotesAccepted"),
+  analyticsResponseTime: document.getElementById("analyticsResponseTime"),
+  analyticsAcceptanceRate: document.getElementById("analyticsAcceptanceRate"),
+  analyticsChannelBreakdown: document.getElementById("analyticsChannelBreakdown"),
+  analyticsSourceBreakdown: document.getElementById("analyticsSourceBreakdown"),
   leadTableBody: document.getElementById("leadTableBody"),
   leadMobileList: document.getElementById("leadMobileList"),
   leadTableInfo: document.getElementById("leadTableInfo"),
@@ -78,6 +88,13 @@ function fmtMoney(value, currency = "EUR") {
     style: "currency",
     currency: currency || "EUR",
   }).format(amount);
+}
+
+function getDateFilterLabel(value) {
+  if (value === "today") return "Hoy";
+  if (value === "7d") return "Ultimos 7 dias";
+  if (value === "30d") return "Ultimos 30 dias";
+  return "Todas";
 }
 
 function toDatetimeLocal(value) {
@@ -304,6 +321,55 @@ function renderLeadDetail() {
   el.internalNotes.value = lead.internal_notes || "";
 }
 
+function renderBreakdown(target, rows = []) {
+  if (!target) return;
+
+  if (!rows.length) {
+    target.innerHTML = '<div class="empty">Sin datos todavia.</div>';
+    return;
+  }
+
+  target.innerHTML = rows
+    .map(
+      (row) => `
+        <div class="analytics-breakdown-row">
+          <span>${row.label || "-"}</span>
+          <strong>${row.value ?? 0}</strong>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderAnalytics() {
+  const analytics = state.analytics;
+
+  el.analyticsRangeLabel.textContent = getDateFilterLabel(el.dateFilter.value);
+
+  if (!analytics) {
+    el.analyticsLeadsGenerated.textContent = "-";
+    el.analyticsPassedWhatsapp.textContent = "-";
+    el.analyticsQuotesSent.textContent = "-";
+    el.analyticsQuotesAccepted.textContent = "-";
+    el.analyticsResponseTime.textContent = "-";
+    el.analyticsAcceptanceRate.textContent = "-";
+    renderBreakdown(el.analyticsChannelBreakdown, []);
+    renderBreakdown(el.analyticsSourceBreakdown, []);
+    return;
+  }
+
+  const totals = analytics.totals || {};
+  el.analyticsLeadsGenerated.textContent = totals.leads_generated ?? 0;
+  el.analyticsPassedWhatsapp.textContent = totals.passed_to_whatsapp ?? 0;
+  el.analyticsQuotesSent.textContent = totals.quotes_sent ?? 0;
+  el.analyticsQuotesAccepted.textContent = totals.quotes_accepted ?? 0;
+  el.analyticsResponseTime.textContent = totals.average_response_label || "-";
+  el.analyticsAcceptanceRate.textContent = `${totals.acceptance_rate ?? 0}%`;
+
+  renderBreakdown(el.analyticsChannelBreakdown, analytics?.breakdowns?.channel || []);
+  renderBreakdown(el.analyticsSourceBreakdown, analytics?.breakdowns?.source || []);
+}
+
 function renderMessages(messages = []) {
   el.messageList.innerHTML = "";
 
@@ -386,6 +452,24 @@ async function loadLeads() {
   } else {
     renderQuote(null);
   }
+
+  try {
+    await loadAnalytics();
+  } catch (error) {
+    console.warn("CRM analytics load failed", error);
+    state.analytics = null;
+    renderAnalytics();
+  }
+}
+
+async function loadAnalytics() {
+  const params = new URLSearchParams({
+    channel: el.sourceFilter.value || "all",
+    date_range: el.dateFilter.value || "all",
+  });
+  const data = await fetchJson(`${API_BASE}/analytics?${params.toString()}`);
+  state.analytics = data.analytics || null;
+  renderAnalytics();
 }
 
 async function loadMessages(conversationId) {
@@ -770,11 +854,17 @@ el.dateFilter.addEventListener("change", () => {
   state.leadPage = 0;
   renderLeadTable();
   renderLeadDetail();
+  loadAnalytics().catch((error) => {
+    console.warn("CRM analytics reload failed", error);
+  });
 });
 el.sourceFilter.addEventListener("change", () => {
   state.leadPage = 0;
   renderLeadTable();
   renderLeadDetail();
+  loadAnalytics().catch((error) => {
+    console.warn("CRM analytics reload failed", error);
+  });
 });
 el.leadPrevBtn.addEventListener("click", () => {
   if (state.leadPage <= 0) return;
