@@ -29,8 +29,10 @@ const el = {
   configSaveBtn: document.getElementById("configSaveBtn"),
   configSaveStatus: document.getElementById("configSaveStatus"),
   configTabGeneral: document.getElementById("configTabGeneral"),
+  configTabIntegrations: document.getElementById("configTabIntegrations"),
   configTabWebsite: document.getElementById("configTabWebsite"),
   configPanelGeneral: document.getElementById("configPanelGeneral"),
+  configPanelIntegrations: document.getElementById("configPanelIntegrations"),
   configPanelWebsite: document.getElementById("configPanelWebsite"),
   configBrandName: document.getElementById("configBrandName"),
   configWebsiteUrl: document.getElementById("configWebsiteUrl"),
@@ -51,6 +53,22 @@ const el = {
   configPrimaryColor: document.getElementById("configPrimaryColor"),
   configAccentColor: document.getElementById("configAccentColor"),
   configPromptAdditions: document.getElementById("configPromptAdditions"),
+  configWhatsappProvider: document.getElementById("configWhatsappProvider"),
+  configWhatsappStatusLabel: document.getElementById("configWhatsappStatusLabel"),
+  configWhatsappPhoneNumberId: document.getElementById("configWhatsappPhoneNumberId"),
+  configWhatsappBusinessAccountId: document.getElementById("configWhatsappBusinessAccountId"),
+  configWhatsappStatusBadge: document.getElementById("configWhatsappStatusBadge"),
+  configMetaLeadSource: document.getElementById("configMetaLeadSource"),
+  configGoogleLeadSource: document.getElementById("configGoogleLeadSource"),
+  configLeadSheetDocument: document.getElementById("configLeadSheetDocument"),
+  configLeadSheetTabs: document.getElementById("configLeadSheetTabs"),
+  configLeadWebhookUrl: document.getElementById("configLeadWebhookUrl"),
+  configEmailProvider: document.getElementById("configEmailProvider"),
+  configEmailFromAddress: document.getElementById("configEmailFromAddress"),
+  configEmailReplyTo: document.getElementById("configEmailReplyTo"),
+  configAutomationPlatform: document.getElementById("configAutomationPlatform"),
+  configAutomationWorkspaceUrl: document.getElementById("configAutomationWorkspaceUrl"),
+  configAutomationNotes: document.getElementById("configAutomationNotes"),
   configServicesList: document.getElementById("configServicesList"),
   configAddServiceBtn: document.getElementById("configAddServiceBtn"),
   dateFilter: document.getElementById("dateFilter"),
@@ -704,6 +722,40 @@ function renderConfig() {
   el.configHandoffTargetChannel.value =
     config?.agent?.handoff_target_channel || "whatsapp";
   el.configPromptAdditions.value = config?.agent?.prompt_additions || "";
+  el.configWhatsappProvider.value =
+    config?.integrations?.whatsapp?.provider || "meta_cloud";
+  el.configWhatsappStatusLabel.value =
+    config?.integrations?.whatsapp?.status_label || "";
+  el.configWhatsappPhoneNumberId.value =
+    config?.integrations?.whatsapp?.phone_number_id || "";
+  el.configWhatsappBusinessAccountId.value =
+    config?.integrations?.whatsapp?.business_account_id || "";
+  el.configMetaLeadSource.value =
+    config?.integrations?.lead_forms?.meta_source || "google_sheets";
+  el.configGoogleLeadSource.value =
+    config?.integrations?.lead_forms?.google_source || "webhook_n8n";
+  el.configLeadSheetDocument.value =
+    config?.integrations?.lead_forms?.sheet_document || "";
+  el.configLeadSheetTabs.value =
+    config?.integrations?.lead_forms?.sheet_tabs || "";
+  el.configLeadWebhookUrl.value =
+    config?.integrations?.lead_forms?.webhook_url || "";
+  el.configEmailProvider.value =
+    config?.integrations?.email?.provider || "smtp";
+  el.configEmailFromAddress.value =
+    config?.integrations?.email?.from_email || "";
+  el.configEmailReplyTo.value =
+    config?.integrations?.email?.reply_to_email || "";
+  el.configAutomationPlatform.value =
+    config?.integrations?.automations?.platform || "n8n";
+  el.configAutomationWorkspaceUrl.value =
+    config?.integrations?.automations?.workspace_url || "";
+  el.configAutomationNotes.value =
+    config?.integrations?.automations?.notes || "";
+  if (el.configWhatsappStatusBadge) {
+    el.configWhatsappStatusBadge.textContent =
+      config?.integrations?.whatsapp?.status_label || "Pendiente";
+  }
   renderServiceEditor(config?.services || {});
   if (!el.configBootstrapSummary.value.trim()) {
     el.configBootstrapSummary.value = "";
@@ -711,10 +763,14 @@ function renderConfig() {
 }
 
 function setConfigTab(tabName) {
+  const isGeneral = tabName === "general";
+  const isIntegrations = tabName === "integrations";
   const isWebsite = tabName === "website";
-  el.configTabGeneral.classList.toggle("is-active", !isWebsite);
+  el.configTabGeneral.classList.toggle("is-active", isGeneral);
+  el.configTabIntegrations.classList.toggle("is-active", isIntegrations);
   el.configTabWebsite.classList.toggle("is-active", isWebsite);
-  el.configPanelGeneral.classList.toggle("is-active", !isWebsite);
+  el.configPanelGeneral.classList.toggle("is-active", isGeneral);
+  el.configPanelIntegrations.classList.toggle("is-active", isIntegrations);
   el.configPanelWebsite.classList.toggle("is-active", isWebsite);
 }
 
@@ -882,6 +938,31 @@ async function saveConfig() {
         final_cta_label: el.configFinalCtaLabel.value,
         handoff_target_channel: el.configHandoffTargetChannel.value,
         prompt_additions: el.configPromptAdditions.value,
+      },
+      integrations: {
+        whatsapp: {
+          provider: el.configWhatsappProvider.value,
+          status_label: el.configWhatsappStatusLabel.value,
+          phone_number_id: el.configWhatsappPhoneNumberId.value,
+          business_account_id: el.configWhatsappBusinessAccountId.value,
+        },
+        lead_forms: {
+          meta_source: el.configMetaLeadSource.value,
+          google_source: el.configGoogleLeadSource.value,
+          sheet_document: el.configLeadSheetDocument.value,
+          sheet_tabs: el.configLeadSheetTabs.value,
+          webhook_url: el.configLeadWebhookUrl.value,
+        },
+        email: {
+          provider: el.configEmailProvider.value,
+          from_email: el.configEmailFromAddress.value,
+          reply_to_email: el.configEmailReplyTo.value,
+        },
+        automations: {
+          platform: el.configAutomationPlatform.value,
+          workspace_url: el.configAutomationWorkspaceUrl.value,
+          notes: el.configAutomationNotes.value,
+        },
       },
       services,
     };
@@ -1341,6 +1422,7 @@ el.crmViewSalesBtn.addEventListener("click", () => setMainView("sales"));
 el.crmViewConfigBtn.addEventListener("click", () => setMainView("config"));
 el.configAnalyzeWebsiteBtn.addEventListener("click", analyzeWebsiteConfig);
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
+el.configTabIntegrations.addEventListener("click", () => setConfigTab("integrations"));
 el.configTabWebsite.addEventListener("click", () => setConfigTab("website"));
 el.dateFilter.addEventListener("change", () => {
   state.leadPage = 0;

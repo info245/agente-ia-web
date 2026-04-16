@@ -18,6 +18,31 @@ export const DEFAULT_APP_CONFIG = {
     handoff_target_channel: "whatsapp",
     prompt_additions: "",
   },
+  integrations: {
+    whatsapp: {
+      provider: "meta_cloud",
+      phone_number_id: "",
+      business_account_id: "",
+      status_label: "Pendiente de conectar",
+    },
+    lead_forms: {
+      meta_source: "google_sheets",
+      google_source: "webhook_n8n",
+      sheet_document: "",
+      sheet_tabs: "",
+      webhook_url: "",
+    },
+    email: {
+      provider: "smtp",
+      from_email: "",
+      reply_to_email: "",
+    },
+    automations: {
+      platform: "n8n",
+      workspace_url: "",
+      notes: "",
+    },
+  },
   services: {
     "Google Ads": {
       min_monthly_fee: "250 € + IVA",
@@ -162,6 +187,53 @@ export function sanitizeAppConfig(input = {}) {
         cleanString(input?.agent?.handoff_target_channel) ||
         DEFAULT_APP_CONFIG.agent.handoff_target_channel,
       prompt_additions: cleanString(input?.agent?.prompt_additions),
+    },
+    integrations: {
+      whatsapp: {
+        provider:
+          cleanString(input?.integrations?.whatsapp?.provider) ||
+          DEFAULT_APP_CONFIG.integrations.whatsapp.provider,
+        phone_number_id: cleanString(
+          input?.integrations?.whatsapp?.phone_number_id
+        ),
+        business_account_id: cleanString(
+          input?.integrations?.whatsapp?.business_account_id
+        ),
+        status_label:
+          cleanString(input?.integrations?.whatsapp?.status_label) ||
+          DEFAULT_APP_CONFIG.integrations.whatsapp.status_label,
+      },
+      lead_forms: {
+        meta_source:
+          cleanString(input?.integrations?.lead_forms?.meta_source) ||
+          DEFAULT_APP_CONFIG.integrations.lead_forms.meta_source,
+        google_source:
+          cleanString(input?.integrations?.lead_forms?.google_source) ||
+          DEFAULT_APP_CONFIG.integrations.lead_forms.google_source,
+        sheet_document: cleanString(
+          input?.integrations?.lead_forms?.sheet_document
+        ),
+        sheet_tabs: cleanString(input?.integrations?.lead_forms?.sheet_tabs),
+        webhook_url: cleanString(input?.integrations?.lead_forms?.webhook_url),
+      },
+      email: {
+        provider:
+          cleanString(input?.integrations?.email?.provider) ||
+          DEFAULT_APP_CONFIG.integrations.email.provider,
+        from_email: cleanString(input?.integrations?.email?.from_email),
+        reply_to_email: cleanString(
+          input?.integrations?.email?.reply_to_email
+        ),
+      },
+      automations: {
+        platform:
+          cleanString(input?.integrations?.automations?.platform) ||
+          DEFAULT_APP_CONFIG.integrations.automations.platform,
+        workspace_url: cleanString(
+          input?.integrations?.automations?.workspace_url
+        ),
+        notes: cleanString(input?.integrations?.automations?.notes),
+      },
     },
     services: Object.keys(services).length
       ? services

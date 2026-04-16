@@ -435,6 +435,7 @@
             <form id="configForm" class="config-form">
               <div class="config-tabs">
                 <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">General</button>
+                <button id="configTabIntegrations" type="button" class="config-tab" data-config-tab="integrations">Integraciones</button>
                 <button id="configTabWebsite" type="button" class="config-tab" data-config-tab="website">Desde web</button>
               </div>
 
@@ -525,6 +526,164 @@
                     </div>
                     <div id="configServicesList" class="services-editor-list"></div>
                   </div>
+                </div>
+              </section>
+
+              <section id="configPanelIntegrations" class="config-panel" data-config-panel="integrations">
+                <div class="config-section-intro">
+                  <strong>Centro de conexiones</strong>
+                  <p>Define como se conectan WhatsApp, formularios, email y automatizaciones. La idea es que esta capa sea la puerta clara para integrar herramientas sin invadir el CRM comercial.</p>
+                </div>
+
+                <div class="config-integrations-grid">
+                  <article class="config-integration-card">
+                    <div class="config-integration-head">
+                      <div>
+                        <span>WhatsApp</span>
+                        <strong>Canal conversacional</strong>
+                      </div>
+                      <em id="configWhatsappStatusBadge">Pendiente</em>
+                    </div>
+
+                    <div class="quote-grid">
+                      <label>
+                        Proveedor
+                        <select id="configWhatsappProvider">
+                          <option value="meta_cloud">Meta Cloud API</option>
+                          <option value="twilio">Twilio</option>
+                          <option value="360dialog">360dialog</option>
+                          <option value="manual">Manual</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        Estado visible
+                        <input id="configWhatsappStatusLabel" type="text" placeholder="Conectado, pendiente, en prueba..." />
+                      </label>
+
+                      <label>
+                        Phone Number ID
+                        <input id="configWhatsappPhoneNumberId" type="text" placeholder="ID del numero en Meta/Twilio" />
+                      </label>
+
+                      <label>
+                        Business Account ID
+                        <input id="configWhatsappBusinessAccountId" type="text" placeholder="ID de cuenta de negocio" />
+                      </label>
+                    </div>
+                  </article>
+
+                  <article class="config-integration-card">
+                    <div class="config-integration-head">
+                      <div>
+                        <span>Lead forms</span>
+                        <strong>Meta y Google</strong>
+                      </div>
+                      <em>Entrada unificada</em>
+                    </div>
+
+                    <div class="quote-grid">
+                      <label>
+                        Meta Lead Ads entra por
+                        <select id="configMetaLeadSource">
+                          <option value="google_sheets">Google Sheets</option>
+                          <option value="webhook_n8n">Webhook n8n</option>
+                          <option value="make">Make</option>
+                          <option value="manual">Manual</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        Google Lead Forms entra por
+                        <select id="configGoogleLeadSource">
+                          <option value="webhook_n8n">Webhook n8n</option>
+                          <option value="google_sheets">Google Sheets</option>
+                          <option value="make">Make</option>
+                          <option value="manual">Manual</option>
+                        </select>
+                      </label>
+
+                      <label class="quote-grid-full">
+                        Documento Google Sheets
+                        <input id="configLeadSheetDocument" type="text" placeholder="Nombre o URL del sheet centralizado" />
+                      </label>
+
+                      <label>
+                        Hojas conectadas
+                        <input id="configLeadSheetTabs" type="text" placeholder="FB_SEO, FB_GOOGLE_ADS, GOOGLE_LEADS..." />
+                      </label>
+
+                      <label>
+                        Webhook principal
+                        <input id="configLeadWebhookUrl" type="url" placeholder="https://n8n.tudominio.com/webhook/..." />
+                      </label>
+                    </div>
+                  </article>
+
+                  <article class="config-integration-card">
+                    <div class="config-integration-head">
+                      <div>
+                        <span>Email</span>
+                        <strong>Envio comercial y soporte</strong>
+                      </div>
+                      <em>Proveedor de salida</em>
+                    </div>
+
+                    <div class="quote-grid">
+                      <label>
+                        Proveedor
+                        <select id="configEmailProvider">
+                          <option value="smtp">SMTP</option>
+                          <option value="gmail">Gmail</option>
+                          <option value="resend">Resend</option>
+                          <option value="sendgrid">SendGrid</option>
+                          <option value="manual">Manual</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        From email
+                        <input id="configEmailFromAddress" type="email" placeholder="comercial@tuempresa.com" />
+                      </label>
+
+                      <label class="quote-grid-full">
+                        Reply-to
+                        <input id="configEmailReplyTo" type="email" placeholder="soporte@tuempresa.com" />
+                      </label>
+                    </div>
+                  </article>
+
+                  <article class="config-integration-card">
+                    <div class="config-integration-head">
+                      <div>
+                        <span>Automatizaciones</span>
+                        <strong>Orquestacion y herramientas</strong>
+                      </div>
+                      <em>Backoffice tecnico</em>
+                    </div>
+
+                    <div class="quote-grid">
+                      <label>
+                        Plataforma
+                        <select id="configAutomationPlatform">
+                          <option value="n8n">n8n</option>
+                          <option value="make">Make</option>
+                          <option value="zapier">Zapier</option>
+                          <option value="custom">Custom</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        Workspace / panel
+                        <input id="configAutomationWorkspaceUrl" type="url" placeholder="https://app.n8n.cloud/..." />
+                      </label>
+
+                      <label class="quote-grid-full">
+                        Notas operativas
+                        <textarea id="configAutomationNotes" rows="5" placeholder="Aqui puedes documentar que flujos estan activos, donde se conectan los formularios o cualquier nota de implementacion."></textarea>
+                      </label>
+                    </div>
+                  </article>
                 </div>
               </section>
 
