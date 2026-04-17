@@ -50,13 +50,13 @@
     if (!lead) return null;
 
     return JSON.stringify({
-      conversation_id: lead.conversation_id || "",
-      name: lead.name || "",
-      email: lead.email || "",
-      phone: lead.phone || "",
-      service: lead.interest_service || "",
-      budget: lead.budget_range || "",
-      urgency: lead.urgency || "",
+      conversation_id: lead?.conversation_id || "",
+      name: lead?.name || "",
+      email: lead?.email || "",
+      phone: lead?.phone || "",
+      service: lead?.interest_service || "",
+      budget: lead?.budget_range || "",
+      urgency: lead?.urgency || "",
     });
   }
 
@@ -64,10 +64,10 @@
     if (!lead) return null;
 
     return JSON.stringify({
-      conversation_id: lead.conversation_id || "",
-      email: lead.email || "",
-      phone: lead.phone || "",
-      service: lead.interest_service || "",
+      conversation_id: lead?.conversation_id || "",
+      email: lead?.email || "",
+      phone: lead?.phone || "",
+      service: lead?.interest_service || "",
       completed: true,
     });
   }
@@ -76,12 +76,12 @@
     if (!lead) return;
 
     const hasUsefulLeadData =
-      !!lead.name ||
-      !!lead.email ||
-      !!lead.phone ||
-      !!lead.interest_service ||
-      !!lead.budget_range ||
-      !!lead.urgency;
+      !!lead?.name ||
+      !!lead?.email ||
+      !!lead?.phone ||
+      !!lead?.interest_service ||
+      !!lead?.budget_range ||
+      !!lead?.urgency;
 
     if (!hasUsefulLeadData) {
       console.log("chatbot_lead no enviado: lead sin datos útiles", lead);
@@ -104,14 +104,14 @@
 
     const payload = {
       event: "chatbot_lead",
-      conversation_id: lead.conversation_id || getConversationId() || "",
-      lead_name: lead.name || "",
-      lead_email: lead.email || "",
-      lead_phone: lead.phone || "",
-      lead_service: lead.interest_service || "",
-      lead_budget: lead.budget_range || "",
-      lead_urgency: lead.urgency || "",
-      lead_score: lead.lead_score || 0,
+      conversation_id: lead?.conversation_id || getConversationId() || "",
+      lead_name: lead?.name || "",
+      lead_email: lead?.email || "",
+      lead_phone: lead?.phone || "",
+      lead_service: lead?.interest_service || "",
+      lead_budget: lead?.budget_range || "",
+      lead_urgency: lead?.urgency || "",
+      lead_score: lead?.lead_score || 0,
     };
 
     window.dataLayer.push(payload);
@@ -140,14 +140,14 @@
 
     const payload = {
       event: "chatbot_completed",
-      conversation_id: lead.conversation_id || getConversationId() || "",
-      lead_name: lead.name || "",
-      lead_email: lead.email || "",
-      lead_phone: lead.phone || "",
-      lead_service: lead.interest_service || "",
-      lead_budget: lead.budget_range || "",
-      lead_urgency: lead.urgency || "",
-      lead_score: lead.lead_score || 0,
+      conversation_id: lead?.conversation_id || getConversationId() || "",
+      lead_name: lead?.name || "",
+      lead_email: lead?.email || "",
+      lead_phone: lead?.phone || "",
+      lead_service: lead?.interest_service || "",
+      lead_budget: lead?.budget_range || "",
+      lead_urgency: lead?.urgency || "",
+      lead_score: lead?.lead_score || 0,
       chat_completed: true,
     };
 
