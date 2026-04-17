@@ -839,6 +839,7 @@ export async function updateLeadCrmFields(leadId, patch = {}) {
   assignClean("company_name");
   assignClean("interest_service");
   assignClean("budget_range");
+  assignClean("summary");
   assignClean("main_goal");
   assignClean("current_situation");
   assignClean("pain_points");
@@ -848,6 +849,11 @@ export async function updateLeadCrmFields(leadId, patch = {}) {
   assignClean("internal_notes");
   assignClean("next_action");
   assignClean("quote_status");
+  assignClean("source_platform");
+  assignClean("source_campaign");
+  assignClean("source_form_name");
+  assignClean("source_ad_name");
+  assignClean("source_adset_name");
 
   if (has("follow_up_at")) {
     payload.follow_up_at = patch.follow_up_at || null;

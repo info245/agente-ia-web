@@ -3747,6 +3747,21 @@ app.post("/api/integrations/external-lead", async (req, res) => {
 
     const lead = await upsertLeadFromConversation(leadPayload);
     await updateLeadCrmFields(lead.id, {
+      name: leadPayload.name,
+      email: leadPayload.email,
+      phone: leadPayload.phone,
+      company_name: leadPayload.company_name,
+      interest_service: leadPayload.interest_service,
+      summary: leadPayload.summary,
+      main_goal: leadPayload.main_goal,
+      current_situation: leadPayload.current_situation,
+      pain_points: leadPayload.pain_points,
+      preferred_contact_channel: leadPayload.preferred_contact_channel,
+      source_platform: sourcePlatform,
+      source_campaign: sourceCampaign,
+      source_form_name: sourceFormName,
+      source_ad_name: sourceAdName,
+      source_adset_name: sourceAdsetName,
       crm_status: "nuevo",
       quote_status: "sin_presupuesto",
       assigned_to: null,
