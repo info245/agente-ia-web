@@ -1070,11 +1070,16 @@ function createMessageTemplateCard(key, template = {}) {
 
   const channel = template.channel || "email";
   const isEmail = channel === "email";
+  const preview = String(template.body || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
   card.innerHTML = `
     <div class="message-template-head">
-      <div>
+      <div class="message-template-head-copy">
         <span>${escapeHtml(channel)}</span>
         <strong>${escapeHtml(template.label || key)}</strong>
+        <p>${escapeHtml(preview || "Configura una plantilla breve, clara y orientada a conversion.")}</p>
       </div>
       <em>${escapeHtml(key)}</em>
     </div>
@@ -1096,7 +1101,7 @@ function createMessageTemplateCard(key, template = {}) {
       </label>
       <label class="quote-grid-full">
         Cuerpo del mensaje
-        <textarea rows="6" data-field="body">${escapeHtml(template.body || "")}</textarea>
+        <textarea rows="5" data-field="body">${escapeHtml(template.body || "")}</textarea>
       </label>
     </div>
   `;
@@ -1198,19 +1203,23 @@ function createAutomationFlowCard(key, flow = {}) {
   const card = document.createElement("article");
   card.className = "automation-flow-card";
   card.dataset.flowKey = key;
+  const steps = Array.isArray(flow.steps) && flow.steps.length ? flow.steps : [];
 
   card.innerHTML = `
     <div class="automation-flow-head">
-      <div>
+      <div class="automation-flow-head-copy">
         <span>Flujo</span>
         <strong>${escapeHtml(flow.label || key)}</strong>
+        <p>${escapeHtml(flow.description || "Secuencia automatica para mover la oportunidad sin depender de seguimiento manual.")}</p>
       </div>
-      <label class="automation-flow-toggle">
-        <input type="checkbox" data-field="enabled"${flow.enabled !== false ? " checked" : ""} />
-        <span>Activo</span>
-      </label>
+      <div class="automation-flow-head-meta">
+        <em>${steps.length} paso${steps.length === 1 ? "" : "s"}</em>
+        <label class="automation-flow-toggle">
+          <input type="checkbox" data-field="enabled"${flow.enabled !== false ? " checked" : ""} />
+          <span>Activo</span>
+        </label>
+      </div>
     </div>
-    <p class="automation-flow-copy">${escapeHtml(flow.description || "")}</p>
     <div class="automation-flow-fields">
       <label>
         Nombre visible
@@ -1229,7 +1238,6 @@ function createAutomationFlowCard(key, flow = {}) {
   `;
 
   const stepsList = card.querySelector(".automation-steps-list");
-  const steps = Array.isArray(flow.steps) && flow.steps.length ? flow.steps : [];
   for (const step of steps) {
     stepsList?.appendChild(createAutomationStepItem(step));
   }
