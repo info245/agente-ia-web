@@ -882,7 +882,7 @@ function isShortAffirmativeResponse(text) {
   );
 }
 
-function buildValueThenAskNameReply(analysisSnapshot) {
+function buildValueThenAskNameReply(analysisSnapshot, lead = null) {
   const focus = norm(analysisSnapshot?.recommended_focus);
   const topPriority = Array.isArray(analysisSnapshot?.priorities)
     ? norm(analysisSnapshot.priorities[0])
@@ -897,6 +897,10 @@ function buildValueThenAskNameReply(analysisSnapshot) {
       : summary
       ? `Perfecto. Viendo lo detectado, hay margen real para mejorar captación y conversión con unos ajustes bien enfocados.`
       : `Perfecto. Con lo que ya he visto, sí tiene sentido profundizar un poco más antes de plantearte el siguiente paso.`;
+
+  if (hasContact(lead) || norm(lead?.preferred_contact_channel)) {
+    return `${valueLine}\n\nSi te va bien, sigo contigo desde aquí y te preparo el siguiente paso sin pedirte de nuevo los datos básicos.`;
+  }
 
   return `${valueLine}\n\nAntes de seguir, ¿cómo te llamas?`;
 }
@@ -1036,11 +1040,25 @@ function buildStructuredCloseReply({
     !hasExplicitCloseIntent &&
     isShortAffirmativeResponse(text)
   ) {
-    return buildValueThenAskNameReply(analysisSnapshot);
+    return buildValueThenAskNameReply(analysisSnapshot, lead);
   }
 
   if (!readyToAdvance) {
     return null;
+  }
+
+  if (!safeName && hasContact(lead)) {
+    if (!preferredChannel) {
+      return "Perfecto. ¿Cómo prefieres que sigamos con la propuesta: por WhatsApp o por email?";
+    }
+
+    if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
+      return "Perfecto. Si te va bien, abre WhatsApp y sigo por ahí con el contexto de este análisis.";
+    }
+
+    if (preferredChannel.includes("email")) {
+      return "Perfecto. Te lo preparo por email con lo que ya hemos revisado.";
+    }
   }
 
   if (!safeName) {
