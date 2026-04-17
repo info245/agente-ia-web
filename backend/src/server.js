@@ -2580,7 +2580,8 @@ async function processIncomingMessage({
   }
 
   if (!reply) {
-    const serviceFacts = getServiceFacts(leadAfter.interest_service, appConfig);
+    const leadForAi = leadAfter || relatedWebLead || {};
+    const serviceFacts = getServiceFacts(leadForAi.interest_service, appConfig);
 
     let factsBlock = "";
 
@@ -2588,7 +2589,7 @@ async function processIncomingMessage({
       factsBlock = `
 INFORMACIÓN VERIFICADA DE LA WEB
 
-Servicio: ${leadAfter.interest_service}
+Servicio: ${leadForAi.interest_service}
 
 Precio mínimo: ${serviceFacts.min_monthly_fee || serviceFacts.min_project_fee}
 
@@ -2604,19 +2605,19 @@ ${serviceFacts.notes}
 
     if (
       conversationPhase !== "discover" &&
-      (leadAfter.interest_service ||
+      (leadForAi.interest_service ||
         hasAnalysisSnapshot(analysisSnapshot) ||
         detectStrongCommercialIntent(userText))
     ) {
       try {
         const docs = await retrieveWebsiteContext(
           `
-Servicio: ${leadAfter.interest_service || ""}
+Servicio: ${leadForAi.interest_service || ""}
 Pregunta usuario: ${userText}
-Presupuesto: ${leadAfter.budget_range || ""}
-Objetivo: ${leadAfter.main_goal || ""}
-Negocio: ${leadAfter.business_type || ""}
-Actividad: ${leadAfter.business_activity || ""}
+Presupuesto: ${leadForAi.budget_range || ""}
+Objetivo: ${leadForAi.main_goal || ""}
+Negocio: ${leadForAi.business_type || ""}
+Actividad: ${leadForAi.business_activity || ""}
 `
         );
 
