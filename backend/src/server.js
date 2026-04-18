@@ -2569,6 +2569,7 @@ async function processIncomingMessage({
 
   await upsertLeadFromConversation({
     ...mergedLead,
+    account_id: scopedAccountId,
     conversation_id: currentConversationId,
     business_activity:
       mergedLead?.business_activity ?? leadBefore?.business_activity ?? null,
@@ -2582,6 +2583,7 @@ async function processIncomingMessage({
   if (!isLikelyValidName(leadAfter?.name) && leadAfter?.name) {
     await upsertLeadFromConversation({
       ...leadAfter,
+      account_id: scopedAccountId,
       conversation_id: currentConversationId,
       name: null,
     });
@@ -2671,6 +2673,7 @@ async function processIncomingMessage({
 
     await upsertLeadFromConversation({
       ...hydratedLead,
+      account_id: scopedAccountId,
       conversation_id: currentConversationId,
       summary: leadAfter?.summary || relatedWebLead?.summary || null,
       business_type: leadAfter?.business_type || relatedWebLead?.business_type,
@@ -2735,6 +2738,7 @@ async function processIncomingMessage({
 
     await upsertLeadFromConversation({
       ...updatedLead,
+      account_id: scopedAccountId,
       conversation_id: currentConversationId,
     });
 
@@ -2748,6 +2752,7 @@ async function processIncomingMessage({
 
     await upsertLeadFromConversation({
       ...leadAfter,
+      account_id: scopedAccountId,
       conversation_id: currentConversationId,
       current_step: currentStep,
       last_question: currentQuestion,
@@ -3017,6 +3022,7 @@ ${ragContext}
       if (finalSummary) {
         await upsertLeadFromConversation({
           ...leadAfter,
+          account_id: scopedAccountId,
           conversation_id: currentConversationId,
           summary: finalSummary,
         });
