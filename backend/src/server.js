@@ -1,4 +1,4 @@
-import "dotenv/config";
+﻿import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import crypto from "crypto";
@@ -209,7 +209,7 @@ function isUserQuestion(text) {
   if (!t) return false;
   if (t.includes("?")) return true;
 
-  return /^(que|qué|como|cómo|cuanto|cuánto|cual|cuál|precio|precios|presupuesto|coste|costes|tarifa|tarifas)\b/i.test(
+  return /^(que|quÃ©|como|cÃ³mo|cuanto|cuÃ¡nto|cual|cuÃ¡l|precio|precios|presupuesto|coste|costes|tarifa|tarifas)\b/i.test(
     t
   );
 }
@@ -224,12 +224,12 @@ function isLikelyServiceIntent(text) {
     t.includes("redes sociales") ||
     t.includes("publicidad") ||
     t.includes("diseno web") ||
-    t.includes("diseño web") ||
+    t.includes("diseÃ±o web") ||
     t.includes("consultoria") ||
-    t.includes("consultoría") ||
+    t.includes("consultorÃ­a") ||
     t.includes("web") ||
     t.includes("campanas") ||
-    t.includes("campañas")
+    t.includes("campaÃ±as")
   );
 }
 
@@ -243,7 +243,7 @@ function isLikelyQuestionOrIntent(text) {
     t.includes("busco") ||
     t.includes("me interesa") ||
     t.includes("cuanto cuesta") ||
-    t.includes("cuánto cuesta") ||
+    t.includes("cuÃ¡nto cuesta") ||
     t.includes("precio") ||
     t.includes("presupuesto")
   );
@@ -268,11 +268,11 @@ function isUnknownResponse(text) {
 
   return (
     t === "no lo se" ||
-    t === "no lo sé" ||
+    t === "no lo sÃ©" ||
     t === "ni idea" ||
     t === "depende" ||
     t === "aun no lo se" ||
-    t === "aún no lo sé"
+    t === "aÃºn no lo sÃ©"
   );
 }
 
@@ -283,7 +283,7 @@ function isGreeting(text) {
     t === "buenas" ||
     t === "buenas tardes" ||
     t === "buenos dias" ||
-    t === "buenos días" ||
+    t === "buenos dÃ­as" ||
     t === "buenas noches" ||
     t === "hey" ||
     t === "hello"
@@ -302,14 +302,14 @@ function isLikelyValidName(value) {
 
   const blockedPhrases = [
     "si",
-    "sí",
+    "sÃ­",
     "si si",
-    "sí sí",
+    "sÃ­ sÃ­",
     "si por favor",
-    "sí por favor",
+    "sÃ­ por favor",
     "por favor",
     "si gracias",
-    "sí gracias",
+    "sÃ­ gracias",
     "prefiero por whatsapp",
     "prefiero whatsapp",
     "por whatsapp",
@@ -321,16 +321,16 @@ function isLikelyValidName(value) {
     "buenas",
     "buenas tardes",
     "buenos dias",
-    "buenos días",
+    "buenos dÃ­as",
     "buenas noches",
     "quiero",
     "necesito",
     "google ads",
     "seo",
     "diseno web",
-    "diseño web",
+    "diseÃ±o web",
     "consultoria",
-    "consultoría",
+    "consultorÃ­a",
     "publicidad",
     "redes sociales",
     "meta ads",
@@ -338,11 +338,29 @@ function isLikelyValidName(value) {
     "precio",
     "presupuesto",
     "cuanto cuesta",
-    "cuánto cuesta",
+    "cuÃ¡nto cuesta",
     "tienda online",
     "ecommerce",
     "soy autonomo",
-    "soy autónomo",
+    "soy autÃ³nomo",
+    "captar",
+    "captar nuevos usuarios",
+    "captar nuevos ususarios",
+    "nuevos usuarios",
+    "nuevos ususarios",
+    "usuarios",
+    "ususarios",
+    "leads",
+    "ventas",
+    "trafico",
+    "tráfico",
+    "captacion",
+    "captación",
+    "confianza",
+    "home",
+    "mejorar posiciones",
+    "conseguir mas leads",
+    "conseguir más leads",
   ];
 
   if (blockedPhrases.some((p) => t.includes(p))) return false;
@@ -355,7 +373,7 @@ function isLikelyValidName(value) {
 
   if (!words.length || words.length > 4) return false;
 
-  const allowedWord = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü'-]+$/;
+  const allowedWord = /^[A-Za-zÃÃ‰ÃÃ“ÃšÃ¡Ã©Ã­Ã³ÃºÃ‘Ã±ÃœÃ¼'-]+$/;
   if (!words.every((w) => allowedWord.test(w))) return false;
 
   return true;
@@ -414,15 +432,15 @@ function isClosingReply(reply) {
   if (!t) return false;
 
   return (
-    /te contactar[ée]/i.test(t) ||
+    /te contactar[Ã©e]/i.test(t) ||
     /gracias por confiar/i.test(t) ||
     /quedo atento/i.test(t) ||
-    /te escribir[ée]/i.test(t) ||
+    /te escribir[Ã©e]/i.test(t) ||
     /nos pondremos en contacto/i.test(t) ||
     /hemos recibido/i.test(t) ||
-    /en breve recibirás/i.test(t) ||
+    /en breve recibirÃ¡s/i.test(t) ||
     /te enviaremos/i.test(t) ||
-    /recibirás la propuesta/i.test(t)
+    /recibirÃ¡s la propuesta/i.test(t)
   );
 }
 
@@ -433,16 +451,16 @@ function shouldMarkChatCompleted(lead, reply) {
 function normalizeBudget(text) {
   const t = String(text || "").trim();
 
-  const m1 = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(€|eur)\b/i);
+  const m1 = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(â‚¬|eur)\b/i);
   if (m1) {
     const n = Number(String(m1[1]).replace(/[.,](?=\d{3}\b)/g, ""));
-    if (Number.isFinite(n) && n >= 10) return `${n} €`;
+    if (Number.isFinite(n) && n >= 10) return `${n} â‚¬`;
   }
 
   const m2 = t.match(/\b(\d{2,6})\b/);
   if (m2) {
     const n = Number(m2[1]);
-    if (Number.isFinite(n) && n >= 10) return `${n} €`;
+    if (Number.isFinite(n) && n >= 10) return `${n} â‚¬`;
   }
 
   return null;
@@ -463,15 +481,15 @@ function detectService(text) {
   }
   if (
     t.includes("diseno web") ||
-    t.includes("diseño web") ||
+    t.includes("diseÃ±o web") ||
     t.includes("pagina web") ||
-    t.includes("página web") ||
+    t.includes("pÃ¡gina web") ||
     t === "web"
   ) {
-    return "Diseño Web";
+    return "DiseÃ±o Web";
   }
-  if (t.includes("consultoria") || t.includes("consultoría")) {
-    return "Consultoría Digital";
+  if (t.includes("consultoria") || t.includes("consultorÃ­a")) {
+    return "ConsultorÃ­a Digital";
   }
 
   return null;
@@ -488,7 +506,7 @@ function detectBusinessType(text) {
   if (t.includes("negocio")) return "negocio";
   if (t.includes("proyecto")) return "proyecto";
   if (t.includes("tienda online") || t.includes("ecommerce")) return "ecommerce";
-  if (t.includes("clinica") || t.includes("clínica")) return "clinica";
+  if (t.includes("clinica") || t.includes("clÃ­nica")) return "clinica";
   if (t.includes("agencia")) return "agencia";
   if (t.includes("despacho")) return "despacho";
 
@@ -523,11 +541,11 @@ function detectBusinessActivity(text) {
   if (triggers.some((x) => t.includes(x))) return raw;
   if (t.includes("tienda online")) return raw;
   if (t.includes("ecommerce")) return raw;
-  if (t.includes("clinica") || t.includes("clínica")) return raw;
+  if (t.includes("clinica") || t.includes("clÃ­nica")) return raw;
   if (t.includes("abogado") || t.includes("bufete")) return raw;
   if (t.includes("dental") || t.includes("dentista")) return raw;
   if (
-    /\b(venta|ventas|fabricacion|fabricaciÃ³n|distribucion|distribuciÃ³n|comercio|tienda|negocio|servicio|servicios|consultoria|consultorÃ­a|asesoria|asesorÃ­a|reparacion|reparaciÃ³n|instalacion|instalaciÃ³n|alquiler|formacion|formaciÃ³n|marketing|publicidad|helados|ropa|comida|restauracion|restauraciÃ³n|cafeteria|cafeterÃ­a)\b/i.test(
+    /\b(venta|ventas|fabricacion|fabricaciÃƒÂ³n|distribucion|distribuciÃƒÂ³n|comercio|tienda|negocio|servicio|servicios|consultoria|consultorÃƒÂ­a|asesoria|asesorÃƒÂ­a|reparacion|reparaciÃƒÂ³n|instalacion|instalaciÃƒÂ³n|alquiler|formacion|formaciÃƒÂ³n|marketing|publicidad|helados|ropa|comida|restauracion|restauraciÃƒÂ³n|cafeteria|cafeterÃƒÂ­a)\b/i.test(
       t
     )
   ) {
@@ -552,7 +570,7 @@ function detectMainGoal(text) {
     "necesito",
     "busco",
     "me gustaria",
-    "me gustaría",
+    "me gustarÃ­a",
     "mi objetivo",
     "captar",
     "conseguir",
@@ -579,7 +597,7 @@ function detectPhone(text) {
   if (digits.length >= 6) return digits;
   return null;
   if (
-    /\b(venta|ventas|fabricacion|fabricación|distribucion|distribución|comercio|tienda|negocio|servicio|servicios|consultoria|consultoría|asesoria|asesoría|reparacion|reparación|instalacion|instalación|alquiler|formacion|formación|marketing|publicidad|helados|ropa|comida|restauracion|restauración|cafeteria|cafetería)\b/i.test(
+    /\b(venta|ventas|fabricacion|fabricaciÃ³n|distribucion|distribuciÃ³n|comercio|tienda|negocio|servicio|servicios|consultoria|consultorÃ­a|asesoria|asesorÃ­a|reparacion|reparaciÃ³n|instalacion|instalaciÃ³n|alquiler|formacion|formaciÃ³n|marketing|publicidad|helados|ropa|comida|restauracion|restauraciÃ³n|cafeteria|cafeterÃ­a)\b/i.test(
       t
     )
   ) {
@@ -660,25 +678,25 @@ function getQuestionForStep(step, lead) {
 
   switch (step) {
     case "ask_name":
-      return "Antes de seguir, ¿cómo te llamas?";
+      return "Antes de seguir, Â¿cÃ³mo te llamas?";
     case "ask_business_type":
       return safeName
-        ? `Encantado, ${safeName}. ¿Tienes una empresa, eres autónomo o es un proyecto que estás empezando?`
-        : "¿Tienes una empresa, eres autónomo o es un proyecto que estás empezando?";
+        ? `Encantado, ${safeName}. Â¿Tienes una empresa, eres autÃ³nomo o es un proyecto que estÃ¡s empezando?`
+        : "Â¿Tienes una empresa, eres autÃ³nomo o es un proyecto que estÃ¡s empezando?";
     case "ask_business_activity":
-      return "Perfecto. ¿A qué te dedicas exactamente o cuál es vuestra actividad principal?";
+      return "Perfecto. Â¿A quÃ© te dedicas exactamente o cuÃ¡l es vuestra actividad principal?";
     case "ask_service":
-      return "Gracias. ¿Qué servicio te interesa ahora mismo: SEO, Google Ads, Redes Sociales, Diseño Web o Consultoría Digital?";
+      return "Gracias. Â¿QuÃ© servicio te interesa ahora mismo: SEO, Google Ads, Redes Sociales, DiseÃ±o Web o ConsultorÃ­a Digital?";
     case "ask_goal":
-      return "Entendido. ¿Cuál es tu objetivo principal ahora mismo?";
+      return "Entendido. Â¿CuÃ¡l es tu objetivo principal ahora mismo?";
     case "ask_budget":
       return lead?.interest_service
-        ? `Para ${lead.interest_service}, ¿con qué presupuesto aproximado te gustaría trabajar?`
-        : "¿Con qué presupuesto aproximado te gustaría trabajar?";
+        ? `Para ${lead.interest_service}, Â¿con quÃ© presupuesto aproximado te gustarÃ­a trabajar?`
+        : "Â¿Con quÃ© presupuesto aproximado te gustarÃ­a trabajar?";
     case "ask_urgency":
-      return "Perfecto. ¿Qué prioridad tiene para ti? ¿Te gustaría empezar cuanto antes o lo estás valorando a medio plazo?";
+      return "Perfecto. Â¿QuÃ© prioridad tiene para ti? Â¿Te gustarÃ­a empezar cuanto antes o lo estÃ¡s valorando a medio plazo?";
     case "ask_contact":
-      return "Genial. Para poder enviarte una propuesta orientativa o contactarte, ¿me dejas tu email o tu teléfono?";
+      return "Genial. Para poder enviarte una propuesta orientativa o contactarte, Â¿me dejas tu email o tu telÃ©fono?";
     default:
       return null;
   }
@@ -773,7 +791,7 @@ function summarizeAnalysisSnapshot(snapshot) {
     : "";
 
   return `
-SNAPSHOT DEL ANÁLISIS
+SNAPSHOT DEL ANÃLISIS
 URL: ${snapshot.url}
 Title: ${snapshot.title || "N/D"}
 Meta description: ${snapshot.meta_description || "N/D"}
@@ -804,7 +822,7 @@ function buildWhatsAppHandoff({
   ).replace(/\D/g, "");
   if (!publicNumber || !conversationId || !handoffCode) return null;
 
-  const intro = "Hola, vengo desde el chat web y quiero seguir por aquí.";
+  const intro = "Hola, vengo desde el chat web y quiero seguir por aquÃ­.";
   const text = `${intro}\nRef: ${handoffCode}`;
   const whatsappUrl = `https://wa.me/${publicNumber}?text=${encodeURIComponent(text)}`;
 
@@ -860,10 +878,10 @@ function cleanReplyForWebHandoff(reply, { handoffAvailable = false, channel = "w
 
   if (channel === "web" && handoffAvailable) {
     text = text
-      .replace(/te escribir[eé]\s+por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.")
-      .replace(/te contactar[eé]\s+por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.")
-      .replace(/te enviar[eé]\s+[^.]*por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.")
-      .replace(/mientras tanto,\s*preparo la propuesta y te la envío pronto\./gi, "Cuando me escribas por WhatsApp, continúo desde este punto sin empezar de cero.");
+      .replace(/te escribir[eÃ©]\s+por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahÃ­ con el contexto de este anÃ¡lisis.")
+      .replace(/te contactar[eÃ©]\s+por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahÃ­ con el contexto de este anÃ¡lisis.")
+      .replace(/te enviar[eÃ©]\s+[^.]*por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahÃ­ con el contexto de este anÃ¡lisis.")
+      .replace(/mientras tanto,\s*preparo la propuesta y te la envÃ­o pronto\./gi, "Cuando me escribas por WhatsApp, continÃºo desde este punto sin empezar de cero.");
   }
 
   return text;
@@ -881,26 +899,26 @@ function cleanReplyForChannelChoice(reply, { channel = "web", lead = null } = {}
     /me facilitas un email/i.test(text) ||
     /me dejas tu email/i.test(text) ||
     /comparteme tu email/i.test(text) ||
-    /compárteme tu email/i.test(text) ||
+    /compÃ¡rteme tu email/i.test(text) ||
     /pasame tu email/i.test(text) ||
-    /pásame tu email/i.test(text) ||
+    /pÃ¡same tu email/i.test(text) ||
     /por email/i.test(text);
 
   if (!asksForEmailDirectly) return text;
 
   const safeName = getSafeLeadName(lead);
   return safeName
-    ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
-    : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
+    ? `Perfecto, ${safeName}. Â¿CÃ³mo prefieres que te mande la propuesta: por WhatsApp o por email?`
+    : "Perfecto. Â¿CÃ³mo prefieres que te mande la propuesta: por WhatsApp o por email?";
 }
 
 function isShortAffirmativeResponse(text) {
   const t = normalizeText(text);
   return (
     t === "si" ||
-    t === "sí" ||
+    t === "sÃ­" ||
     t === "si por favor" ||
-    t === "sí por favor" ||
+    t === "sÃ­ por favor" ||
     t === "vale" ||
     t === "ok" ||
     t === "perfecto" ||
@@ -917,18 +935,18 @@ function buildValueThenAskNameReply(analysisSnapshot, lead = null) {
 
   const valueLine =
     focus
-      ? `Perfecto. El siguiente paso con más impacto sería trabajar primero ${focus}.`
+      ? `Perfecto. El siguiente paso con mÃ¡s impacto serÃ­a trabajar primero ${focus}.`
       : topPriority
-      ? `Perfecto. La prioridad más clara ahora mismo sería ${topPriority}.`
+      ? `Perfecto. La prioridad mÃ¡s clara ahora mismo serÃ­a ${topPriority}.`
       : summary
-      ? `Perfecto. Viendo lo detectado, hay margen real para mejorar captación y conversión con unos ajustes bien enfocados.`
-      : `Perfecto. Con lo que ya he visto, sí tiene sentido profundizar un poco más antes de plantearte el siguiente paso.`;
+      ? `Perfecto. Viendo lo detectado, hay margen real para mejorar captaciÃ³n y conversiÃ³n con unos ajustes bien enfocados.`
+      : `Perfecto. Con lo que ya he visto, sÃ­ tiene sentido profundizar un poco mÃ¡s antes de plantearte el siguiente paso.`;
 
   if (hasContact(lead) || norm(lead?.preferred_contact_channel)) {
-    return `${valueLine}\n\nSi te va bien, sigo contigo desde aquí y te preparo el siguiente paso sin pedirte de nuevo los datos básicos.`;
+    return `${valueLine}\n\nSi te va bien, sigo contigo desde aquÃ­ y te preparo el siguiente paso sin pedirte de nuevo los datos bÃ¡sicos.`;
   }
 
-  return `${valueLine}\n\nAntes de seguir, ¿cómo te llamas?`;
+  return `${valueLine}\n\nAntes de seguir, Â¿cÃ³mo te llamas?`;
 }
 
 function buildWhatsAppContinuationReply({
@@ -949,24 +967,24 @@ function buildWhatsAppContinuationReply({
   const feeText = norm(serviceFacts?.min_monthly_fee || serviceFacts?.min_project_fee);
 
   const intro = safeName
-    ? `Hola ${safeName}, continúo por aquí con el contexto de lo que vimos en la web.`
-    : "Hola, continúo por aquí con el contexto de lo que vimos en la web.";
+    ? `Hola ${safeName}, continÃºo por aquÃ­ con el contexto de lo que vimos en la web.`
+    : "Hola, continÃºo por aquÃ­ con el contexto de lo que vimos en la web.";
 
   const summaryLine = summary
     ? `He visto que te interesa ${service} y que tu caso va orientado a ${summary}.`
-    : `He visto que te interesa ${service} y ya tengo el contexto previo del análisis.`;
+    : `He visto que te interesa ${service} y ya tengo el contexto previo del anÃ¡lisis.`;
 
   const serviceLine = serviceDescription
     ? `Nuestro servicio de ${service} consiste en ${serviceDescription.charAt(0).toLowerCase()}${serviceDescription.slice(1)}`
-    : `Nuestro servicio de ${service} está orientado a mejorar visibilidad, captación y resultados de forma sostenida.`;
+    : `Nuestro servicio de ${service} estÃ¡ orientado a mejorar visibilidad, captaciÃ³n y resultados de forma sostenida.`;
 
   const priorityLine = topPriority
-    ? `La primera prioridad que trabajaría sería ${topPriority}.`
+    ? `La primera prioridad que trabajarÃ­a serÃ­a ${topPriority}.`
     : null;
 
   const budgetLine = feeText
-    ? `Para orientarte bien, solemos partir desde ${feeText}. ¿Con qué presupuesto te gustaría plantearlo?`
-    : "Para orientarte bien, ¿con qué presupuesto te gustaría plantearlo?";
+    ? `Para orientarte bien, solemos partir desde ${feeText}. Â¿Con quÃ© presupuesto te gustarÃ­a plantearlo?`
+    : "Para orientarte bien, Â¿con quÃ© presupuesto te gustarÃ­a plantearlo?";
 
   return [intro, summaryLine, serviceLine, priorityLine, budgetLine]
     .filter(Boolean)
@@ -979,17 +997,17 @@ function buildWhatsAppReminderHook(lead = {}) {
   const summary = norm(lead?.summary);
 
   const intro = safeName
-    ? `Hola ${safeName}, te escribo por aquí por si quieres retomar lo que dejamos pendiente.`
-    : "Hola, te escribo por aquí por si quieres retomar lo que dejamos pendiente.";
+    ? `Hola ${safeName}, te escribo por aquÃ­ por si quieres retomar lo que dejamos pendiente.`
+    : "Hola, te escribo por aquÃ­ por si quieres retomar lo que dejamos pendiente.";
 
   const contextLine = summary
-    ? `Por lo que vimos, tu interés principal va orientado a ${summary}.`
-    : `Teníamos pendiente avanzar con ${service}.`;
+    ? `Por lo que vimos, tu interÃ©s principal va orientado a ${summary}.`
+    : `TenÃ­amos pendiente avanzar con ${service}.`;
 
   return [
     intro,
     contextLine,
-    `Si te va bien, te doy una recomendación concreta para avanzar con ${service} o ajustamos el siguiente paso según tu presupuesto.`,
+    `Si te va bien, te doy una recomendaciÃ³n concreta para avanzar con ${service} o ajustamos el siguiente paso segÃºn tu presupuesto.`,
   ].join("\n\n");
 }
 
@@ -1033,7 +1051,7 @@ function buildExternalLeadIntroMessage(lead = {}) {
     goal
       ? `Vemos que te interesa ${service} y que tu objetivo va orientado a ${goal}.`
       : `Vemos que te interesa ${service}.`,
-    "Si quieres, seguimos por aquí y te doy una primera orientación para tu caso.",
+    "Si quieres, seguimos por aquÃ­ y te doy una primera orientaciÃ³n para tu caso.",
   ].join("\n\n");
 }
 
@@ -1264,34 +1282,24 @@ function buildStructuredCloseReply({
     return null;
   }
 
-  if (!safeName && hasContact(lead)) {
-    if (!preferredChannel) {
-      return "Perfecto. ¿Cómo prefieres que sigamos con la propuesta: por WhatsApp o por email?";
-    }
-
-    if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
-      return "Perfecto. Si te va bien, abre WhatsApp y sigo por ahí con el contexto de este análisis.";
-    }
-
-    if (preferredChannel.includes("email")) {
-      return "Perfecto. Te lo preparo por email con lo que ya hemos revisado.";
-    }
-  }
-
   if (!safeName) {
     return "Antes de seguir, ¿cómo te llamas?";
   }
 
   if (!preferredChannel) {
-    return `Perfecto, ${safeName}. ¿Prefieres que sigamos por email o por WhatsApp?`;
+    return `Perfecto, ${safeName}. Â¿Prefieres que sigamos por email o por WhatsApp?`;
   }
 
-  if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
-    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.\n\nCuando me escribas por WhatsApp, continúo desde este punto sin empezar de cero.`;
+  if (preferredChannel.includes("whatsapp") && !hasPhone(lead)) {
+    return `Perfecto, ${safeName}. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.`;
   }
 
   if (preferredChannel.includes("email") && !lead?.email) {
-    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si prefieres email, compárteme tu correo y te lo preparo por ahí.`;
+    return `Perfecto, ${safeName}. Compárteme tu email y te lo preparo por ahí.`;
+  }
+
+  if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
+    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y te sigo por ahÃ­ con el contexto de este anÃ¡lisis.\n\nCuando me escribas por WhatsApp, continÃºo desde este punto sin empezar de cero.`;
   }
 
   if (preferredChannel.includes("email") && lead?.email) {
@@ -1307,7 +1315,7 @@ function detectStrongCommercialIntent(text) {
     t.includes("precio") ||
     t.includes("presupuesto") ||
     t.includes("cuanto cuesta") ||
-    t.includes("cuánto cuesta") ||
+    t.includes("cuÃ¡nto cuesta") ||
     t.includes("trabajar contigo") ||
     t.includes("trabajar con vosotros") ||
     t.includes("empezar") ||
@@ -1404,41 +1412,41 @@ function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
   for (const item of sequence) {
     switch (item) {
       case "name":
-        if (!hasName(lead)) return "Si te encaja, ¿cómo te llamas?";
+        if (!hasName(lead)) return "Si te encaja, Â¿cÃ³mo te llamas?";
         break;
       case "business_type":
         if (!hasBusinessType(lead)) {
-          return "¿Esto es para una empresa en marcha, un negocio local o un proyecto que estás arrancando?";
+          return "Â¿Esto es para una empresa en marcha, un negocio local o un proyecto que estÃ¡s arrancando?";
         }
         break;
       case "business_activity":
         if (!hasBusinessActivity(lead)) {
-          return "¿A qué os dedicáis exactamente?";
+          return "Â¿A quÃ© os dedicÃ¡is exactamente?";
         }
         break;
       case "interest_service":
         if (!hasService(lead)) {
-          return "¿Qué quieres revisar primero: web, SEO, Google Ads o captación?";
+          return "Â¿QuÃ© quieres revisar primero: web, SEO, Google Ads o captaciÃ³n?";
         }
         break;
       case "preferred_channel":
         if (hasName(lead) && !normalizeText(lead?.preferred_contact_channel || "")) {
-          return `Perfecto, ${getSafeLeadName(lead) || ""}. ¿Prefieres que sigamos por email o por WhatsApp?`;
+          return `Perfecto, ${getSafeLeadName(lead) || ""}. Â¿Prefieres que sigamos por email o por WhatsApp?`;
         }
         break;
       case "main_goal":
         if (!hasMainGoal(lead)) {
-          return "¿Qué te preocupa más ahora mismo: captar más contactos, vender más o mejorar la conversión?";
+          return "Â¿QuÃ© te preocupa mÃ¡s ahora mismo: captar mÃ¡s contactos, vender mÃ¡s o mejorar la conversiÃ³n?";
         }
         break;
       case "budget_range":
         if (!hasBudget(lead)) {
-          return "Si quieres, te oriento mejor si me dices con qué presupuesto aproximado te gustaría moverte.";
+          return "Si quieres, te oriento mejor si me dices con quÃ© presupuesto aproximado te gustarÃ­a moverte.";
         }
         break;
       case "urgency":
         if (!hasUrgency(lead)) {
-          return "¿Esto te corre ahora o es algo que quieres mover más adelante?";
+          return "Â¿Esto te corre ahora o es algo que quieres mover mÃ¡s adelante?";
         }
         break;
       case "email_or_phone":
@@ -1446,22 +1454,22 @@ function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
           const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
           if (!preferredChannel) {
             return hasName(lead)
-              ? `Perfecto, ${getSafeLeadName(lead) || ""}. ¿Prefieres que sigamos por email o por WhatsApp?`
-              : "Antes de seguir por un canal externo, dime tu nombre y te guío con el siguiente paso.";
+              ? `Perfecto, ${getSafeLeadName(lead) || ""}. Â¿Prefieres que sigamos por email o por WhatsApp?`
+              : "Antes de seguir por un canal externo, dime tu nombre y te guÃ­o con el siguiente paso.";
           }
           if (preferredChannel.includes("whatsapp")) {
             return hasName(lead)
-              ? `Perfecto, ${getSafeLeadName(lead) || ""}. Compárteme tu número de WhatsApp y te dejo el paso preparado por ahí.`
-              : "Si prefieres WhatsApp, antes dime tu nombre y luego tu número.";
+              ? `Perfecto, ${getSafeLeadName(lead) || ""}. CompÃ¡rteme tu nÃºmero de WhatsApp y te dejo el paso preparado por ahÃ­.`
+              : "Si prefieres WhatsApp, antes dime tu nombre y luego tu nÃºmero.";
           }
           if (preferredChannel.includes("email")) {
             return hasName(lead)
-              ? `Perfecto, ${getSafeLeadName(lead) || ""}. Compárteme tu email y te lo preparo por ahí.`
+              ? `Perfecto, ${getSafeLeadName(lead) || ""}. CompÃ¡rteme tu email y te lo preparo por ahÃ­.`
               : "Si prefieres email, antes dime tu nombre y seguimos.";
           }
           return hasName(lead)
-            ? `Perfecto, ${getSafeLeadName(lead) || ""}. Si quieres que te deje esto preparado o seguir por un canal más cómodo, compárteme email o WhatsApp y seguimos por ahí.`
-            : "Si quieres que te deje esto preparado o seguir por un canal más cómodo, antes dime tu nombre y seguimos.";
+            ? `Perfecto, ${getSafeLeadName(lead) || ""}. Si quieres que te deje esto preparado o seguir por un canal mÃ¡s cÃ³modo, compÃ¡rteme email o WhatsApp y seguimos por ahÃ­.`
+            : "Si quieres que te deje esto preparado o seguir por un canal mÃ¡s cÃ³modo, antes dime tu nombre y seguimos.";
         }
         break;
     }
@@ -1486,18 +1494,18 @@ function buildModeInstructions({ mode, phase, lead, analysisSnapshot, channel, t
   const modeGuidance = {
     diagnostic_web: `
 MODO: diagnostic_web
-- Este chat web debe reducir fricción.
+- Este chat web debe reducir fricciÃ³n.
 - Empieza ayudando, no interrogando.
-- Ofrece caminos claros: revisar web, SEO, Google Ads o captación.
-- Si hay URL o análisis, entrega un mini diagnóstico útil y breve.
-- Solo pide un dato de lead si el usuario ya recibió valor o quiere seguir.
-${suggestWhatsApp ? "- Si encaja, propone seguir por WhatsApp como continuación cómoda del análisis." : ""}
+- Ofrece caminos claros: revisar web, SEO, Google Ads o captaciÃ³n.
+- Si hay URL o anÃ¡lisis, entrega un mini diagnÃ³stico Ãºtil y breve.
+- Solo pide un dato de lead si el usuario ya recibiÃ³ valor o quiere seguir.
+${suggestWhatsApp ? "- Si encaja, propone seguir por WhatsApp como continuaciÃ³n cÃ³moda del anÃ¡lisis." : ""}
 `,
     closer_whatsapp: `
 MODO: closer_whatsapp
-- Esto es una continuación natural de un contexto previo, normalmente desde web.
-- No reinicies la conversación ni repitas preguntas ya resueltas.
-- Usa el análisis previo como punto de partida.
+- Esto es una continuaciÃ³n natural de un contexto previo, normalmente desde web.
+- No reinicies la conversaciÃ³n ni repitas preguntas ya resueltas.
+- Usa el anÃ¡lisis previo como punto de partida.
 - Resuelve dudas, profundiza solo lo necesario y orienta a cierre o siguiente paso.
 - Si falta un dato clave para avanzar, pide solo uno.
 `,
@@ -1505,7 +1513,7 @@ MODO: closer_whatsapp
 MODO: hybrid_whatsapp
 - Este usuario ha llegado directo a WhatsApp o no hay contexto previo fiable.
 - WhatsApp debe descubrir y diagnosticar con tono cercano.
-- Puedes ofrecer opciones guiadas, pedir URL o problema y dar un mini diagnóstico si hay material.
+- Puedes ofrecer opciones guiadas, pedir URL o problema y dar un mini diagnÃ³stico si hay material.
 - No dependas del chat web para ayudarle.
 `,
   };
@@ -1513,33 +1521,33 @@ MODO: hybrid_whatsapp
   const phaseGuidance = {
     discover: `
 FASE: descubrimiento
-- Tu prioridad es captar atención y orientar.
+- Tu prioridad es captar atenciÃ³n y orientar.
 - No pidas nombre, empresa, urgencia ni contacto al inicio.
-- Si aún no hay URL ni problema claro, guía con opciones muy concretas.
-- Haz como máximo una pregunta clara al final.
+- Si aÃºn no hay URL ni problema claro, guÃ­a con opciones muy concretas.
+- Haz como mÃ¡ximo una pregunta clara al final.
 `,
     diagnose: `
-FASE: diagnóstico ligero
-- Resume qué has detectado.
-- Explica por qué puede afectar a captación, conversión o visibilidad.
-- Señala 2 o 3 prioridades.
-- Invita a profundizar o a seguir por un canal cómodo.
+FASE: diagnÃ³stico ligero
+- Resume quÃ© has detectado.
+- Explica por quÃ© puede afectar a captaciÃ³n, conversiÃ³n o visibilidad.
+- SeÃ±ala 2 o 3 prioridades.
+- Invita a profundizar o a seguir por un canal cÃ³modo.
 - No inventes datos ni exageres.
 `,
     deepen: `
-FASE: profundización
-- Ya puedes afinar el problema y recoger información comercial de forma progresiva.
-- Pide solo el dato que más desbloquee el siguiente paso.
+FASE: profundizaciÃ³n
+- Ya puedes afinar el problema y recoger informaciÃ³n comercial de forma progresiva.
+- Pide solo el dato que mÃ¡s desbloquee el siguiente paso.
 - No conviertas el mensaje en un formulario.
-- No entregues análisis largos adicionales si ya has dado un primer diagnóstico útil.
-- Si todavía no tienes el nombre, pídelo antes de plantear contacto o continuidad formal.
+- No entregues anÃ¡lisis largos adicionales si ya has dado un primer diagnÃ³stico Ãºtil.
+- Si todavÃ­a no tienes el nombre, pÃ­delo antes de plantear contacto o continuidad formal.
 ${missingLeadQuestion ? `- Si necesitas pedir un dato, la mejor pregunta ahora es: "${missingLeadQuestion}"` : ""}
 `,
     close: `
-FASE: cierre o transición
+FASE: cierre o transiciÃ³n
 - Orienta a siguiente paso claro: WhatsApp, email, llamada o propuesta.
-- Si faltan datos mínimos para avanzar, pide solo uno.
-- En WhatsApp, cierra por ahí si el usuario ya viene con intención.
+- Si faltan datos mÃ­nimos para avanzar, pide solo uno.
+- En WhatsApp, cierra por ahÃ­ si el usuario ya viene con intenciÃ³n.
 - Antes de pedir contacto o proponer seguimiento, intenta tener al menos el nombre.
 ${missingLeadQuestion ? `- Si necesitas pedir un dato, la mejor pregunta ahora es: "${missingLeadQuestion}"` : ""}
 `,
@@ -1578,23 +1586,23 @@ async function generateFinalConversationSummary({ lead, messages }) {
   const prompt = `
 Eres un asistente comercial de TMedia Global.
 
-Tu tarea es redactar un resumen final único de todo el lead usando TODA la conversación, no solo el último tramo.
+Tu tarea es redactar un resumen final Ãºnico de todo el lead usando TODA la conversaciÃ³n, no solo el Ãºltimo tramo.
 
 REGLAS:
-- Escribe el resumen en español.
-- Haz un resumen comercial útil, claro y breve.
+- Escribe el resumen en espaÃ±ol.
+- Haz un resumen comercial Ãºtil, claro y breve.
 - Longitud: 4 a 7 frases.
-- Incluye solo información útil para ventas.
+- Incluye solo informaciÃ³n Ãºtil para ventas.
 - Si falta un dato, no lo inventes.
-- Prioriza: servicio de interés, necesidad principal, urgencia, presupuesto, datos de contacto, contexto del negocio, actividad y siguiente paso comercial.
+- Prioriza: servicio de interÃ©s, necesidad principal, urgencia, presupuesto, datos de contacto, contexto del negocio, actividad y siguiente paso comercial.
 - No pongas etiquetas tipo "Nombre:", "Email:", etc.
-- No repitas literalmente frases vacías como "gracias" o "ok".
-- Devuelve solo el resumen final, sin introducciones ni viñetas.
+- No repitas literalmente frases vacÃ­as como "gracias" o "ok".
+- Devuelve solo el resumen final, sin introducciones ni viÃ±etas.
 
 Lead estructurado actual:
 ${JSON.stringify(lead || {}, null, 2)}
 
-Conversación completa:
+ConversaciÃ³n completa:
 ${transcript}
 `;
 
@@ -1888,7 +1896,7 @@ function inferBrandNameFromSnapshot(snapshot = {}) {
     .filter(Boolean);
 
   for (const candidate of candidates) {
-    const first = candidate.split(/[\|\-·]/)[0]?.trim();
+    const first = candidate.split(/[\|\-Â·]/)[0]?.trim();
     if (first && first.length >= 3) return first;
   }
 
@@ -1921,7 +1929,7 @@ function inferServicesFromSnapshot(snapshot = {}, appConfig = null) {
   };
 
   maybeAdd("SEO", ["seo", "posicionamiento", "google organic", "buscadores"]);
-  maybeAdd("Google Ads", ["google ads", "sem", "ppc", "campanas de google", "campañas de google"]);
+  maybeAdd("Google Ads", ["google ads", "sem", "ppc", "campanas de google", "campaÃ±as de google"]);
   maybeAdd("Redes Sociales", [
     "facebook ads",
     "instagram ads",
@@ -1930,8 +1938,8 @@ function inferServicesFromSnapshot(snapshot = {}, appConfig = null) {
     "instagram",
     "facebook",
   ]);
-  maybeAdd("Diseño Web", ["diseno web", "diseño web", "web corporativa", "landing page", "pagina web", "página web"]);
-  maybeAdd("Consultoría Digital", ["consultoria", "consultoría", "estrategia digital", "consultor"]);
+  maybeAdd("DiseÃ±o Web", ["diseno web", "diseÃ±o web", "web corporativa", "landing page", "pagina web", "pÃ¡gina web"]);
+  maybeAdd("ConsultorÃ­a Digital", ["consultoria", "consultorÃ­a", "estrategia digital", "consultor"]);
 
   return Object.keys(selected).length ? selected : defaultServices;
 }
@@ -2199,7 +2207,7 @@ async function validateIntegrationConfig(type, config = {}) {
 
     return buildValidationResult(
       "connected",
-      messages.join(" · ") || "Lead forms configurados para entrada unificada.",
+      messages.join(" Â· ") || "Lead forms configurados para entrada unificada.",
       checkedAt
     );
   }
@@ -2246,7 +2254,7 @@ async function validateIntegrationConfig(type, config = {}) {
     if (!TASK_SECRET) {
       return buildValidationResult(
         "warning",
-        "El workspace responde, pero falta TASK_SECRET para ejecutar tareas automáticas.",
+        "El workspace responde, pero falta TASK_SECRET para ejecutar tareas automÃ¡ticas.",
         checkedAt
       );
     }
@@ -2309,7 +2317,7 @@ function applyFlowPatch(lead, text) {
     (
       normalizeText(text).includes("urgente") ||
       normalizeText(text).includes("cuanto antes") ||
-      normalizeText(text).includes("cuánto antes") ||
+      normalizeText(text).includes("cuÃ¡nto antes") ||
       normalizeText(text).includes("ya") ||
       normalizeText(text).includes("esta semana")
     )
@@ -2329,7 +2337,7 @@ function applyFlowPatch(lead, text) {
     (
       normalizeText(text).includes("sin prisa") ||
       normalizeText(text).includes("mas adelante") ||
-      normalizeText(text).includes("más adelante") ||
+      normalizeText(text).includes("mÃ¡s adelante") ||
       isUnknownResponse(text)
     )
   ) {
@@ -2397,7 +2405,7 @@ function applyFlowPatch(lead, text) {
       if (
         normalizeText(text).includes("urgente") ||
         normalizeText(text).includes("cuanto antes") ||
-        normalizeText(text).includes("cuánto antes") ||
+        normalizeText(text).includes("cuÃ¡nto antes") ||
         normalizeText(text).includes("ya") ||
         normalizeText(text).includes("esta semana")
       ) {
@@ -2411,7 +2419,7 @@ function applyFlowPatch(lead, text) {
       } else if (
         normalizeText(text).includes("sin prisa") ||
         normalizeText(text).includes("mas adelante") ||
-        normalizeText(text).includes("más adelante") ||
+        normalizeText(text).includes("mÃ¡s adelante") ||
         isUnknownResponse(text)
       ) {
         patch.urgency = "baja";
@@ -2827,13 +2835,13 @@ async function processIncomingMessage({
 
     if (serviceFacts) {
       factsBlock = `
-INFORMACIÓN VERIFICADA DE LA WEB
+INFORMACIÃ“N VERIFICADA DE LA WEB
 
 Servicio: ${leadForAi.interest_service}
 
-Precio mínimo: ${serviceFacts.min_monthly_fee || serviceFacts.min_project_fee}
+Precio mÃ­nimo: ${serviceFacts.min_monthly_fee || serviceFacts.min_project_fee}
 
-Página oficial:
+PÃ¡gina oficial:
 ${serviceFacts.url}
 
 Notas:
@@ -2891,26 +2899,26 @@ ${getAgentSystemPrompt(appConfig)}
 REGLAS IMPORTANTES
 
 1. RESPONDE SIEMPRE LA PREGUNTA DEL USUARIO
-2. USA INFORMACIÓN DE LA WEB Y DEL SNAPSHOT SI ESTÁ DISPONIBLE
+2. USA INFORMACIÃ“N DE LA WEB Y DEL SNAPSHOT SI ESTÃ DISPONIBLE
 3. LOS PRECIOS SIEMPRE DEBEN INCLUIR "+ IVA"
 4. NO INVENTES PRECIOS
 5. USA LA MEMORIA DEL LEAD PARA DAR CONTINUIDAD
-6. SI EL USUARIO HACE UNA PREGUNTA DIRECTA, RESPÓNDELA PRIMERO
-7. DESPUÉS DE RESPONDER, HAZ COMO MÁXIMO UNA PREGUNTA COMERCIAL
-8. SI EXISTE INFORMACIÓN VERIFICADA DE LA WEB, USA SOLO ESA INFORMACIÓN PARA HABLAR DE PRECIOS
-9. NO DES RANGOS DE PRECIOS SI NO ESTÁN EXPLÍCITAMENTE EN LA INFORMACIÓN VERIFICADA
-10. RESPUESTAS BREVES: MÁXIMO 2 PÁRRAFOS CORTOS
+6. SI EL USUARIO HACE UNA PREGUNTA DIRECTA, RESPÃ“NDELA PRIMERO
+7. DESPUÃ‰S DE RESPONDER, HAZ COMO MÃXIMO UNA PREGUNTA COMERCIAL
+8. SI EXISTE INFORMACIÃ“N VERIFICADA DE LA WEB, USA SOLO ESA INFORMACIÃ“N PARA HABLAR DE PRECIOS
+9. NO DES RANGOS DE PRECIOS SI NO ESTÃN EXPLÃCITAMENTE EN LA INFORMACIÃ“N VERIFICADA
+10. RESPUESTAS BREVES: MÃXIMO 2 PÃRRAFOS CORTOS
 11. NO HAGAS VARIAS PREGUNTAS SEGUIDAS EN EL MISMO MENSAJE
 12. NO EMPIECES COMO FORMULARIO
 13. DA VALOR ANTES DE PEDIR DATOS
-14. SI EL CANAL ES WEB, PRIORIZA DIAGNÓSTICO Y REDUCCIÓN DE FRICCIÓN
-15. SI EL CANAL ES WHATSAPP CON CONTEXTO PREVIO, CONTINÚA SIN REINICIAR
-16. SI EL CANAL ES WHATSAPP SIN CONTEXTO, COMBINA DESCUBRIMIENTO Y DIAGNÓSTICO
-17. NO PREGUNTES NOMBRE, EMPRESA, URGENCIA O CONTACTO AL PRINCIPIO SI TODAVÍA NO HAS APORTADO VALOR
-18. NO SOBRESCRIBAS DATOS CONFIRMADOS CON SUPOSICIONES DÉBILES
-19. SI ESTÁS EN WEB, NO DIGAS "TE ESCRIBIRÉ POR WHATSAPP" NI PROMETAS UN CONTACTO SALIENTE MANUAL
-20. SI EL USUARIO QUIERE SEGUIR POR WHATSAPP DESDE WEB, PLANTÉALO COMO CONTINUACIÓN POR UN BOTÓN O ENLACE
-21. SI TODAVÍA NO SE HA ELEGIDO CANAL DE CONTACTO, NO PIDAS EMAIL DIRECTAMENTE: PRIMERO PREGUNTA SI PREFIERE WHATSAPP O EMAIL PARA RECIBIR LA PROPUESTA
+14. SI EL CANAL ES WEB, PRIORIZA DIAGNÃ“STICO Y REDUCCIÃ“N DE FRICCIÃ“N
+15. SI EL CANAL ES WHATSAPP CON CONTEXTO PREVIO, CONTINÃšA SIN REINICIAR
+16. SI EL CANAL ES WHATSAPP SIN CONTEXTO, COMBINA DESCUBRIMIENTO Y DIAGNÃ“STICO
+17. NO PREGUNTES NOMBRE, EMPRESA, URGENCIA O CONTACTO AL PRINCIPIO SI TODAVÃA NO HAS APORTADO VALOR
+18. NO SOBRESCRIBAS DATOS CONFIRMADOS CON SUPOSICIONES DÃ‰BILES
+19. SI ESTÃS EN WEB, NO DIGAS "TE ESCRIBIRÃ‰ POR WHATSAPP" NI PROMETAS UN CONTACTO SALIENTE MANUAL
+20. SI EL USUARIO QUIERE SEGUIR POR WHATSAPP DESDE WEB, PLANTÃ‰ALO COMO CONTINUACIÃ“N POR UN BOTÃ“N O ENLACE
+21. SI TODAVÃA NO SE HA ELEGIDO CANAL DE CONTACTO, NO PIDAS EMAIL DIRECTAMENTE: PRIMERO PREGUNTA SI PREFIERE WHATSAPP O EMAIL PARA RECIBIR LA PROPUESTA
 
 ${modeInstructions}
 
@@ -2941,8 +2949,8 @@ ${ragContext}
     if (!reply) {
       reply =
         conversationPhase === "discover"
-          ? "Puedo ayudarte a revisar tu web, SEO, Google Ads o captación. Si quieres, pásame tu URL o dime qué te preocupa más y te doy una primera orientación."
-          : "Si quieres, sigo contigo sobre ese punto y te digo cuál sería la prioridad más sensata.";
+          ? "Puedo ayudarte a revisar tu web, SEO, Google Ads o captaciÃ³n. Si quieres, pÃ¡same tu URL o dime quÃ© te preocupa mÃ¡s y te doy una primera orientaciÃ³n."
+          : "Si quieres, sigo contigo sobre ese punto y te digo cuÃ¡l serÃ­a la prioridad mÃ¡s sensata.";
     }
 
     const structuredCloseReply = buildStructuredCloseReply({
@@ -3967,7 +3975,7 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
 
     const via = String(req.body?.via || "").trim().toLowerCase();
     if (!["email", "whatsapp"].includes(via)) {
-      return res.status(400).json({ ok: false, error: "Canal de envío no válido" });
+      return res.status(400).json({ ok: false, error: "Canal de envÃ­o no vÃ¡lido" });
     }
 
     const baseUrl = `${req.protocol}://${req.get("host")}`;
@@ -3999,15 +4007,15 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
         channel: lead?.conversations?.channel || null,
       });
       if (!phone) {
-        return res.status(400).json({ ok: false, error: "Este lead no tiene teléfono válido para WhatsApp" });
+        return res.status(400).json({ ok: false, error: "Este lead no tiene telÃ©fono vÃ¡lido para WhatsApp" });
       }
 
       const message = [
         `Hola${lead?.name ? ` ${lead.name}` : ""}, te compartimos tu propuesta de ${lead?.interest_service || "TMedia Global"}.`,
         quote?.title ? `Propuesta: ${quote.title}` : null,
-        `Puedes revisarla aquí: ${previewUrl}`,
+        `Puedes revisarla aquÃ­: ${previewUrl}`,
         "Si quieres, la comentamos contigo y la ajustamos antes de cerrarla.",
-        `Si prefieres hablar con un agente humano, puedes escribir aquí: ${humanAgentUrl}`,
+        `Si prefieres hablar con un agente humano, puedes escribir aquÃ­: ${humanAgentUrl}`,
       ]
         .filter(Boolean)
         .join("\n\n");
@@ -4230,7 +4238,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       follow_up_at: null,
       internal_notes: [
         `Lead importado desde ${sourcePlatform}`,
-        sourceCampaign ? `Campaña: ${sourceCampaign}` : null,
+        sourceCampaign ? `CampaÃ±a: ${sourceCampaign}` : null,
         sourceFormName ? `Formulario: ${sourceFormName}` : null,
       ].filter(Boolean).join(" | "),
     }).catch((error) => {
@@ -4292,7 +4300,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       autoStart === "1" ||
       autoStart === "yes" ||
       autoStart === "si" ||
-      autoStart === "sí";
+      autoStart === "sÃ­";
 
     let autoContact = null;
 
@@ -4782,3 +4790,4 @@ app.listen(PORT, () => {
   console.log("Server running on port", PORT);
   startInternalScheduler();
 });
+
