@@ -3043,20 +3043,21 @@ ${ragContext}
 
   try {
     const latestLead = await loadLeadForConversation();
-    if (hasUsefulLeadDataForNotification(latestLead)) {
-      const signature = buildLeadSignature(latestLead);
-      const previousSignature = lastLeadEmailSent.get(currentConversationId);
+    const signature = buildLeadSignature(latestLead);
+    const previousSignature = lastLeadEmailSent.get(currentConversationId);
+    const shouldNotify =
+      hasUsefulLeadDataForNotification(latestLead) ||
+      (chatCompleted && !previousSignature);
 
-      if (signature !== previousSignature) {
-        await sendLeadEmail({
-          lead: latestLead,
-          conversation_id: currentConversationId,
-          type: previousSignature ? "update" : "new",
-          changedFields: [],
-        });
+    if (shouldNotify && signature !== previousSignature) {
+      await sendLeadEmail({
+        lead: latestLead,
+        conversation_id: currentConversationId,
+        type: previousSignature ? "update" : "new",
+        changedFields: [],
+      });
 
-        lastLeadEmailSent.set(currentConversationId, signature);
-      }
+      lastLeadEmailSent.set(currentConversationId, signature);
     }
   } catch (e) {
     console.log("lead email error", e.message);
