@@ -419,10 +419,12 @@ function hasUrgency(lead) {
 function isCompletedLeadData(lead) {
   return (
     hasName(lead) &&
-    hasBusinessType(lead) &&
-    hasBusinessActivity(lead) &&
     hasService(lead) &&
-    hasContact(lead)
+    (
+      hasContact(lead) ||
+      normalizeText(lead?.preferred_contact_channel || "").includes("whatsapp") ||
+      normalizeText(lead?.preferred_contact_channel || "").includes("email")
+    )
   );
 }
 
