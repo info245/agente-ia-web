@@ -26,6 +26,9 @@ import {
   upsertLatestQuoteForLead,
   markLatestQuoteAsSent,
   markLatestQuoteResponse,
+  getLatestAnalysisByLeadId,
+  upsertLatestAnalysisForLead,
+  markLatestAnalysisAsSent,
 } from "./lib/chatStore.js";
 
 import { mergeLeadData } from "./lib/leadMerge.js";
@@ -65,6 +68,10 @@ import {
   renderQuotePreviewHtml,
   renderQuoteResponseHtml,
 } from "./lib/quoteTemplate.js";
+import {
+  renderAnalysisPreviewHtml,
+  renderAnalysisEmailHtml,
+} from "./lib/analysisTemplate.js";
 import { renderHtmlToPdfBuffer } from "./lib/htmlPdf.js";
 import {
   extractFirstUrlFromText,
@@ -1009,6 +1016,197 @@ function buildExternalLeadIntroMessage(lead = {}) {
       : `Vemos que te interesa ${service}.`,
     "Si quieres, seguimos por aquí y te doy una primera orientación para tu caso.",
   ].join("\n\n");
+}
+
+function extractJsonObject(text = "") {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+
+  const fencedMatch =
+    raw.match(/```json\s*([\s\S]*?)```/i) || raw.match(/```\s*([\s\S]*?)```/i);
+  const candidate = fencedMatch?.[1] || raw;
+  const firstBrace = candidate.indexOf("{");
+  const lastBrace = candidate.lastIndexOf("}");
+  if (firstBrace < 0 || lastBrace < 0 || lastBrace <= firstBrace) return null;
+
+  try {
+    return JSON.parse(candidate.slice(firstBrace, lastBrace + 1));
+  } catch (_error) {
+    return null;
+  }
+}
+
+function buildAnalysisFallback({ lead = {}, snapshot = null, messages = [] } = {}) {
+  const topUserMessages = (messages || [])
+    .filter((item) => item?.role === "user")
+    .map((item) => String(item?.content || "").trim())
+    .filter(Boolean)
+    .slice(-3);
+
+  const summaryParts = [];
+  if (lead?.main_goal) summaryParts.push(`Objetivo declarado: ${lead.main_goal}.`);
+  if (lead?.current_situation) summaryParts.push(`Situacion actual: ${lead.current_situation}.`);
+  if (snapshot?.summary) summaryParts.push(snapshot.summary);
+  if (!summaryParts.length && topUserMessages.length) {
+    summaryParts.push(`Conversacion reciente: ${topUserMessages.join(" | ")}`);
+  }
+
+  return {
+    title: `Analisis inicial de ${lead?.interest_service || "oportunidad comercial"}`,
+    headline:
+      "Diagnostico inicial con foco en claridad comercial, captacion y siguiente accion.",
+    summary:
+      summaryParts.join(" ") ||
+      "Hemos preparado una lectura inicial del caso para detectar prioridades y siguiente paso comercial.",
+    findings:
+      Array.isArray(snapshot?.findings) && snapshot.findings.length
+        ? snapshot.findings.map((item) => ({ title: "Hallazgo", detail: item }))
+        : [
+            {
+              title: "Contexto",
+              detail:
+                "Ya existe suficiente conversacion para plantear una primera lectura comercial del caso.",
+            },
+          ],
+    quick_wins:
+      Array.isArray(snapshot?.priorities) && snapshot.priorities.length
+        ? snapshot.priorities.slice(0, 3)
+        : [
+            "Alinear el mensaje principal con la propuesta de valor.",
+            "Hacer mas visible la captacion o siguiente paso.",
+          ],
+    priorities:
+      Array.isArray(snapshot?.priorities) && snapshot.priorities.length
+        ? snapshot.priorities.slice(0, 3)
+        : [
+            "Definir el enfoque con mas impacto comercial.",
+            "Convertir el interes en una accion concreta.",
+          ],
+    next_step:
+      lead?.interest_service
+        ? `Convertir este analisis en una propuesta priorizada para ${lead.interest_service}.`
+        : "Convertir este analisis en una propuesta comercial accionable.",
+    source_summary: topUserMessages.join(" | "),
+    recommended_service:
+      lead?.interest_service || snapshot?.recommended_focus || "",
+    source_url: snapshot?.final_url || snapshot?.url || "",
+  };
+}
+
+async function generateStructuredAnalysisResult({
+  lead = {},
+  messages = [],
+  snapshot = null,
+  appConfig = null,
+} = {}) {
+  const transcript = buildTranscript(messages);
+  const prompt = `
+Eres un estratega comercial senior de ${appConfig?.brand?.name || "TMedia Global"}.
+
+Devuelve SOLO JSON valido con esta estructura exacta:
+{
+  "title": string,
+  "headline": string,
+  "summary": string,
+  "findings": [{"title": string, "detail": string}],
+  "quick_wins": [string],
+  "priorities": [string],
+  "next_step": string,
+  "source_summary": string,
+  "recommended_service": string,
+  "source_url": string
+}
+
+REGLAS:
+- Espanol claro, comercial y profesional.
+- No inventes datos.
+- findings: 2 a 4 elementos.
+- quick_wins: 2 a 4 elementos.
+- priorities: 2 a 4 elementos.
+- summary: 3 a 5 frases.
+- next_step: una recomendacion accionable y concreta.
+- recommended_service debe ser uno de los servicios detectados o una recomendacion razonable.
+
+Lead estructurado:
+${JSON.stringify(lead || {}, null, 2)}
+
+Snapshot web:
+${JSON.stringify(snapshot || {}, null, 2)}
+
+Conversacion:
+${transcript}
+`;
+
+  try {
+    const result = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: prompt,
+    });
+
+    const parsed = extractJsonObject(result?.output_text || "");
+    if (parsed && typeof parsed === "object") {
+      return {
+        ...buildAnalysisFallback({ lead, snapshot, messages }),
+        ...parsed,
+      };
+    }
+  } catch (error) {
+    console.log("analysis generation error", error?.message || error);
+  }
+
+  return buildAnalysisFallback({ lead, snapshot, messages });
+}
+
+async function buildAnalysisForLead({ lead, account }) {
+  const [messages, analysisEvent] = await Promise.all([
+    getConversationMessages(lead.conversation_id, 50).catch(() => []),
+    getLatestConversationEvent(lead.conversation_id, "analysis_snapshot").catch(
+      () => null
+    ),
+  ]);
+
+  let snapshot = analysisEvent?.payload || null;
+  if (!hasAnalysisSnapshot(snapshot)) {
+    const urlCandidate =
+      extractFirstUrlFromText(lead?.internal_notes || "") ||
+      extractFirstUrlFromText(lead?.summary || "") ||
+      extractFirstUrlFromText(
+        (messages || []).map((item) => String(item?.content || "")).join("\n")
+      );
+
+    if (urlCandidate) {
+      snapshot = await runLightSiteAnalysis(urlCandidate).catch(() => null);
+      if (snapshot) {
+        await trackConversationEvent({
+          conversation_id: lead.conversation_id,
+          event_type: "analysis_snapshot",
+          channel: lead?.conversations?.channel || "crm",
+          external_user_id:
+            lead?.conversations?.external_user_id ||
+            lead?.email ||
+            lead?.phone ||
+            null,
+          payload: snapshot,
+          account_id: account.id,
+        });
+      }
+    }
+  }
+
+  const appConfig = await getAppConfig({ accountId: account.id });
+  const structured = await generateStructuredAnalysisResult({
+    lead,
+    messages,
+    snapshot,
+    appConfig,
+  });
+
+  return {
+    analysis: structured,
+    snapshot,
+    messages,
+    appConfig,
+  };
 }
 
 function buildStructuredCloseReply({
@@ -3373,6 +3571,24 @@ app.get("/api/crm/leads/:leadId/quote", async (req, res) => {
   }
 });
 
+app.get("/api/crm/leads/:leadId/analysis", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
+    const lead =
+      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+
+    if (!lead) {
+      return res.status(404).json({ ok: false, error: "Lead no encontrado" });
+    }
+
+    const analysis = await getLatestAnalysisByLeadId(req.params.leadId);
+    res.json({ ok: true, analysis });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/api/crm/service-facts/:serviceName", async (req, res) => {
   try {
       const serviceName = decodeURIComponent(req.params.serviceName || "");
@@ -3445,6 +3661,44 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
       acceptUrl,
       rejectUrl,
       humanAgentUrl,
+    });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(200).send(html);
+  } catch (error) {
+    return res.status(500).send(error.message);
+  }
+});
+
+app.get("/crm/analysis/:leadId/preview", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const appConfig = await getAppConfig({ accountId: account.id });
+    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
+    const lead =
+      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+
+    if (!lead) {
+      return res.status(404).send("Lead no encontrado");
+    }
+
+    const analysis = await getLatestAnalysisByLeadId(req.params.leadId);
+    if (!analysis) {
+      return res.status(404).send("No hay analisis disponible");
+    }
+
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const configuredLogoUrl = String(appConfig?.brand?.logo_url || "").trim();
+    const resolvedLogoUrl = configuredLogoUrl
+      ? configuredLogoUrl.startsWith("http")
+        ? configuredLogoUrl
+        : `${baseUrl}${configuredLogoUrl.startsWith("/") ? "" : "/"}${configuredLogoUrl}`
+      : `${baseUrl}/crm/assets/tmedia-global-logo.png`;
+
+    const html = renderAnalysisPreviewHtml({
+      lead,
+      analysis,
+      logoUrl: resolvedLogoUrl,
+      brandName: appConfig?.brand?.name || "TMedia Global",
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(html);
@@ -3602,6 +3856,53 @@ async function handleCrmQuoteUpsert(req, res) {
 app.put("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
 app.post("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
 
+app.post("/api/crm/leads/:leadId/analysis/generate", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
+    const lead =
+      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+
+    if (!lead) {
+      return res.status(404).json({ ok: false, error: "Lead no encontrado" });
+    }
+
+    const result = await buildAnalysisForLead({ lead, account });
+    const saved = await upsertLatestAnalysisForLead(lead, {
+      title:
+        result.analysis?.title ||
+        `Analisis inicial de ${lead?.interest_service || "la oportunidad"}`,
+      recommended_service:
+        result.analysis?.recommended_service || lead?.interest_service || "",
+      source_url:
+        result.analysis?.source_url ||
+        result.snapshot?.final_url ||
+        result.snapshot?.url ||
+        "",
+      content_json: result.analysis,
+      status: "draft",
+    });
+
+    await trackConversationEvent({
+      conversation_id: lead.conversation_id,
+      event_type: "analysis_generated",
+      channel: lead?.conversations?.channel || "crm",
+      external_user_id:
+        lead?.conversations?.external_user_id || lead?.email || lead?.phone || null,
+      payload: {
+        analysis_id: saved.id,
+        lead_id: lead.id,
+        recommended_service: saved.recommended_service || null,
+      },
+      account_id: account.id,
+    });
+
+    res.json({ ok: true, analysis: saved });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
   try {
       const account = await resolveRequestAccount(req);
@@ -3674,6 +3975,100 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
   } catch (error) {
     console.log("crm quote send error", error);
     return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const appConfig = await getAppConfig({ accountId: account.id });
+    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
+    const lead =
+      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+
+    if (!lead) {
+      return res.status(404).json({ ok: false, error: "Lead no encontrado" });
+    }
+
+    if (!lead.email) {
+      return res.status(400).json({ ok: false, error: "Este lead no tiene email" });
+    }
+
+    let analysis = await getLatestAnalysisByLeadId(req.params.leadId);
+    if (!analysis) {
+      const result = await buildAnalysisForLead({ lead, account });
+      analysis = await upsertLatestAnalysisForLead(lead, {
+        title:
+          result.analysis?.title ||
+          `Analisis inicial de ${lead?.interest_service || "la oportunidad"}`,
+        recommended_service:
+          result.analysis?.recommended_service || lead?.interest_service || "",
+        source_url:
+          result.analysis?.source_url ||
+          result.snapshot?.final_url ||
+          result.snapshot?.url ||
+          "",
+        content_json: result.analysis,
+        status: "draft",
+      });
+    }
+
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const previewUrl = `${baseUrl}/crm/analysis/${lead.id}/preview`;
+    const humanAgentUrl = buildHumanAgentWhatsAppUrl(
+      lead?.interest_service || "",
+      appConfig
+    );
+
+    const subject = analysis?.title
+      ? `${analysis.title} - ${appConfig?.brand?.name || "TMedia Global"}`
+      : `Analisis inicial - ${appConfig?.brand?.name || "TMedia Global"}`;
+
+    const html = renderAnalysisEmailHtml({
+      lead,
+      analysis,
+      previewUrl,
+      humanAgentUrl,
+      brandName: appConfig?.brand?.name || "TMedia Global",
+    });
+
+    const text = [
+      `Hola${lead?.name ? ` ${lead.name}` : ""},`,
+      "",
+      `Te compartimos tu analisis inicial sobre ${analysis?.recommended_service || lead?.interest_service || "tu caso"}.`,
+      "",
+      `Abrir analisis: ${previewUrl}`,
+      humanAgentUrl ? `Hablar con un agente: ${humanAgentUrl}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    await sendTransactionalEmail({
+      to: lead.email,
+      subject,
+      text,
+      html,
+    });
+
+    const updated = await markLatestAnalysisAsSent(lead.id, "email");
+
+    await trackConversationEvent({
+      conversation_id: lead.conversation_id,
+      event_type: "analysis_sent",
+      channel: lead?.conversations?.channel || "crm",
+      external_user_id:
+        lead?.conversations?.external_user_id || lead?.email || lead?.phone || null,
+      payload: {
+        analysis_id: updated.id,
+        lead_id: lead.id,
+        sent_via: "email",
+      },
+      account_id: account.id,
+    });
+
+    res.json({ ok: true, analysis: updated });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 

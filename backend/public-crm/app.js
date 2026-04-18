@@ -8,6 +8,7 @@ const state = {
   filteredLeads: [],
   selectedLead: null,
   selectedQuote: null,
+  selectedAnalysis: null,
   leadPage: 0,
   quoteItems: [],
   analytics: null,
@@ -207,6 +208,18 @@ const el = {
   quoteTax: document.getElementById("quoteTax"),
   quoteTotal: document.getElementById("quoteTotal"),
   quoteSaveStatus: document.getElementById("quoteSaveStatus"),
+  analysisGenerateBtn: document.getElementById("analysisGenerateBtn"),
+  analysisPreviewBtn: document.getElementById("analysisPreviewBtn"),
+  analysisSendBtn: document.getElementById("analysisSendBtn"),
+  analysisSaveStatus: document.getElementById("analysisSaveStatus"),
+  analysisTitle: document.getElementById("analysisTitle"),
+  analysisHeadline: document.getElementById("analysisHeadline"),
+  analysisRecommendedService: document.getElementById("analysisRecommendedService"),
+  analysisStatusLabel: document.getElementById("analysisStatusLabel"),
+  analysisSummaryText: document.getElementById("analysisSummaryText"),
+  analysisFindingsList: document.getElementById("analysisFindingsList"),
+  analysisQuickWinsList: document.getElementById("analysisQuickWinsList"),
+  analysisNextStepText: document.getElementById("analysisNextStepText"),
 };
 
 function fmtDate(value) {
@@ -1437,6 +1450,7 @@ function renderLeadDetail() {
     el.leadMeta.innerHTML = "";
     el.messageList.innerHTML = '<div class="empty">Selecciona una conversacion.</div>';
     renderQuote(null);
+    renderAnalysis(null);
     return;
   }
 
@@ -1720,6 +1734,53 @@ function renderMessages(messages = []) {
   }
 }
 
+function renderAnalysisList(target, rows = []) {
+  if (!target) return;
+  if (!rows.length) {
+    target.innerHTML = "<li>Sin datos todavia.</li>";
+    return;
+  }
+
+  target.innerHTML = rows
+    .slice(0, 4)
+    .map((item) => {
+      if (typeof item === "string") {
+        return `<li>${escapeHtml(item)}</li>`;
+      }
+      return `<li><strong>${escapeHtml(item?.title || "Punto clave")}:</strong> ${escapeHtml(
+        item?.detail || item?.text || ""
+      )}</li>`;
+    })
+    .join("");
+}
+
+function renderAnalysis(analysis) {
+  state.selectedAnalysis = analysis || null;
+  const content = analysis?.content_json || {};
+
+  el.analysisTitle.textContent =
+    analysis?.title || "Todavia no hay analisis generado";
+  el.analysisHeadline.textContent =
+    content?.headline ||
+    "Cuando generemos el analisis, aqui veras el enfoque recomendado y el resumen ejecutivo.";
+  el.analysisRecommendedService.textContent =
+    analysis?.recommended_service ||
+    content?.recommended_service ||
+    state.selectedLead?.interest_service ||
+    "-";
+  el.analysisStatusLabel.textContent = analysis?.status || "draft";
+  el.analysisSummaryText.textContent =
+    content?.summary ||
+    "Genera el analisis para obtener una lectura comercial clara y reutilizable.";
+  el.analysisNextStepText.textContent = content?.next_step || "-";
+  renderAnalysisList(el.analysisFindingsList, content?.findings || []);
+  renderAnalysisList(el.analysisQuickWinsList, content?.quick_wins || []);
+
+  const hasAnalysis = Boolean(analysis?.id);
+  if (el.analysisPreviewBtn) el.analysisPreviewBtn.disabled = !hasAnalysis;
+  if (el.analysisSendBtn) el.analysisSendBtn.disabled = !hasAnalysis;
+}
+
 function renderQuote(quote) {
   state.selectedQuote = quote || null;
   const content = quote?.content_json || {};
@@ -1780,8 +1841,10 @@ async function loadLeads() {
 
   if (state.selectedLead?.id) {
     await loadQuote(state.selectedLead.id);
+    await loadAnalysis(state.selectedLead.id);
   } else {
     renderQuote(null);
+    renderAnalysis(null);
   }
 
   try {
@@ -1823,6 +1886,11 @@ async function loadQuote(leadId) {
   renderQuote(data.quote || null);
 }
 
+async function loadAnalysis(leadId) {
+  const data = await fetchJson(`${API_BASE}/leads/${leadId}/analysis`);
+  renderAnalysis(data.analysis || null);
+}
+
 async function selectLead(leadId) {
   state.selectedLead = state.leads.find((lead) => lead.id === leadId) || null;
   renderLeadTable();
@@ -1836,8 +1904,10 @@ async function selectLead(leadId) {
 
   if (state.selectedLead?.id) {
     await loadQuote(state.selectedLead.id);
+    await loadAnalysis(state.selectedLead.id);
   } else {
     renderQuote(null);
+    renderAnalysis(null);
   }
 }
 
@@ -2361,6 +2431,54 @@ async function sendQuote(via) {
   }
 }
 
+async function generateAnalysis() {
+  if (!state.selectedLead) return;
+
+  el.analysisGenerateBtn.disabled = true;
+  el.analysisGenerateBtn.classList.add("is-busy");
+  setStatus(el.analysisSaveStatus, "Generando analisis...");
+
+  try {
+    const data = await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}/analysis/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    renderAnalysis(data.analysis || null);
+    setStatus(el.analysisSaveStatus, "Analisis generado.", "ok");
+  } catch (error) {
+    setStatus(el.analysisSaveStatus, `No se pudo generar: ${error.message}`, "error");
+  } finally {
+    el.analysisGenerateBtn.disabled = false;
+    el.analysisGenerateBtn.classList.remove("is-busy");
+  }
+}
+
+async function sendAnalysis() {
+  if (!state.selectedLead?.id) return;
+
+  el.analysisSendBtn.disabled = true;
+  el.analysisSendBtn.classList.add("is-busy");
+  setStatus(el.analysisSaveStatus, "Enviando analisis...");
+
+  try {
+    const data = await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}/analysis/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    renderAnalysis(data.analysis || null);
+    setStatus(el.analysisSaveStatus, "Analisis enviado por email.", "ok");
+  } catch (error) {
+    setStatus(el.analysisSaveStatus, `No se pudo enviar: ${error.message}`, "error");
+  } finally {
+    el.analysisSendBtn.disabled = false;
+    el.analysisSendBtn.classList.remove("is-busy");
+  }
+}
+
 el.saveBtn.addEventListener("click", saveLead);
 el.refreshBtn.addEventListener("click", loadLeads);
 el.accountSelect?.addEventListener("change", () =>
@@ -2481,6 +2599,12 @@ el.quotePdfBtn.addEventListener("click", () => {
 });
 el.quoteSendEmailBtn.addEventListener("click", () => sendQuote("email"));
 el.quoteSendWhatsappBtn.addEventListener("click", () => sendQuote("whatsapp"));
+el.analysisGenerateBtn?.addEventListener("click", generateAnalysis);
+el.analysisPreviewBtn?.addEventListener("click", () => {
+  if (!state.selectedLead?.id || !state.selectedAnalysis?.id) return;
+  window.open(withAccountScope(`/crm/analysis/${state.selectedLead.id}/preview`), "_blank", "noopener,noreferrer");
+});
+el.analysisSendBtn?.addEventListener("click", sendAnalysis);
 el.quoteAddItemBtn.addEventListener("click", () => {
   state.quoteItems.push(createEmptyQuoteItem());
   renderQuoteItems();

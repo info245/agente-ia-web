@@ -540,6 +540,61 @@
               <div id="quoteSaveStatus" class="save-status" aria-live="polite"></div>
             </form>
           </section>
+
+          <section id="crm-analysis" class="crm-card crm-analysis-result-card">
+            <div class="crm-card-header">
+              <div>
+                <h3>Analisis comercial</h3>
+                <p class="crm-section-copy">Convierte la conversacion y la web en un entregable inicial que luego puedes enviar al cliente.</p>
+              </div>
+              <div class="crm-actions">
+                <button id="analysisGenerateBtn" type="button"><span class="action-icon">✨</span><span>Generar analisis</span></button>
+                <button id="analysisPreviewBtn" type="button"><span class="action-icon">👁</span><span>Vista previa</span></button>
+                <button id="analysisSendBtn" type="button"><span class="action-icon">✉</span><span>Enviar analisis</span></button>
+              </div>
+            </div>
+
+            <div class="analysis-result-shell">
+              <div class="analysis-result-summary">
+                <div class="analysis-result-hero">
+                  <span class="analysis-result-kicker">ANALISIS</span>
+                  <strong id="analysisTitle">Todavia no hay analisis generado</strong>
+                  <p id="analysisHeadline">Cuando generemos el analisis, aqui veras el enfoque recomendado y el resumen ejecutivo.</p>
+                </div>
+                <div class="analysis-result-meta">
+                  <div class="meta-box">
+                    <strong>Servicio recomendado</strong>
+                    <span id="analysisRecommendedService">-</span>
+                  </div>
+                  <div class="meta-box">
+                    <strong>Estado</strong>
+                    <span id="analysisStatusLabel">draft</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="analysis-result-grid">
+                <article class="analysis-mini-card">
+                  <h4>Resumen ejecutivo</h4>
+                  <p id="analysisSummaryText" class="analysis-rich-copy">Genera el analisis para obtener una lectura comercial clara y reutilizable.</p>
+                </article>
+                <article class="analysis-mini-card">
+                  <h4>Hallazgos</h4>
+                  <ul id="analysisFindingsList" class="analysis-bullet-list"></ul>
+                </article>
+                <article class="analysis-mini-card">
+                  <h4>Quick wins</h4>
+                  <ul id="analysisQuickWinsList" class="analysis-bullet-list"></ul>
+                </article>
+                <article class="analysis-mini-card">
+                  <h4>Siguiente paso</h4>
+                  <p id="analysisNextStepText" class="analysis-rich-copy">-</p>
+                </article>
+              </div>
+            </div>
+
+            <div id="analysisSaveStatus" class="save-status" aria-live="polite"></div>
+          </section>
         </div>
 
         <div id="crmViewConfig" class="crm-view">

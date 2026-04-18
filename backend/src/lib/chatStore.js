@@ -23,6 +23,37 @@ function cleanQuoteItems(value) {
     .filter((item) => item.concept || item.quantity || item.unit_price);
 }
 
+function cleanAnalysisContent(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+
+  const asArray = (items, mapper) =>
+    Array.isArray(items)
+      ? items
+          .map(mapper)
+          .filter(Boolean)
+          .slice(0, 8)
+      : [];
+
+  return {
+    headline: clean(value.headline),
+    summary: clean(value.summary),
+    findings: asArray(value.findings, (item) => {
+      if (typeof item === "string") return clean(item);
+      if (!item || typeof item !== "object") return null;
+      const title = clean(item.title);
+      const detail = clean(item.detail) || clean(item.text);
+      if (!title && !detail) return null;
+      return { title, detail };
+    }),
+    quick_wins: asArray(value.quick_wins, (item) => clean(item)),
+    priorities: asArray(value.priorities, (item) => clean(item)),
+    next_step: clean(value.next_step),
+    source_summary: clean(value.source_summary),
+    recommended_service: clean(value.recommended_service),
+    source_url: clean(value.source_url),
+  };
+}
+
 const accountColumnSupport = new Map();
 
 async function tableHasAccountColumn(tableName) {
@@ -1053,6 +1084,96 @@ export async function markLatestQuoteResponse(leadId, action) {
     action: safeAction,
     responded_at: respondedAt,
   };
+}
+
+export async function getLatestAnalysisByLeadId(leadId) {
+  const safeLeadId = clean(leadId);
+  if (!safeLeadId) {
+    throw new Error("getLatestAnalysisByLeadId: leadId es obligatorio");
+  }
+
+  const { data, error } = await supabase
+    .from("analysis_results")
+    .select("*")
+    .eq("lead_id", safeLeadId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    const message = String(error.message || "").toLowerCase();
+    if (message.includes("analysis_results") || message.includes("does not exist")) {
+      return null;
+    }
+    throw error;
+  }
+
+  return data || null;
+}
+
+export async function upsertLatestAnalysisForLead(lead = {}, analysis = {}) {
+  const safeLeadId = clean(lead.id);
+  if (!safeLeadId) {
+    throw new Error("upsertLatestAnalysisForLead: lead.id es obligatorio");
+  }
+
+  const current = await getLatestAnalysisByLeadId(safeLeadId);
+
+  const payload = await applyAccountInsert(
+    "analysis_results",
+    {
+      lead_id: safeLeadId,
+      conversation_id: clean(lead.conversation_id),
+      title: clean(analysis.title) || "Analisis comercial",
+      status: clean(analysis.status) || "draft",
+      recommended_service:
+        clean(analysis.recommended_service) || clean(lead.interest_service),
+      source_url: clean(analysis.source_url),
+      content_json: cleanAnalysisContent(analysis.content_json || analysis),
+      html_snapshot: clean(analysis.html_snapshot),
+      sent_via: clean(analysis.sent_via),
+      sent_at: analysis.sent_at || null,
+      updated_at: new Date().toISOString(),
+    },
+    clean(lead.account_id)
+  );
+
+  const query = current
+    ? supabase.from("analysis_results").update(payload).eq("id", current.id)
+    : supabase.from("analysis_results").insert(payload);
+
+  const { data, error } = await query.select().single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function markLatestAnalysisAsSent(leadId, sentVia = "email") {
+  const safeLeadId = clean(leadId);
+  if (!safeLeadId) {
+    throw new Error("markLatestAnalysisAsSent: leadId es obligatorio");
+  }
+
+  const current = await getLatestAnalysisByLeadId(safeLeadId);
+  if (!current) {
+    throw new Error("No hay analisis guardado para este lead");
+  }
+
+  const sentAt = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("analysis_results")
+    .update({
+      status: "sent",
+      sent_via: clean(sentVia),
+      sent_at: sentAt,
+      updated_at: sentAt,
+    })
+    .eq("id", current.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 }
 
 export async function upsertLeadFromConversation(lead = {}) {
