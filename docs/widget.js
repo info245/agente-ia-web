@@ -1,4 +1,4 @@
-(() => {
+;(async () => {
   // ====== LEE CONFIG DESDE EL <script ... data-*> ======
   const currentScript = document.currentScript;
 
@@ -6,6 +6,8 @@
   const brandFromAttr = currentScript?.getAttribute("data-brand");
   const posFromAttr = currentScript?.getAttribute("data-position");
   const colorFromAttr = currentScript?.getAttribute("data-color");
+  const accountIdFromAttr = currentScript?.getAttribute("data-account-id");
+  const accountSlugFromAttr = currentScript?.getAttribute("data-account-slug");
 
   const CONFIG = {
     backendBaseUrl:
@@ -14,10 +16,34 @@
     brandName: brandFromAttr || "Agente IA",
     position: posFromAttr === "left" ? "left" : "right",
     primaryColor: colorFromAttr || "#111827",
+    accountId: accountIdFromAttr || "",
+    accountSlug: accountSlugFromAttr || "",
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
     requestTimeoutMs: 25000,
   };
+
+  async function loadRemoteWidgetConfig() {
+    try {
+      const params = new URLSearchParams();
+      if (CONFIG.accountId) params.set("account_id", CONFIG.accountId);
+      else if (CONFIG.accountSlug) params.set("account_slug", CONFIG.accountSlug);
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`${CONFIG.backendBaseUrl}/api/widget/config${suffix}`);
+      const data = await res.json();
+      if (!res.ok || !data?.ok) return;
+
+      const remote = data.config || {};
+      CONFIG.brandName = brandFromAttr || remote?.brand?.name || CONFIG.brandName;
+      CONFIG.primaryColor = colorFromAttr || remote?.brand?.primary_color || CONFIG.primaryColor;
+      CONFIG.accountId = CONFIG.accountId || remote?.account?.id || "";
+      CONFIG.accountSlug = CONFIG.accountSlug || remote?.account?.slug || "";
+    } catch (_error) {
+      // fallback silencioso
+    }
+  }
+
+  await loadRemoteWidgetConfig();
 
   // ====== HELPERS ======
   const uid = () => Math.random().toString(36).slice(2, 10);
@@ -168,6 +194,8 @@
     };
 
     if (conversationId) payload.conversation_id = conversationId;
+    if (CONFIG.accountId) payload.account_id = CONFIG.accountId;
+    else if (CONFIG.accountSlug) payload.account_slug = CONFIG.accountSlug;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs);

@@ -5,6 +5,8 @@
   const brandFromAttr = currentScript?.getAttribute("data-brand");
   const posFromAttr = currentScript?.getAttribute("data-position");
   const colorFromAttr = currentScript?.getAttribute("data-color");
+  const accountIdFromAttr = currentScript?.getAttribute("data-account-id");
+  const accountSlugFromAttr = currentScript?.getAttribute("data-account-slug");
 
   const CONFIG = {
     backendBaseUrl: backendFromAttr || "https://tmedia-global-ai.onrender.com",
@@ -14,6 +16,8 @@
     primaryColor: colorFromAttr || "#111827",
     accentColor: "#8d58ff",
     logoUrl: "",
+    accountId: accountIdFromAttr || "",
+    accountSlug: accountSlugFromAttr || "",
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
     chatStartedStorageKey: "agente_ia_chat_started",
@@ -22,7 +26,11 @@
 
   async function loadRemoteWidgetConfig() {
     try {
-      const res = await fetch(`${CONFIG.backendBaseUrl}/api/widget/config`);
+      const params = new URLSearchParams();
+      if (CONFIG.accountId) params.set("account_id", CONFIG.accountId);
+      else if (CONFIG.accountSlug) params.set("account_slug", CONFIG.accountSlug);
+      const suffix = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`${CONFIG.backendBaseUrl}/api/widget/config${suffix}`);
       const data = await res.json();
       if (!res.ok || !data?.ok) return;
 
@@ -32,6 +40,8 @@
         colorFromAttr || remote?.brand?.primary_color || CONFIG.primaryColor;
       CONFIG.accentColor = remote?.brand?.accent_color || CONFIG.accentColor;
       CONFIG.logoUrl = remote?.brand?.logo_url || CONFIG.logoUrl;
+      CONFIG.accountId = CONFIG.accountId || remote?.account?.id || "";
+      CONFIG.accountSlug = CONFIG.accountSlug || remote?.account?.slug || "";
     } catch (_error) {
       // fallback silencioso: el widget sigue funcionando con la config local
     }
@@ -139,6 +149,8 @@
     };
 
     if (conversationId) payload.conversation_id = conversationId;
+    if (CONFIG.accountId) payload.account_id = CONFIG.accountId;
+    else if (CONFIG.accountSlug) payload.account_slug = CONFIG.accountSlug;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs);

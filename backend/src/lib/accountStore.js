@@ -13,6 +13,7 @@ let accountsTableAvailable = null;
 let accountsCache = null;
 let accountsCacheExpiresAt = 0;
 const CACHE_TTL_MS = 30_000;
+const tableSupportCache = new Map();
 
 function clean(value) {
   if (value === undefined || value === null) return "";
@@ -53,6 +54,30 @@ async function hasAccountsTable() {
   }
 
   accountsTableAvailable = true;
+  return true;
+}
+
+async function tableExists(tableName) {
+  if (tableSupportCache.has(tableName)) {
+    return tableSupportCache.get(tableName);
+  }
+
+  const { error } = await supabase.from(tableName).select("id").limit(1);
+  if (error) {
+    const message = String(error.message || "").toLowerCase();
+    if (
+      message.includes(tableName.toLowerCase()) ||
+      message.includes("does not exist") ||
+      message.includes("relation") ||
+      message.includes("schema cache")
+    ) {
+      tableSupportCache.set(tableName, false);
+      return false;
+    }
+    throw error;
+  }
+
+  tableSupportCache.set(tableName, true);
   return true;
 }
 
@@ -199,4 +224,46 @@ export async function updateAccount(accountId, input = {}) {
   if (error) throw error;
   resetCache();
   return normalizeAccount(data);
+}
+
+export async function deleteAccount(accountId) {
+  const available = await hasAccountsTable();
+  if (!available) {
+    throw new Error(
+      "Falta la tabla accounts en Supabase. Ejecuta sql/005_multi_account.sql antes de borrar cuentas."
+    );
+  }
+
+  const resolved = await resolveAccount(accountId);
+  const safeAccountId = clean(resolved?.id || accountId);
+  if (!safeAccountId) {
+    throw new Error("Cuenta no valida.");
+  }
+
+  if (resolved?.is_default) {
+    throw new Error("No se puede borrar la cuenta por defecto.");
+  }
+
+  const relatedTables = [
+    "analysis_results",
+    "quotes",
+    "messages",
+    "conversation_events",
+    "leads",
+    "conversations",
+    "app_settings",
+    "crm_users",
+  ];
+
+  for (const tableName of relatedTables) {
+    if (!(await tableExists(tableName))) continue;
+    const { error } = await supabase.from(tableName).delete().eq("account_id", safeAccountId);
+    if (error) throw error;
+  }
+
+  const { error } = await supabase.from("accounts").delete().eq("id", safeAccountId);
+  if (error) throw error;
+
+  resetCache();
+  return { ok: true, id: safeAccountId };
 }

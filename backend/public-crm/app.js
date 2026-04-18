@@ -700,6 +700,11 @@ function renderAdminOverview() {
           <div class="admin-account-footer">
             <small>Ultima actividad: ${fmtShortDate(account.last_activity_at)}</small>
             <div class="admin-account-actions">
+              ${
+                account.is_default
+                  ? ""
+                  : `<button type="button" class="crm-danger-btn" data-delete-account="${escapeHtml(account.id)}">Eliminar</button>`
+              }
               <button type="button" class="crm-secondary-btn" data-save-account="${escapeHtml(account.id)}">Guardar cuenta</button>
               <button type="button" class="crm-secondary-btn" data-open-account="${escapeHtml(account.id)}" data-open-view="config">Configurar</button>
               <button type="button" class="crm-primary-inline-btn" data-open-account="${escapeHtml(account.id)}" data-open-view="sales">Abrir CRM</button>
@@ -746,6 +751,34 @@ function renderAdminOverview() {
         setStatus(el.adminAccountStatus, "Cuenta actualizada.", "ok");
       } catch (error) {
         setStatus(el.adminAccountStatus, `No se pudo guardar: ${error.message}`, "error");
+      } finally {
+        button.disabled = false;
+        button.classList.remove("is-busy");
+      }
+    });
+  });
+
+  el.adminOverviewGrid.querySelectorAll("[data-delete-account]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const accountId = button.getAttribute("data-delete-account");
+      if (!accountId) return;
+      if (!window.confirm("¿Seguro que quieres eliminar esta cuenta y sus datos asociados?")) {
+        return;
+      }
+
+      button.disabled = true;
+      button.classList.add("is-busy");
+      setStatus(el.adminAccountStatus, "Eliminando cuenta...");
+      try {
+        await fetchJson(`${window.location.origin}/api/admin/accounts/${accountId}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account_id: state.activeAccountId || "" }),
+        });
+        await Promise.all([loadAccounts(), loadAdminOverview(), loadConfig(), loadLeads()]);
+        setStatus(el.adminAccountStatus, "Cuenta eliminada.", "ok");
+      } catch (error) {
+        setStatus(el.adminAccountStatus, `No se pudo eliminar: ${error.message}`, "error");
       } finally {
         button.disabled = false;
         button.classList.remove("is-busy");

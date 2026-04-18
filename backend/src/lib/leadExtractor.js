@@ -163,9 +163,14 @@ function normalizeText(text = "") {
 }
 
 function toTitleCase(str = "") {
-  return str
-    .toLowerCase()
-    .replace(/\b([a-záéíóúüñ])/gi, (m) => m.toUpperCase());
+  return String(str || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => {
+      const lower = word.toLocaleLowerCase("es-ES");
+      return lower.charAt(0).toLocaleUpperCase("es-ES") + lower.slice(1);
+    })
+    .join(" ");
 }
 
 function isNegativeResponse(text = "") {
@@ -549,7 +554,7 @@ export function extractLeadDataFromText(text, existingLead = null) {
 
   const email = extractEmail(safeText);
   const phone = extractPhone(safeText);
-  const name = extractNameFromPhrases(safeText);
+  const name = extractNameFromPhrases(safeText) || extractStandaloneName(safeText);
   const interest_service = pickService(safeText, existingLead?.interest_service || null);
   const urgency = extractUrgency(safeText);
   const budget_range = extractBudget(safeText);

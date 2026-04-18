@@ -41,6 +41,7 @@ import {
   resolveAccount,
   createAccount,
   updateAccount,
+  deleteAccount,
 } from "./lib/accountStore.js";
 import {
   countCrmUsers,
@@ -732,6 +733,24 @@ function buildLeadSignature(lead) {
     last_question: lead?.last_question || null,
     summary: lead?.summary || null,
   });
+}
+
+function hasUsefulLeadDataForNotification(lead) {
+  return !!(
+    norm(lead?.name) ||
+    norm(lead?.email) ||
+    norm(lead?.phone) ||
+    norm(lead?.interest_service) ||
+    norm(lead?.budget_range) ||
+    norm(lead?.urgency) ||
+    norm(lead?.company_name) ||
+    norm(lead?.business_type) ||
+    norm(lead?.business_activity) ||
+    norm(lead?.main_goal) ||
+    norm(lead?.current_situation) ||
+    norm(lead?.pain_points) ||
+    norm(lead?.preferred_contact_channel)
+  );
 }
 
 function hasAnalysisSnapshot(snapshot) {
@@ -3024,18 +3043,20 @@ ${ragContext}
 
   try {
     const latestLead = await loadLeadForConversation();
-    const signature = buildLeadSignature(latestLead);
-    const previousSignature = lastLeadEmailSent.get(currentConversationId);
+    if (hasUsefulLeadDataForNotification(latestLead)) {
+      const signature = buildLeadSignature(latestLead);
+      const previousSignature = lastLeadEmailSent.get(currentConversationId);
 
-    if (signature !== previousSignature) {
-      await sendLeadEmail({
-        lead: latestLead,
-        conversation_id: currentConversationId,
-        type: previousSignature ? "update" : "new",
-        changedFields: [],
-      });
+      if (signature !== previousSignature) {
+        await sendLeadEmail({
+          lead: latestLead,
+          conversation_id: currentConversationId,
+          type: previousSignature ? "update" : "new",
+          changedFields: [],
+        });
 
-      lastLeadEmailSent.set(currentConversationId, signature);
+        lastLeadEmailSent.set(currentConversationId, signature);
+      }
     }
   } catch (e) {
     console.log("lead email error", e.message);
@@ -3322,6 +3343,23 @@ app.patch("/api/admin/accounts/:accountId", requireCrmAuth("super_admin"), async
   try {
     const account = await updateAccount(req.params.accountId, req.body || {});
     res.json({ ok: true, account });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.delete("/api/admin/accounts/:accountId", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const activeAccount = await resolveRequestAccount(req);
+    if (String(activeAccount?.id || "") === String(req.params.accountId || "")) {
+      return res.status(400).json({
+        ok: false,
+        error: "No puedes borrar la cuenta activa desde esta misma sesion.",
+      });
+    }
+
+    const result = await deleteAccount(req.params.accountId);
+    res.json({ ok: true, deleted: result });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }

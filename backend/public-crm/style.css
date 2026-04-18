@@ -275,6 +275,8 @@ textarea {
 #quoteSendWhatsappBtn,
 #quoteAutofillBtn,
 #quoteSaveBtn,
+#analysisGenerateBtn,
+#analysisSendBtn,
 #quoteAddItemBtn,
 #leadPrevBtn,
 #leadNextBtn {
@@ -291,7 +293,9 @@ textarea {
 #saveBtn.is-busy,
 #quoteSaveBtn.is-busy,
 #quoteSendEmailBtn.is-busy,
-#quoteSendWhatsappBtn.is-busy {
+#quoteSendWhatsappBtn.is-busy,
+#analysisGenerateBtn.is-busy,
+#analysisSendBtn.is-busy {
   opacity: 0.7;
 }
 
@@ -304,6 +308,9 @@ textarea {
 #quoteSendWhatsappBtn:disabled,
 #quoteAutofillBtn:disabled,
 #quoteSaveBtn:disabled,
+#analysisGenerateBtn:disabled,
+#analysisSendBtn:disabled,
+#analysisPreviewBtn:disabled,
 #quoteAddItemBtn:disabled,
 #leadPrevBtn:disabled,
 #leadNextBtn:disabled {
@@ -343,6 +350,16 @@ textarea {
   font-weight: 800;
   cursor: pointer;
   box-shadow: 0 10px 24px rgba(109, 65, 243, 0.18);
+}
+
+.crm-danger-btn {
+  border: 1px solid rgba(244, 143, 177, 0.7);
+  background: rgba(255, 238, 244, 0.96);
+  color: #a23b63;
+  padding: 11px 16px;
+  border-radius: 999px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .action-icon {
