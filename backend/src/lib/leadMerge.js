@@ -48,6 +48,16 @@ function looksLikeValidName(value) {
     "meta ads",
     "seo",
     "web",
+    "soporte",
+    "mantenimiento",
+    "emailing",
+    "ropa",
+    "catalogo",
+    "catálogo",
+    "pasarela",
+    "pasarela de pago",
+    "tienda online",
+    "ecommerce",
     "trafico",
     "tráfico",
     "alta",
@@ -89,6 +99,15 @@ function shouldReplaceName(currentName, newName, lastUserMessage) {
   return userExplicitlyCorrectedName(lastUserMessage);
 }
 
+function shouldAcceptNameCandidate(currentLead, extractedLead, lastUserMessage) {
+  const candidate = normalizeText(extractedLead?.name);
+  if (!looksLikeValidName(candidate)) return false;
+  if (userExplicitlyCorrectedName(lastUserMessage)) return true;
+
+  const currentStep = normalizeText(currentLead?.current_step);
+  return currentStep === "ask_name";
+}
+
 function chooseField(currentValue, newValue, validator) {
   const current = normalizeText(currentValue);
   const next = normalizeText(newValue);
@@ -104,7 +123,10 @@ export function mergeLeadData({ currentLead, extractedLead, lastUserMessage }) {
 
   if (shouldReplaceName(currentLead?.name, extractedLead?.name, lastUserMessage)) {
     merged.name = normalizeText(extractedLead.name);
-  } else if (!normalizeText(currentLead?.name) && looksLikeValidName(extractedLead?.name)) {
+  } else if (
+    !normalizeText(currentLead?.name) &&
+    shouldAcceptNameCandidate(currentLead, extractedLead, lastUserMessage)
+  ) {
     merged.name = normalizeText(extractedLead.name);
   }
 

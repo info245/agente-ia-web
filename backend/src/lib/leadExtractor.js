@@ -361,6 +361,22 @@ function extractStandaloneName(text = "") {
   return toTitleCase(t);
 }
 
+function shouldAcceptStandaloneName(existingLead = null, text = "") {
+  const currentStep = normalizeText(existingLead?.current_step || "");
+  if (currentStep === "ask_name") return true;
+
+  const normalized = normalizeText(text);
+  if (
+    normalized.startsWith("me llamo ") ||
+    normalized.startsWith("mi nombre es ") ||
+    normalized.startsWith("soy ")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function extractUrgency(text = "") {
   const t = String(text).toLowerCase();
 
@@ -592,7 +608,12 @@ export function extractLeadDataFromText(text, existingLead = null) {
 
   const email = extractEmail(safeText);
   const phone = extractPhone(safeText);
-  const name = extractNameFromPhrases(safeText) || extractStandaloneName(safeText);
+  const nameFromPhrase = extractNameFromPhrases(safeText);
+  const name =
+    nameFromPhrase ||
+    (shouldAcceptStandaloneName(existingLead, safeText)
+      ? extractStandaloneName(safeText)
+      : null);
   const interest_service = pickService(safeText, existingLead?.interest_service || null);
   const urgency = extractUrgency(safeText);
   const budget_range = extractBudget(safeText);
