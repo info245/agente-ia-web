@@ -341,6 +341,14 @@ function isLikelyValidName(value) {
     "cuÃ¡nto cuesta",
     "tienda online",
     "ecommerce",
+    "emailing",
+    "soporte",
+    "mantenimiento",
+    "pasarela de pago",
+    "pasarela",
+    "catalogo",
+    "catálogo",
+    "ropa",
     "soy autonomo",
     "soy autÃ³nomo",
     "captar",
@@ -484,8 +492,15 @@ function detectService(text) {
   if (
     t.includes("diseno web") ||
     t.includes("diseÃ±o web") ||
+    t.includes("disenar pagina web") ||
+    t.includes("diseñar página web") ||
+    t.includes("paginas web") ||
+    t.includes("páginas web") ||
     t.includes("pagina web") ||
     t.includes("pÃ¡gina web") ||
+    t.includes("tienda online") ||
+    t.includes("ecommerce") ||
+    t.includes("e-commerce") ||
     t === "web"
   ) {
     return "DiseÃ±o Web";
@@ -1264,6 +1279,8 @@ function buildStructuredCloseReply({
   const safeName = getSafeLeadName(lead);
   const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
   const hasValueDelivered = hasAnalysisSnapshot(analysisSnapshot);
+  const hasCommercialContext =
+    hasService(lead) || hasMainGoal(lead) || hasBusinessActivity(lead);
   const hasExplicitCloseIntent =
     detectStrongCommercialIntent(text) || wantsWhatsapp || wantsEmail;
   const shouldStartCloseSequence =
@@ -1272,10 +1289,10 @@ function buildStructuredCloseReply({
     shouldStartCloseSequence && (hasExplicitCloseIntent || (hasValueDelivered && allowCloseAdvance));
 
   if (
-    hasValueDelivered &&
     !safeName &&
     !hasExplicitCloseIntent &&
-    isShortAffirmativeResponse(text)
+    isShortAffirmativeResponse(text) &&
+    (hasValueDelivered || hasCommercialContext)
   ) {
     return buildValueThenAskNameReply(analysisSnapshot, lead);
   }
@@ -1330,22 +1347,22 @@ function detectStrongCommercialIntent(text) {
 function prefersWhatsAppChannel(text) {
   const t = normalizeText(text);
   return (
-    t.includes("whatsapp") ||
-    t.includes("wasap") ||
-    t.includes("whats") ||
-    t.includes("por whatsapp") ||
-    t.includes("mejor por whatsapp")
+    /\bwhatsapp\b/.test(t) ||
+    /\bwasap\b/.test(t) ||
+    /\bwhats\b/.test(t) ||
+    /\bpor whatsapp\b/.test(t) ||
+    /\bmejor por whatsapp\b/.test(t)
   );
 }
 
 function prefersEmailChannel(text) {
   const t = normalizeText(text);
   return (
-    t.includes("email") ||
-    t.includes("correo") ||
-    t.includes("mail") ||
-    t.includes("por email") ||
-    t.includes("por correo")
+    /\bemail\b/.test(t) ||
+    /\bcorreo\b/.test(t) ||
+    /\bmail\b/.test(t) ||
+    /\bpor email\b/.test(t) ||
+    /\bpor correo\b/.test(t)
   );
 }
 

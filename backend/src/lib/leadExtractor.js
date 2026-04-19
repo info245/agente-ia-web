@@ -66,6 +66,17 @@ const SERVICE_ALIASES = [
       /inteligencia\s+artificial/i,
     ],
   },
+  {
+    key: "DiseÃ±o Web",
+    patterns: [
+      /diseÃ±ar\s+(una\s+)?p[aÃ¡]gina\s+web/i,
+      /diseÃ±ar\s+(una\s+)?tienda\s+online/i,
+      /paginas?\s+web/i,
+      /tienda\s+online/i,
+      /\becommerce\b/i,
+      /\be-commerce\b/i,
+    ],
+  },
 ];
 
 const GENERIC_SERVICES = new Set(["IA", "Automatización"]);
@@ -138,6 +149,15 @@ const NAME_STOPWORDS = new Set([
   "proyecto",
   "tienda",
   "online",
+  "ropa",
+  "catalogo",
+  "catálogo",
+  "mantenimiento",
+  "soporte",
+  "pasarela",
+  "pago",
+  "pagos",
+  "emailing",
   "ecommerce",
   "e-commerce",
   "tengo",
@@ -505,9 +525,27 @@ function extractMainGoal(text = "") {
   return null;
 }
 
-function extractPreferredContactChannel({ email, phone }) {
+function extractPreferredContactChannel({ text = "", email, phone }) {
+  const normalized = normalizeText(text);
+
+  if (
+    /\bwhatsapp\b/.test(normalized) ||
+    /\bwasap\b/.test(normalized) ||
+    /\bwhats\b/.test(normalized)
+  ) {
+    return "whatsapp";
+  }
+
+  if (
+    /\bemail\b/.test(normalized) ||
+    /\bcorreo\b/.test(normalized) ||
+    /\bmail\b/.test(normalized)
+  ) {
+    return "email";
+  }
+
   if (email) return "email";
-  if (phone) return "phone";
+  if (phone) return "whatsapp";
   return null;
 }
 
@@ -562,7 +600,11 @@ export function extractLeadDataFromText(text, existingLead = null) {
   const business_type = extractBusinessType(safeText);
   const business_activity = extractBusinessActivity(safeText);
   const main_goal = extractMainGoal(safeText);
-  const preferred_contact_channel = extractPreferredContactChannel({ email, phone });
+  const preferred_contact_channel = extractPreferredContactChannel({
+    text: safeText,
+    email,
+    phone,
+  });
   const last_intent = extractLastIntent({
     text: safeText,
     interest_service,
