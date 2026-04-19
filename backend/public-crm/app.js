@@ -1570,7 +1570,7 @@ function renderTimeline(rows = []) {
   if (!el.analyticsTimeline) return;
 
   if (!rows.length) {
-    el.analyticsTimeline.innerHTML = '<div class="empty">Sin datos diarios todavia.</div>';
+    el.analyticsTimeline.innerHTML = '<div class="empty">Sin datos del periodo todavia.</div>';
     return;
   }
 
@@ -1579,7 +1579,28 @@ function renderTimeline(rows = []) {
     1
   );
 
-  el.analyticsTimeline.innerHTML = rows
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.leads += row.leads || 0;
+      acc.sent += row.quotes_sent || 0;
+      acc.accepted += row.quotes_accepted || 0;
+      return acc;
+    },
+    { leads: 0, sent: 0, accepted: 0 }
+  );
+
+  const activeDays = rows.filter(
+    (row) => (row.leads || 0) > 0 || (row.quotes_sent || 0) > 0 || (row.quotes_accepted || 0) > 0
+  ).length;
+  const averageLeads = rows.length ? (totals.leads / rows.length).toFixed(1) : "0.0";
+  const topDay = rows.reduce((best, row) => {
+    const currentScore = (row.leads || 0) + (row.quotes_sent || 0) + (row.quotes_accepted || 0);
+    const bestScore =
+      (best?.leads || 0) + (best?.quotes_sent || 0) + (best?.quotes_accepted || 0);
+    return currentScore > bestScore ? row : best;
+  }, rows[0]);
+
+  const dailyRows = rows
     .map((row) => {
       const leadPct = Math.max(8, Math.round(((row.leads || 0) / maxValue) * 100));
       const sentPct = Math.max(8, Math.round(((row.quotes_sent || 0) / maxValue) * 100));
@@ -1609,6 +1630,34 @@ function renderTimeline(rows = []) {
       `;
     })
     .join("");
+
+  el.analyticsTimeline.innerHTML = `
+    <div class="timeline-overview">
+      <div class="timeline-overview-copy">
+        <span class="timeline-overview-kicker">Resumen ejecutivo</span>
+        <h5>Lectura global del periodo</h5>
+        <p>${activeDays} dias con movimiento. Mejor pico: <strong>${topDay?.date || "-"}</strong>. Media diaria de leads: <strong>${averageLeads}</strong>.</p>
+      </div>
+      <div class="timeline-overview-stats">
+        <article class="timeline-overview-stat">
+          <span>Leads del periodo</span>
+          <strong>${totals.leads}</strong>
+        </article>
+        <article class="timeline-overview-stat">
+          <span>Propuestas enviadas</span>
+          <strong>${totals.sent}</strong>
+        </article>
+        <article class="timeline-overview-stat">
+          <span>Propuestas aceptadas</span>
+          <strong>${totals.accepted}</strong>
+        </article>
+      </div>
+    </div>
+    <details class="timeline-details">
+      <summary>Ver detalle por dia</summary>
+      <div class="timeline-detail-list">${dailyRows}</div>
+    </details>
+  `;
 }
 
 function renderAnalytics() {
