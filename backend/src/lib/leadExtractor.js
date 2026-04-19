@@ -38,6 +38,13 @@ const SERVICE_ALIASES = [
       /p[aá]gina\s+web/i,
       /web\s+corporativa/i,
       /\bwordpress\b/i,
+      /\bshopify\b/i,
+      /\bwoocommerce\b/i,
+      /\bprestashop\b/i,
+      /\bmagento\b/i,
+      /tienda\s+online/i,
+      /\becommerce\b/i,
+      /\be-commerce\b/i,
     ],
   },
   {
@@ -67,10 +74,10 @@ const SERVICE_ALIASES = [
     ],
   },
   {
-    key: "DiseÃ±o Web",
+    key: "Diseño Web",
     patterns: [
-      /diseÃ±ar\s+(una\s+)?p[aÃ¡]gina\s+web/i,
-      /diseÃ±ar\s+(una\s+)?tienda\s+online/i,
+      /diseñar\s+(una\s+)?p[aá]gina\s+web/i,
+      /diseñar\s+(una\s+)?tienda\s+online/i,
       /paginas?\s+web/i,
       /tienda\s+online/i,
       /\becommerce\b/i,
@@ -160,6 +167,14 @@ const NAME_STOPWORDS = new Set([
   "emailing",
   "ecommerce",
   "e-commerce",
+  "shopify",
+  "woocommerce",
+  "prestashop",
+  "magento",
+  "wordpress",
+  "plugin",
+  "plugins",
+  "cms",
   "tengo",
   "tenemos",
   "dedico",
@@ -279,7 +294,7 @@ export function looksLikeValidName(name = "") {
     if (NAME_STOPWORDS.has(w)) return false;
   }
 
-  return /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,2}$/.test(value);
+  return /^[\p{L}]+(?:[\s'-][\p{L}]+){0,2}$/u.test(value);
 }
 
 function extractEmail(text = "") {

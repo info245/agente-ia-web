@@ -349,6 +349,14 @@ function isLikelyValidName(value) {
     "catalogo",
     "catálogo",
     "ropa",
+    "shopify",
+    "woocommerce",
+    "prestashop",
+    "magento",
+    "wordpress",
+    "plugin",
+    "plugins",
+    "cms",
     "soy autonomo",
     "soy autÃ³nomo",
     "captar",
@@ -695,25 +703,25 @@ function getQuestionForStep(step, lead) {
 
   switch (step) {
     case "ask_name":
-      return "Antes de seguir, Â¿cÃ³mo te llamas?";
+      return "Antes de seguir, ¿cómo te llamas?";
     case "ask_business_type":
       return safeName
-        ? `Encantado, ${safeName}. Â¿Tienes una empresa, eres autÃ³nomo o es un proyecto que estÃ¡s empezando?`
-        : "Â¿Tienes una empresa, eres autÃ³nomo o es un proyecto que estÃ¡s empezando?";
+        ? `Encantado, ${safeName}. ¿Tienes una empresa, eres autónomo o es un proyecto que estás empezando?`
+        : "¿Tienes una empresa, eres autónomo o es un proyecto que estás empezando?";
     case "ask_business_activity":
-      return "Perfecto. Â¿A quÃ© te dedicas exactamente o cuÃ¡l es vuestra actividad principal?";
+      return "Perfecto. ¿A qué te dedicas exactamente o cuál es vuestra actividad principal?";
     case "ask_service":
-      return "Gracias. Â¿QuÃ© servicio te interesa ahora mismo: SEO, Google Ads, Redes Sociales, DiseÃ±o Web o ConsultorÃ­a Digital?";
+      return "Gracias. ¿Qué servicio te interesa ahora mismo: SEO, Google Ads, Redes Sociales, Diseño Web o Consultoría Digital?";
     case "ask_goal":
-      return "Entendido. Â¿CuÃ¡l es tu objetivo principal ahora mismo?";
+      return "Entendido. ¿Cuál es tu objetivo principal ahora mismo?";
     case "ask_budget":
       return lead?.interest_service
-        ? `Para ${lead.interest_service}, Â¿con quÃ© presupuesto aproximado te gustarÃ­a trabajar?`
-        : "Â¿Con quÃ© presupuesto aproximado te gustarÃ­a trabajar?";
+        ? `Para ${lead.interest_service}, ¿con qué presupuesto aproximado te gustaría trabajar?`
+        : "¿Con qué presupuesto aproximado te gustaría trabajar?";
     case "ask_urgency":
-      return "Perfecto. Â¿QuÃ© prioridad tiene para ti? Â¿Te gustarÃ­a empezar cuanto antes o lo estÃ¡s valorando a medio plazo?";
+      return "Perfecto. ¿Qué prioridad tiene para ti? ¿Te gustaría empezar cuanto antes o lo estás valorando a medio plazo?";
     case "ask_contact":
-      return "Genial. Para poder enviarte una propuesta orientativa o contactarte, Â¿me dejas tu email o tu telÃ©fono?";
+      return "Genial. Para poder enviarte una propuesta orientativa o contactarte, ¿me dejas tu email o tu teléfono?";
     default:
       return null;
   }
@@ -925,8 +933,8 @@ function cleanReplyForChannelChoice(reply, { channel = "web", lead = null } = {}
 
   const safeName = getSafeLeadName(lead);
   return safeName
-    ? `Perfecto, ${safeName}. Â¿CÃ³mo prefieres que te mande la propuesta: por WhatsApp o por email?`
-    : "Perfecto. Â¿CÃ³mo prefieres que te mande la propuesta: por WhatsApp o por email?";
+    ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
+    : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
 }
 
 function isShortAffirmativeResponse(text) {
@@ -963,7 +971,7 @@ function buildValueThenAskNameReply(analysisSnapshot, lead = null) {
     return `${valueLine}\n\nSi te va bien, sigo contigo desde aquÃ­ y te preparo el siguiente paso sin pedirte de nuevo los datos bÃ¡sicos.`;
   }
 
-  return `${valueLine}\n\nAntes de seguir, Â¿cÃ³mo te llamas?`;
+  return `${valueLine}\n\nAntes de seguir, ¿cómo te llamas?`;
 }
 
 function buildWhatsAppContinuationReply({
@@ -1431,41 +1439,41 @@ function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
   for (const item of sequence) {
     switch (item) {
       case "name":
-        if (!hasName(lead)) return "Si te encaja, Â¿cÃ³mo te llamas?";
+        if (!hasName(lead)) return "Si te encaja, ¿cómo te llamas?";
         break;
       case "business_type":
         if (!hasBusinessType(lead)) {
-          return "Â¿Esto es para una empresa en marcha, un negocio local o un proyecto que estÃ¡s arrancando?";
+          return "¿Esto es para una empresa en marcha, un negocio local o un proyecto que estás arrancando?";
         }
         break;
       case "business_activity":
         if (!hasBusinessActivity(lead)) {
-          return "Â¿A quÃ© os dedicÃ¡is exactamente?";
+          return "¿A qué os dedicáis exactamente?";
         }
         break;
       case "interest_service":
         if (!hasService(lead)) {
-          return "Â¿QuÃ© quieres revisar primero: web, SEO, Google Ads o captaciÃ³n?";
+          return "¿Qué quieres revisar primero: web, SEO, Google Ads o captación?";
         }
         break;
       case "preferred_channel":
         if (hasName(lead) && !normalizeText(lead?.preferred_contact_channel || "")) {
-          return `Perfecto, ${getSafeLeadName(lead) || ""}. Â¿Prefieres que sigamos por email o por WhatsApp?`;
+          return `Perfecto, ${getSafeLeadName(lead) || ""}. ¿Prefieres que sigamos por email o por WhatsApp?`;
         }
         break;
       case "main_goal":
         if (!hasMainGoal(lead)) {
-          return "Â¿QuÃ© te preocupa mÃ¡s ahora mismo: captar mÃ¡s contactos, vender mÃ¡s o mejorar la conversiÃ³n?";
+          return "¿Qué te preocupa más ahora mismo: captar más contactos, vender más o mejorar la conversión?";
         }
         break;
       case "budget_range":
         if (!hasBudget(lead)) {
-          return "Si quieres, te oriento mejor si me dices con quÃ© presupuesto aproximado te gustarÃ­a moverte.";
+          return "Si quieres, te oriento mejor si me dices con qué presupuesto aproximado te gustaría moverte.";
         }
         break;
       case "urgency":
         if (!hasUrgency(lead)) {
-          return "Â¿Esto te corre ahora o es algo que quieres mover mÃ¡s adelante?";
+          return "¿Esto te corre ahora o es algo que quieres mover más adelante?";
         }
         break;
       case "email_or_phone":
@@ -1473,21 +1481,21 @@ function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
           const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
           if (!preferredChannel) {
             return hasName(lead)
-              ? `Perfecto, ${getSafeLeadName(lead) || ""}. Â¿Prefieres que sigamos por email o por WhatsApp?`
-              : "Antes de seguir por un canal externo, dime tu nombre y te guÃ­o con el siguiente paso.";
+              ? `Perfecto, ${getSafeLeadName(lead) || ""}. ¿Prefieres que sigamos por email o por WhatsApp?`
+              : "Antes de seguir por un canal externo, dime tu nombre y te guío con el siguiente paso.";
           }
           if (preferredChannel.includes("whatsapp")) {
             return hasName(lead)
-              ? `Perfecto, ${getSafeLeadName(lead) || ""}. CompÃ¡rteme tu nÃºmero de WhatsApp y te dejo el paso preparado por ahÃ­.`
+              ? `Perfecto, ${getSafeLeadName(lead) || ""}. Compárteme tu número de WhatsApp y te dejo el paso preparado por ahí.`
               : "Si prefieres WhatsApp, antes dime tu nombre y luego tu nÃºmero.";
           }
           if (preferredChannel.includes("email")) {
             return hasName(lead)
-              ? `Perfecto, ${getSafeLeadName(lead) || ""}. CompÃ¡rteme tu email y te lo preparo por ahÃ­.`
+              ? `Perfecto, ${getSafeLeadName(lead) || ""}. Compárteme tu email y te lo preparo por ahí.`
               : "Si prefieres email, antes dime tu nombre y seguimos.";
           }
           return hasName(lead)
-            ? `Perfecto, ${getSafeLeadName(lead) || ""}. Si quieres que te deje esto preparado o seguir por un canal mÃ¡s cÃ³modo, compÃ¡rteme email o WhatsApp y seguimos por ahÃ­.`
+            ? `Perfecto, ${getSafeLeadName(lead) || ""}. Si quieres que te deje esto preparado o seguir por un canal más cómodo, compárteme email o WhatsApp y seguimos por ahí.`
             : "Si quieres que te deje esto preparado o seguir por un canal mÃ¡s cÃ³modo, antes dime tu nombre y seguimos.";
         }
         break;
