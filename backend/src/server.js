@@ -848,7 +848,9 @@ function buildWhatsAppHandoff({
   ).replace(/\D/g, "");
   if (!publicNumber || !conversationId || !handoffCode) return null;
 
-  const intro = "Hola, vengo desde el chat web y quiero seguir por ahí.";
+  const intro = hasAnalysisSnapshot(analysisSnapshot)
+    ? "Hola, vengo desde el chat web y quiero seguir por ahí."
+    : "Hola, vengo desde el chat web y quiero seguir por WhatsApp.";
   const text = `${intro}\nRef: ${handoffCode}`;
   const whatsappUrl = `https://wa.me/${publicNumber}?text=${encodeURIComponent(text)}`;
 
@@ -891,12 +893,19 @@ function shouldOfferWhatsAppTransition({
   text,
 }) {
   if (channel !== "web") return false;
-  if (!hasAnalysisSnapshot(snapshot)) return false;
   if (!hasName(lead)) return false;
 
   const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
   if (!preferredChannel.includes("whatsapp")) return false;
-  return hasPhone(lead);
+  if (!hasPhone(lead)) return false;
+
+  return (
+    hasAnalysisSnapshot(snapshot) ||
+    hasService(lead) ||
+    hasMainGoal(lead) ||
+    hasBusinessActivity(lead) ||
+    detectStrongCommercialIntent(text)
+  );
 }
 
 function cleanReplyForWebHandoff(reply, { handoffAvailable = false, channel = "web" } = {}) {
@@ -937,6 +946,42 @@ function cleanReplyForChannelChoice(reply, { channel = "web", lead = null } = {}
   return safeName
     ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
     : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
+}
+
+function hasGoogleAdsCampaignContext(lead, text = "") {
+  const combined = normalizeText(
+    [
+      lead?.current_situation,
+      lead?.summary,
+      lead?.pain_points,
+      text,
+    ]
+      .filter(Boolean)
+      .join(" ")
+  );
+
+  return /(campan|anuncios|cuenta de google ads|conversiones|roas|cpc|cpa|rendimiento|resultado)/i.test(
+    combined
+  );
+}
+
+function sanitizeGoogleAdsWebReply(reply, { lead = null, text = "" } = {}) {
+  const service = normalizeText(lead?.interest_service || "");
+  if (!service.includes("google ads")) return String(reply || "");
+  if (hasGoogleAdsCampaignContext(lead, text)) return String(reply || "");
+
+  const currentReply = String(reply || "").trim();
+  if (!currentReply) return currentReply;
+
+  if (
+    /diagnostic/i.test(currentReply) ||
+    /campa[nñ]a actual/i.test(currentReply) ||
+    /como esta funcionando tu campa/i.test(normalizeText(currentReply))
+  ) {
+    return "Si te va bien, cuéntame si ya tienes campañas activas en Google Ads y qué resultado estás viendo, o si partes de cero y prefieres que te oriente desde ahí.";
+  }
+
+  return currentReply;
 }
 
 function isShortAffirmativeResponse(text) {
@@ -1316,7 +1361,7 @@ function buildStructuredCloseReply({
   }
 
   if (!preferredChannel) {
-    return `Perfecto, ${safeName}. Â¿Prefieres que sigamos por email o por WhatsApp?`;
+    return `Perfecto, ${safeName}. ¿Prefieres que sigamos por email o por WhatsApp?`;
   }
 
   if (preferredChannel.includes("whatsapp") && !hasPhone(lead)) {
@@ -1328,7 +1373,13 @@ function buildStructuredCloseReply({
   }
 
   if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
-    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.\n\nCuando me escribas por WhatsApp, continúo desde este punto sin empezar de cero.`;
+    return hasAnalysisSnapshot(analysisSnapshot)
+      ? `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.\n\nCuando me escribas por WhatsApp, continúo desde este punto sin empezar de cero.`
+      : `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y seguimos por ahí con tu propuesta y el siguiente paso ya preparado.`;
+  }
+
+  if (preferredChannel.includes("whatsapp") && hasPhone(lead)) {
+    return `Perfecto, ${safeName}. Te sigo por WhatsApp con la propuesta y el siguiente paso ya preparado.`;
   }
 
   if (preferredChannel.includes("email") && lead?.email) {
@@ -1527,6 +1578,8 @@ MODO: diagnostic_web
 - Empieza ayudando, no interrogando.
 - Ofrece caminos claros: revisar web, SEO, Google Ads o captaciÃ³n.
 - Si hay URL o anÃ¡lisis, entrega un mini diagnÃ³stico Ãºtil y breve.
+- Si el servicio es Google Ads y todavÃ­a no has visto campaÃ±as ni datos reales, no hables de diagnosticar campaÃ±as como si ya las hubieras analizado.
+- En Google Ads, si aÃºn no hay contexto suficiente, pregunta si ya tienen campaÃ±as activas o si parten de cero.
 - Solo pide un dato de lead si el usuario ya recibiÃ³ valor o quiere seguir.
 ${suggestWhatsApp ? "- Si encaja, propone seguir por WhatsApp como continuaciÃ³n cÃ³moda del anÃ¡lisis." : ""}
 `,
@@ -2981,6 +3034,11 @@ ${ragContext}
           ? "Puedo ayudarte a revisar tu web, SEO, Google Ads o captaciÃ³n. Si quieres, pÃ¡same tu URL o dime quÃ© te preocupa mÃ¡s y te doy una primera orientaciÃ³n."
           : "Si quieres, sigo contigo sobre ese punto y te digo cuÃ¡l serÃ­a la prioridad mÃ¡s sensata.";
     }
+
+    reply = sanitizeGoogleAdsWebReply(reply, {
+      lead: leadAfter || {},
+      text: userText,
+    });
 
     const structuredCloseReply = buildStructuredCloseReply({
       channel: channel || "web",
