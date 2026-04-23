@@ -170,6 +170,7 @@ const el = {
   messageList: document.getElementById("messageList"),
   leadForm: document.getElementById("leadForm"),
   saveBtn: document.getElementById("saveBtn"),
+  deleteLeadBtn: document.getElementById("deleteLeadBtn"),
   leadSaveStatus: document.getElementById("leadSaveStatus"),
   leadName: document.getElementById("leadName"),
   leadEmail: document.getElementById("leadEmail"),
@@ -1484,6 +1485,10 @@ function renderLeadDetail() {
     el.messageList.innerHTML = '<div class="empty">Selecciona una conversacion.</div>';
     renderQuote(null);
     renderAnalysis(null);
+    if (el.deleteLeadBtn) {
+      el.deleteLeadBtn.disabled = true;
+      el.deleteLeadBtn.classList.remove("is-busy");
+    }
     return;
   }
 
@@ -1516,6 +1521,10 @@ function renderLeadDetail() {
   el.nextAction.value = lead.next_action || "";
   el.followUpAt.value = toDatetimeLocal(lead.follow_up_at);
   el.internalNotes.value = lead.internal_notes || "";
+  if (el.deleteLeadBtn) {
+    el.deleteLeadBtn.disabled = false;
+    el.deleteLeadBtn.classList.remove("is-busy");
+  }
 }
 
 function renderBreakdown(target, rows = []) {
@@ -2228,6 +2237,63 @@ async function saveLead() {
   }
 }
 
+async function deleteSelectedLead() {
+  if (!state.selectedLead?.id) return;
+
+  const leadName = getLeadDisplayName(state.selectedLead);
+  const confirmed = window.confirm(
+    `¿Seguro que quieres eliminar el lead "${leadName}" del CRM? Esta accion borra tambien su propuesta y analisis guardados.`
+  );
+
+  if (!confirmed) return;
+
+  el.deleteLeadBtn.disabled = true;
+  el.deleteLeadBtn.classList.add("is-busy");
+  setStatus(el.leadSaveStatus, "Eliminando lead...");
+
+  try {
+    await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const deletedLeadId = state.selectedLead.id;
+    state.leads = state.leads.filter((lead) => lead.id !== deletedLeadId);
+    state.filteredLeads = state.filteredLeads.filter((lead) => lead.id !== deletedLeadId);
+    state.selectedLead = state.leads[0] || null;
+
+    renderLeadTable();
+    renderLeadDetail();
+
+    if (state.selectedLead?.conversation_id) {
+      await loadMessages(state.selectedLead.conversation_id);
+    } else {
+      renderMessages([]);
+    }
+
+    if (state.selectedLead?.id) {
+      await loadQuote(state.selectedLead.id);
+      await loadAnalysis(state.selectedLead.id);
+    } else {
+      renderQuote(null);
+      renderAnalysis(null);
+    }
+
+    setStatus(el.leadSaveStatus, "Lead eliminado del CRM.", "ok");
+
+    loadAnalytics().catch((error) => {
+      console.warn("CRM analytics reload after delete failed", error);
+    });
+  } catch (error) {
+    setStatus(el.leadSaveStatus, `No se pudo eliminar: ${error.message}`, "error");
+  } finally {
+    if (el.deleteLeadBtn) {
+      el.deleteLeadBtn.disabled = !state.selectedLead;
+      el.deleteLeadBtn.classList.remove("is-busy");
+    }
+  }
+}
+
 function buildServiceItems(service, serviceFacts = null) {
   const normalizedService = String(service || "").toLowerCase();
 
@@ -2562,6 +2628,7 @@ async function sendAnalysis() {
 }
 
 el.saveBtn.addEventListener("click", saveLead);
+el.deleteLeadBtn?.addEventListener("click", deleteSelectedLead);
 el.refreshBtn.addEventListener("click", loadLeads);
 el.accountSelect?.addEventListener("change", () =>
   handleAccountChange(el.accountSelect.value).catch((error) => {

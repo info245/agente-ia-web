@@ -1997,6 +1997,17 @@ textarea {
   padding-right: 4px;
 }
 
+.lead-form-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.lead-form-actions > button {
+  flex: 1 1 180px;
+}
+
 .lead-form label,
 .quote-grid label {
   display: grid;

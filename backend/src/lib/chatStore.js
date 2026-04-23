@@ -852,8 +852,9 @@ export async function getCrmAnalytics({
   };
 }
 
-export async function updateLeadCrmFields(leadId, patch = {}) {
+export async function updateLeadCrmFields(leadId, patch = {}, { accountId = null } = {}) {
   const safeLeadId = clean(leadId);
+  const safeAccountId = clean(accountId);
   if (!safeLeadId) {
     throw new Error("updateLeadCrmFields: leadId es obligatorio");
   }
@@ -891,25 +892,75 @@ export async function updateLeadCrmFields(leadId, patch = {}) {
   }
 
   if (!Object.keys(payload).length) {
-    const { data, error } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("id", safeLeadId)
-      .single();
+    let query = supabase.from("leads").select("*").eq("id", safeLeadId);
+    if (safeAccountId && (await tableHasAccountColumn("leads"))) {
+      query = query.eq("account_id", safeAccountId);
+    }
+
+    const { data, error } = await query.single();
 
     if (error) throw error;
     return data;
   }
 
-  const { data, error } = await supabase
-    .from("leads")
-    .update(payload)
-    .eq("id", safeLeadId)
-    .select()
-    .single();
+  let query = supabase.from("leads").update(payload).eq("id", safeLeadId);
+  if (safeAccountId && (await tableHasAccountColumn("leads"))) {
+    query = query.eq("account_id", safeAccountId);
+  }
+
+  const { data, error } = await query.select().single();
 
   if (error) throw error;
   return data;
+}
+
+export async function deleteCrmLeadById(leadId, { accountId = null } = {}) {
+  const safeLeadId = clean(leadId);
+  const safeAccountId = clean(accountId);
+
+  if (!safeLeadId) {
+    throw new Error("deleteCrmLeadById: leadId es obligatorio");
+  }
+
+  let leadQuery = supabase
+    .from("leads")
+    .select("id, conversation_id, account_id")
+    .eq("id", safeLeadId);
+
+  if (safeAccountId && (await tableHasAccountColumn("leads"))) {
+    leadQuery = leadQuery.eq("account_id", safeAccountId);
+  }
+
+  const { data: lead, error: leadError } = await leadQuery.maybeSingle();
+  if (leadError) throw leadError;
+  if (!lead) {
+    throw new Error("Lead no encontrado");
+  }
+
+  const relatedByLead = ["analysis_results", "quotes"];
+  for (const tableName of relatedByLead) {
+    const { error } = await supabase.from(tableName).delete().eq("lead_id", safeLeadId);
+    if (error) {
+      const message = String(error.message || "").toLowerCase();
+      if (!message.includes(tableName) && !message.includes("does not exist")) {
+        throw error;
+      }
+    }
+  }
+
+  let deleteLeadQuery = supabase.from("leads").delete().eq("id", safeLeadId);
+  if (safeAccountId && (await tableHasAccountColumn("leads"))) {
+    deleteLeadQuery = deleteLeadQuery.eq("account_id", safeAccountId);
+  }
+
+  const { error: deleteLeadError } = await deleteLeadQuery;
+  if (deleteLeadError) throw deleteLeadError;
+
+  return {
+    ok: true,
+    id: safeLeadId,
+    conversation_id: clean(lead.conversation_id),
+  };
 }
 
 export async function getLatestQuoteByLeadId(leadId) {

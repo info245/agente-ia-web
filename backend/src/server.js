@@ -22,6 +22,7 @@ import {
   getCrmAnalytics,
   listWhatsAppLeadsForFollowUp,
   updateLeadCrmFields,
+  deleteCrmLeadById,
   getLatestQuoteByLeadId,
   upsertLatestQuoteForLead,
   markLatestQuoteAsSent,
@@ -3633,7 +3634,10 @@ app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
 
 async function handleCrmLeadUpdate(req, res) {
   try {
-    const updated = await updateLeadCrmFields(req.params.leadId, req.body || {});
+    const account = await resolveRequestAccount(req);
+    const updated = await updateLeadCrmFields(req.params.leadId, req.body || {}, {
+      accountId: account.id,
+    });
     res.json({ ok: true, lead: updated });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -3642,6 +3646,19 @@ async function handleCrmLeadUpdate(req, res) {
 
 app.patch("/api/crm/leads/:leadId", handleCrmLeadUpdate);
 app.post("/api/crm/leads/:leadId", handleCrmLeadUpdate);
+app.delete("/api/crm/leads/:leadId", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const deleted = await deleteCrmLeadById(req.params.leadId, {
+      accountId: account.id,
+    });
+    res.json({ ok: true, deleted });
+  } catch (error) {
+    const message = String(error.message || "");
+    const status = message.toLowerCase().includes("no encontrado") ? 404 : 500;
+    res.status(status).json({ ok: false, error: error.message });
+  }
+});
 
 app.get("/api/crm/leads/:leadId/quote", async (req, res) => {
   try {
