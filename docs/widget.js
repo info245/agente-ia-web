@@ -361,13 +361,27 @@
     el.status.style.color = isError ? "#b91c1c" : "";
   }
 
+  function fixMojibake(text) {
+    return String(text || "")
+      .replace(/Ã¡/g, "á")
+      .replace(/Ã©/g, "é")
+      .replace(/Ã­/g, "í")
+      .replace(/Ã³/g, "ó")
+      .replace(/Ãº/g, "ú")
+      .replace(/Ã±/g, "ñ")
+      .replace(/Â¿/g, "¿")
+      .replace(/Â¡/g, "¡")
+      .replace(/â†»/g, "↻")
+      .replace(/âœ•/g, "✕");
+  }
+
   function append(role, text) {
     const row = document.createElement("div");
     row.className = `row ${role}`;
 
     const bubble = document.createElement("div");
     bubble.className = "bubble-msg";
-    bubble.textContent = text;
+    bubble.textContent = fixMojibake(text);
 
     row.appendChild(bubble);
     el.messages.appendChild(row);

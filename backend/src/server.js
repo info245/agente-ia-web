@@ -847,7 +847,7 @@ function buildWhatsAppHandoff({
   ).replace(/\D/g, "");
   if (!publicNumber || !conversationId || !handoffCode) return null;
 
-  const intro = "Hola, vengo desde el chat web y quiero seguir por aquÃ­.";
+  const intro = "Hola, vengo desde el chat web y quiero seguir por ahí.";
   const text = `${intro}\nRef: ${handoffCode}`;
   const whatsappUrl = `https://wa.me/${publicNumber}?text=${encodeURIComponent(text)}`;
 
@@ -894,7 +894,8 @@ function shouldOfferWhatsAppTransition({
   if (!hasName(lead)) return false;
 
   const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
-  return preferredChannel.includes("whatsapp");
+  if (!preferredChannel.includes("whatsapp")) return false;
+  return hasPhone(lead);
 }
 
 function cleanReplyForWebHandoff(reply, { handoffAvailable = false, channel = "web" } = {}) {
@@ -903,10 +904,10 @@ function cleanReplyForWebHandoff(reply, { handoffAvailable = false, channel = "w
 
   if (channel === "web" && handoffAvailable) {
     text = text
-      .replace(/te escribir[eÃ©]\s+por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahÃ­ con el contexto de este anÃ¡lisis.")
-      .replace(/te contactar[eÃ©]\s+por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahÃ­ con el contexto de este anÃ¡lisis.")
-      .replace(/te enviar[eÃ©]\s+[^.]*por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahÃ­ con el contexto de este anÃ¡lisis.")
-      .replace(/mientras tanto,\s*preparo la propuesta y te la envÃ­o pronto\./gi, "Cuando me escribas por WhatsApp, continÃºo desde este punto sin empezar de cero.");
+      .replace(/te escribir[eÃ©]\s+por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.")
+      .replace(/te contactar[eÃ©]\s+por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.")
+      .replace(/te enviar[eÃ©]\s+[^.]*por whatsapp[^.]*\./gi, "Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.")
+      .replace(/mientras tanto,\s*preparo la propuesta y te la envÃ­o pronto\./gi, "Cuando me escribas por WhatsApp, continúo desde este punto sin empezar de cero.");
   }
 
   return text;
@@ -968,7 +969,7 @@ function buildValueThenAskNameReply(analysisSnapshot, lead = null) {
       : `Perfecto. Con lo que ya he visto, sÃ­ tiene sentido profundizar un poco mÃ¡s antes de plantearte el siguiente paso.`;
 
   if (hasContact(lead) || norm(lead?.preferred_contact_channel)) {
-    return `${valueLine}\n\nSi te va bien, sigo contigo desde aquÃ­ y te preparo el siguiente paso sin pedirte de nuevo los datos bÃ¡sicos.`;
+    return `${valueLine}\n\nSi te va bien, sigo contigo desde aquí y te preparo el siguiente paso sin pedirte de nuevo los datos básicos.`;
   }
 
   return `${valueLine}\n\nAntes de seguir, ¿cómo te llamas?`;
@@ -1326,7 +1327,7 @@ function buildStructuredCloseReply({
   }
 
   if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
-    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y te sigo por ahÃ­ con el contexto de este anÃ¡lisis.\n\nCuando me escribas por WhatsApp, continÃºo desde este punto sin empezar de cero.`;
+    return `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.\n\nCuando me escribas por WhatsApp, continúo desde este punto sin empezar de cero.`;
   }
 
   if (preferredChannel.includes("email") && lead?.email) {
