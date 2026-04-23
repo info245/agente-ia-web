@@ -138,6 +138,9 @@
       lead_budget: lead?.budget_range || "",
       lead_urgency: lead?.urgency || "",
       lead_score: lead?.lead_score || 0,
+      preferred_contact_channel: lead?.preferred_contact_channel || "",
+      interest_service: lead?.interest_service || "",
+      budget_range: lead?.budget_range || "",
     };
 
     window.dataLayer.push(payload);
@@ -174,6 +177,9 @@
       lead_budget: lead?.budget_range || "",
       lead_urgency: lead?.urgency || "",
       lead_score: lead?.lead_score || 0,
+      preferred_contact_channel: lead?.preferred_contact_channel || "",
+      interest_service: lead?.interest_service || "",
+      budget_range: lead?.budget_range || "",
       chat_completed: true,
     };
 
