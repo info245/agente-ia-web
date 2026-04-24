@@ -27,6 +27,148 @@ const MESSAGE_TEMPLATE_ORDER = [
   "recovery_email",
 ];
 const AUTOMATION_FLOW_ORDER = ["lead_recovery", "quote_followup"];
+const SECTOR_PRESETS = {
+  clinic: {
+    label: "Clinica",
+    kicker: "Captacion local",
+    summary: "Pensado para clinicas y centros que necesitan convertir visitas en citas o valoraciones.",
+    tone: "cercano, profesional y orientado a resolver dudas con claridad y confianza",
+    prompt_additions:
+      "Prioriza confianza, autoridad y facilidad de reserva. Haz preguntas simples, evita tecnicismos y conduce la conversacion hacia valoracion, cita o llamada.",
+    website_focus:
+      "tratamientos, especialidades, zonas, testimonios, casos, contacto, llamada a la accion y reserva",
+    internal_notes:
+      "Trabajar objeciones habituales sobre precio, confianza, tiempos y resultados esperados. Dar mucha importancia a testimonios y autoridad.",
+    services: {
+      SEO: {
+        min_monthly_fee: "350 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "SEO local y contenidos orientados a captar pacientes y mejorar visibilidad en buscadores.",
+        notes: "Enfatizar Google Maps, reseñas, confianza y captacion por especialidad.",
+      },
+      "Google Ads": {
+        min_monthly_fee: "300 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "Campañas para captar solicitudes de cita y primeras valoraciones.",
+        notes: "Hablar de volumen de leads, zonas y especialidades con mejor retorno.",
+      },
+      "Diseño Web": {
+        min_monthly_fee: "",
+        min_project_fee: "1200 € + IVA",
+        url: "",
+        description: "Web enfocada a generar confianza y facilitar el paso a cita o contacto.",
+        notes: "Priorizar prueba social, llamadas a la accion y estructura clara por tratamiento.",
+      },
+    },
+  },
+  ecommerce: {
+    label: "Ecommerce",
+    kicker: "Venta online",
+    summary: "Base pensada para tiendas online que quieren vender mas con mejor conversion y adquisicion.",
+    tone: "directo, comercial y orientado a conversion, rentabilidad y escalado",
+    prompt_additions:
+      "Prioriza catalogo, conversion, ticket medio y adquisicion. Si el usuario vende online, habla de embudo, margen y retorno sin perder claridad.",
+    website_focus:
+      "catalogo, categorias, producto, pasarela de pago, envios, confianza, captacion y conversion",
+    internal_notes:
+      "Tener en cuenta Shopify, WooCommerce, feed de productos, campañas de shopping, emailing y CRO.",
+    services: {
+      "Google Ads": {
+        min_monthly_fee: "400 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "Campañas de shopping, search y performance orientadas a ventas online.",
+        notes: "Hablar de ROAS, feed, catalogo y escalado por categoria o margen.",
+      },
+      SEO: {
+        min_monthly_fee: "450 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "SEO para categorias, producto y estructura de ecommerce orientada a captacion organica.",
+        notes: "Relevante para fichas de producto, categorias, enlazado interno y contenidos.",
+      },
+      "Diseño Web": {
+        min_monthly_fee: "",
+        min_project_fee: "1800 € + IVA",
+        url: "",
+        description: "Diseño o mejora de ecommerce con foco en conversion y experiencia de compra.",
+        notes: "Mencionar checkout, confianza, pasarela de pago, email marketing y automatizaciones.",
+      },
+    },
+  },
+  agency: {
+    label: "Agencia",
+    kicker: "Leads B2B",
+    summary: "Pensado para agencias y negocios de servicios que venden proyectos o retainers.",
+    tone: "consultivo, estrategico y orientado a detectar oportunidades de captacion y posicionamiento",
+    prompt_additions:
+      "Si el negocio es una agencia o servicio B2B, prioriza captacion de leads, posicionamiento de expertise, propuesta de valor y canal mas rentable.",
+    website_focus:
+      "casos de exito, servicios, propuesta de valor, equipo, captacion de leads y diferenciacion",
+    internal_notes:
+      "Importan mucho autoridad, casos reales, especializacion, formularios cortos y continuidad comercial por WhatsApp o llamada.",
+    services: {
+      SEO: {
+        min_monthly_fee: "400 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "SEO para captar demanda organica y construir autoridad por especialidad.",
+        notes: "Enfatizar contenidos, casos y landings por servicio.",
+      },
+      "Google Ads": {
+        min_monthly_fee: "350 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "Captacion de leads mediante search y campañas orientadas a formularios o llamadas.",
+        notes: "Hablar de calidad del lead, volumen y control de coste por oportunidad.",
+      },
+      "Consultoría Digital": {
+        min_monthly_fee: "",
+        min_project_fee: "600 € + IVA",
+        url: "",
+        description: "Diagnostico comercial y plan de crecimiento para ordenar canales y conversion.",
+        notes: "Muy util cuando hay dudas de canal, propuesta o priorizacion.",
+      },
+    },
+  },
+  legal: {
+    label: "Despacho",
+    kicker: "Confianza y autoridad",
+    summary: "Base comercial para despachos y profesionales donde la confianza y la claridad pesan mucho.",
+    tone: "serio, claro y orientado a generar confianza sin sonar frio ni excesivamente tecnico",
+    prompt_additions:
+      "En negocios legales o profesionales, prioriza claridad, autoridad, especializacion y facilidad de contacto. Evita prometer resultados de forma agresiva.",
+    website_focus:
+      "especialidades, casos, confianza, equipo, contacto, zonas y captacion de consultas",
+    internal_notes:
+      "Dar mucha importancia a reputacion, especializacion, tono profesional y seguimiento humano rapido.",
+    services: {
+      SEO: {
+        min_monthly_fee: "400 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "SEO local y de especialidad para generar consultas cualificadas.",
+        notes: "Trabajar visibilidad por ciudad y por vertical juridica o profesional.",
+      },
+      "Google Ads": {
+        min_monthly_fee: "350 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "Campañas para captar primeras consultas y llamadas en servicios de alta intencion.",
+        notes: "Importa mucho el filtrado de lead y el control de calidad de la consulta.",
+      },
+      "Diseño Web": {
+        min_monthly_fee: "",
+        min_project_fee: "1000 € + IVA",
+        url: "",
+        description: "Web sobria y clara orientada a confianza, autoridad y conversion a consulta.",
+        notes: "Reforzar especialidades, equipo, testimonios y canales de contacto visibles.",
+      },
+    },
+  },
+};
 
 const el = {
   crmPage: document.querySelector(".crm-page"),
@@ -136,6 +278,8 @@ const el = {
   configAddServiceBtn: document.getElementById("configAddServiceBtnKnowledge"),
   configSuggestServicesBtn: document.getElementById("configSuggestServicesBtn"),
   configSuggestServicesStatus: document.getElementById("configSuggestServicesStatus"),
+  configSectorPresetList: document.getElementById("configSectorPresetList"),
+  configSectorPresetStatus: document.getElementById("configSectorPresetStatus"),
   configKnowledgeWebsiteUrls: document.getElementById("configKnowledgeWebsiteUrls"),
   configKnowledgeWebsiteFocus: document.getElementById("configKnowledgeWebsiteFocus"),
   configKnowledgeWebsiteCount: document.getElementById("configKnowledgeWebsiteCount"),
@@ -1254,6 +1398,120 @@ function collectKnowledgeSources() {
   };
 }
 
+function buildPresetFeatureList(preset = {}) {
+  const serviceNames = Object.keys(preset.services || {});
+  return [
+    preset.kicker || "",
+    ...serviceNames.slice(0, 3),
+  ].filter(Boolean);
+}
+
+function renderSectorPresets() {
+  if (!el.configSectorPresetList) return;
+
+  el.configSectorPresetList.innerHTML = Object.entries(SECTOR_PRESETS)
+    .map(([key, preset]) => {
+      const featureList = buildPresetFeatureList(preset)
+        .map((item) => `<span class="sector-preset-chip">${escapeHtml(item)}</span>`)
+        .join("");
+
+      return `
+        <article class="sector-preset-card">
+          <div class="sector-preset-head">
+            <div>
+              <span>${escapeHtml(preset.label || "")}</span>
+              <strong>${escapeHtml(preset.summary || "")}</strong>
+            </div>
+            <em>${Object.keys(preset.services || {}).length} servicios</em>
+          </div>
+          <div class="sector-preset-chips">${featureList}</div>
+          <button type="button" class="crm-secondary-btn" data-sector-preset="${escapeHtml(key)}">
+            Aplicar preset
+          </button>
+        </article>
+      `;
+    })
+    .join("");
+
+  el.configSectorPresetList.querySelectorAll("[data-sector-preset]").forEach((button) => {
+    button.addEventListener("click", () => applySectorPreset(button.getAttribute("data-sector-preset")));
+  });
+}
+
+function mergePresetServices(currentServices = {}, presetServices = {}) {
+  const merged = { ...(presetServices || {}) };
+  for (const [name, facts] of Object.entries(currentServices || {})) {
+    merged[name] = {
+      ...(merged[name] || {}),
+      ...(facts || {}),
+    };
+  }
+  return merged;
+}
+
+function mergePresetText(currentValue = "", presetValue = "", { append = false } = {}) {
+  const current = String(currentValue || "").trim();
+  const preset = String(presetValue || "").trim();
+  if (!preset) return current;
+  if (!current) return preset;
+  if (current.toLowerCase().includes(preset.toLowerCase())) return current;
+  return append ? `${current}\n\n${preset}` : preset;
+}
+
+function applySectorPreset(presetKey) {
+  const preset = SECTOR_PRESETS[presetKey];
+  if (!preset) return;
+
+  const payload = buildConfigPayload();
+  const nextConfig = {
+    ...(state.appConfig || {}),
+    ...payload,
+    services: mergePresetServices(payload.services, preset.services || {}),
+    agent: {
+      ...(state.appConfig?.agent || {}),
+      ...payload.agent,
+      tone: mergePresetText(payload.agent?.tone, preset.tone),
+      prompt_additions: mergePresetText(payload.agent?.prompt_additions, preset.prompt_additions, {
+        append: true,
+      }),
+    },
+    knowledge_sources: {
+      ...(state.appConfig?.knowledge_sources || {}),
+      ...(payload.knowledge_sources || {}),
+      website_focus: mergePresetText(payload.knowledge_sources?.website_focus, preset.website_focus),
+      internal_notes: mergePresetText(payload.knowledge_sources?.internal_notes, preset.internal_notes, {
+        append: true,
+      }),
+    },
+  };
+
+  const suggestedTemplates = buildSuggestedTemplates(
+    nextConfig,
+    state.appConfig?.message_templates || {}
+  );
+
+  nextConfig.message_templates = {
+    ...(state.appConfig?.message_templates || {}),
+    ...Object.fromEntries(
+      Object.entries(suggestedTemplates).filter(([key]) => !key.startsWith("_"))
+    ),
+  };
+
+  nextConfig.automation_flows = buildSuggestedAutomations(
+    nextConfig,
+    state.appConfig?.automation_flows || {},
+    suggestedTemplates
+  );
+
+  state.appConfig = nextConfig;
+  renderConfig();
+  setStatus(
+    el.configSectorPresetStatus,
+    `Preset ${preset.label} aplicado. Ya puedes retocar servicios, mensajes y automatizaciones antes de guardar.`,
+    "ok"
+  );
+}
+
 function buildConfigPayload() {
   const services = collectServiceConfig();
   const knowledge_sources = collectKnowledgeSources();
@@ -2005,6 +2263,7 @@ function renderConfig() {
     config?.agent?.handoff_target_channel || "whatsapp";
   el.configPromptAdditions.value = config?.agent?.prompt_additions || "";
   renderKnowledgeSources(config?.knowledge_sources || {});
+  renderSectorPresets();
   el.configWhatsappProvider.value =
     config?.integrations?.whatsapp?.provider || "meta_cloud";
   el.configWhatsappStatusLabel.value =

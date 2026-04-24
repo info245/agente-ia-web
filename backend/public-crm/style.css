@@ -1340,6 +1340,88 @@ textarea {
   margin-bottom: 18px;
 }
 
+.sector-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.sector-preset-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(191, 208, 234, 0.84);
+  background:
+    linear-gradient(145deg, rgba(109, 65, 243, 0.08), rgba(78, 143, 255, 0.06)),
+    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,249,255,0.94));
+  box-shadow:
+    0 12px 28px rgba(85, 112, 166, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.82);
+}
+
+.sector-preset-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sector-preset-head span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.sector-preset-head strong {
+  display: block;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.sector-preset-head em {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.74);
+  border: 1px solid rgba(191, 208, 234, 0.8);
+  color: var(--accent-dark);
+  font-style: normal;
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sector-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sector-preset-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.76);
+  border: 1px solid rgba(191, 208, 234, 0.8);
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.sector-preset-card .crm-secondary-btn {
+  justify-self: flex-start;
+}
+
 .knowledge-block-head {
   display: flex;
   align-items: flex-start;
@@ -3072,7 +3154,8 @@ textarea {
   .knowledge-intro-grid,
   .knowledge-advanced-grid,
   .knowledge-upload-row,
-  .knowledge-priority-card {
+  .knowledge-priority-card,
+  .sector-preset-grid {
     grid-template-columns: 1fr;
   }
 
