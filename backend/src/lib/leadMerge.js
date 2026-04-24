@@ -113,7 +113,7 @@ function shouldAcceptNameCandidate(currentLead, extractedLead, lastUserMessage) 
   if (userExplicitlyCorrectedName(lastUserMessage)) return true;
 
   const currentStep = normalizeText(currentLead?.current_step);
-  return currentStep === "ask_name";
+  return currentStep === "ask_name" || currentStep === "close_ask_name";
 }
 
 function chooseField(currentValue, newValue, validator) {

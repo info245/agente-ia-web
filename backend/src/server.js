@@ -700,12 +700,102 @@ function getCurrentStep(lead) {
   return "ready_for_ai";
 }
 
+const CLOSE_FLOW_STEPS = new Set([
+  "close_ask_name",
+  "close_ask_channel",
+  "close_ask_phone",
+  "close_ask_email",
+  "close_ready",
+]);
+
+function isCloseFlowStep(step) {
+  return CLOSE_FLOW_STEPS.has(String(step || "").trim());
+}
+
+function getExplicitPreferredChannel(text = "") {
+  if (prefersWhatsAppChannel(text)) return "whatsapp";
+  if (prefersEmailChannel(text)) return "email";
+  return null;
+}
+
+function shouldUseCommercialCloseFlow({
+  lead = {},
+  text = "",
+  channel = "web",
+  analysisSnapshot = null,
+} = {}) {
+  if (channel !== "web") return false;
+  if (isCloseFlowStep(lead?.current_step)) return true;
+  if (isGreeting(text)) return false;
+
+  const explicitChannel = getExplicitPreferredChannel(text);
+  const hasValueDelivered = hasAnalysisSnapshot(analysisSnapshot);
+  const hasCommercialContext =
+    hasService(lead) || hasMainGoal(lead) || hasBusinessActivity(lead);
+  const hasExplicitCloseIntent =
+    detectStrongCommercialIntent(text) ||
+    !!explicitChannel ||
+    hasContact(lead);
+
+  if (hasExplicitCloseIntent) return true;
+  if (isShortAffirmativeResponse(text) && (hasValueDelivered || hasCommercialContext)) {
+    return true;
+  }
+
+  return false;
+}
+
+function getCommercialCloseStep({
+  lead = {},
+  text = "",
+  channel = "web",
+  analysisSnapshot = null,
+} = {}) {
+  if (
+    !shouldUseCommercialCloseFlow({
+      lead,
+      text,
+      channel,
+      analysisSnapshot,
+    })
+  ) {
+    return null;
+  }
+
+  if (!hasName(lead)) return "close_ask_name";
+
+  const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
+  if (!preferredChannel) return "close_ask_channel";
+  if (preferredChannel.includes("whatsapp") && !hasPhone(lead)) {
+    return "close_ask_phone";
+  }
+  if (preferredChannel.includes("email") && !lead?.email) {
+    return "close_ask_email";
+  }
+
+  return "close_ready";
+}
+
 function getQuestionForStep(step, lead) {
   const safeName = getSafeLeadName(lead);
 
   switch (step) {
     case "ask_name":
       return "Antes de seguir, ¿cómo te llamas?";
+    case "close_ask_name":
+      return "Antes de seguir, ¿cómo te llamas?";
+    case "close_ask_channel":
+      return safeName
+        ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
+        : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
+    case "close_ask_phone":
+      return safeName
+        ? `Perfecto, ${safeName}. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.`
+        : "Perfecto. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.";
+    case "close_ask_email":
+      return safeName
+        ? `Perfecto, ${safeName}. Compárteme tu email y te lo preparo por ahí.`
+        : "Perfecto. Compárteme tu email y te lo preparo por ahí.";
     case "ask_business_type":
       return safeName
         ? `Encantado, ${safeName}. ¿Tienes una empresa, eres autónomo o es un proyecto que estás empezando?`
@@ -729,8 +819,34 @@ function getQuestionForStep(step, lead) {
   }
 }
 
+function fixCommonMojibakeText(value = "") {
+  return String(value || "")
+    .replace(/Â¿/g, "¿")
+    .replace(/Â¡/g, "¡")
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã©/g, "é")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã±/g, "ñ")
+    .replace(/Ã/g, "Á")
+    .replace(/Ã‰/g, "É")
+    .replace(/Ã/g, "Í")
+    .replace(/Ã“/g, "Ó")
+    .replace(/Ãš/g, "Ú")
+    .replace(/Ã‘/g, "Ñ")
+    .replace(/mÃ¡s/g, "más")
+    .replace(/sÃ­/g, "sí")
+    .replace(/anÃ¡lisis/g, "análisis")
+    .replace(/cÃ³mo/g, "cómo")
+    .replace(/serÃ­a/g, "sería")
+    .replace(/aquÃ­/g, "aquí")
+    .replace(/ahÃ­/g, "ahí")
+    .replace(/nÃºmero/g, "número");
+}
+
 function cleanReply(reply) {
-  let text = String(reply || "").trim();
+  let text = fixCommonMojibakeText(String(reply || "").trim());
   text = text.replace(/\n{3,}/g, "\n\n");
 
   const paragraphs = text
@@ -1330,48 +1446,53 @@ function buildStructuredCloseReply({
   if (channel !== "web") return null;
   if (isGreeting(text)) return null;
 
-  const wantsWhatsapp = prefersWhatsAppChannel(text);
-  const wantsEmail = prefersEmailChannel(text);
   const safeName = getSafeLeadName(lead);
-  const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
   const hasValueDelivered = hasAnalysisSnapshot(analysisSnapshot);
   const hasCommercialContext =
     hasService(lead) || hasMainGoal(lead) || hasBusinessActivity(lead);
-  const hasExplicitCloseIntent =
-    detectStrongCommercialIntent(text) || wantsWhatsapp || wantsEmail;
-  const shouldStartCloseSequence =
-    hasExplicitCloseIntent || !!preferredChannel || hasContact(lead);
-  const readyToAdvance =
-    shouldStartCloseSequence && (hasExplicitCloseIntent || (hasValueDelivered && allowCloseAdvance));
+  const closeStep = getCommercialCloseStep({
+    lead,
+    text,
+    channel,
+    analysisSnapshot,
+  });
 
   if (
     !safeName &&
-    !hasExplicitCloseIntent &&
+    !detectStrongCommercialIntent(text) &&
     isShortAffirmativeResponse(text) &&
     (hasValueDelivered || hasCommercialContext)
   ) {
     return buildValueThenAskNameReply(analysisSnapshot, lead);
   }
 
-  if (!readyToAdvance) {
+  if (!closeStep) {
     return null;
   }
 
-  if (!safeName) {
+  if (closeStep === "close_ask_name") {
     return "Antes de seguir, ¿cómo te llamas?";
   }
 
-  if (!preferredChannel) {
-    return `Perfecto, ${safeName}. ¿Prefieres que sigamos por email o por WhatsApp?`;
+  if (closeStep === "close_ask_channel") {
+    return safeName
+      ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
+      : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
   }
 
-  if (preferredChannel.includes("whatsapp") && !hasPhone(lead)) {
-    return `Perfecto, ${safeName}. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.`;
+  if (closeStep === "close_ask_phone") {
+    return safeName
+      ? `Perfecto, ${safeName}. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.`
+      : "Perfecto. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.";
   }
 
-  if (preferredChannel.includes("email") && !lead?.email) {
-    return `Perfecto, ${safeName}. Compárteme tu email y te lo preparo por ahí.`;
+  if (closeStep === "close_ask_email") {
+    return safeName
+      ? `Perfecto, ${safeName}. Compárteme tu email y te lo preparo por ahí.`
+      : "Perfecto. Compárteme tu email y te lo preparo por ahí.";
   }
+
+  const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
 
   if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
     return hasAnalysisSnapshot(analysisSnapshot)
@@ -1486,6 +1607,13 @@ function getConversationPhase({ mode, lead, analysisSnapshot, text }) {
 }
 
 function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
+  const closeStep = isCloseFlowStep(lead?.current_step)
+    ? lead.current_step
+    : null;
+  if (closeStep && closeStep !== "close_ready") {
+    return getQuestionForStep(closeStep, lead);
+  }
+
   const sequence = lateOnly
     ? ["name", "preferred_channel", "email_or_phone"]
     : ["name", "business_type", "business_activity", "interest_service", "main_goal", "budget_range", "urgency", "email_or_phone"];
@@ -2366,8 +2494,18 @@ function getWhatsAppTextFromMessage(message) {
   return null;
 }
 
-function applyFlowPatch(lead, text) {
-  const step = lead?.current_step || getCurrentStep(lead || {});
+function applyFlowPatch(
+  lead,
+  text,
+  { channel = "web", analysisSnapshot = null } = {}
+) {
+  const closeStep = getCommercialCloseStep({
+    lead: lead || {},
+    text,
+    channel,
+    analysisSnapshot,
+  });
+  const step = closeStep || lead?.current_step || getCurrentStep(lead || {});
   const patch = {};
 
   const detectedEmail = detectEmail(text);
@@ -2377,14 +2515,12 @@ function applyFlowPatch(lead, text) {
   const detectedBusinessType = detectBusinessType(text);
   const detectedBusinessActivity = detectBusinessActivity(text);
   const detectedGoal = detectMainGoal(text);
-  const prefersWhatsapp = prefersWhatsAppChannel(text);
-  const prefersEmail = prefersEmailChannel(text);
+  const explicitPreferredChannel = getExplicitPreferredChannel(text);
 
   if (detectedEmail && !lead?.email) patch.email = detectedEmail;
   if (detectedPhone && !lead?.phone) patch.phone = detectedPhone;
   if (detectedService && !lead?.interest_service) patch.interest_service = detectedService;
-  if (prefersWhatsapp) patch.preferred_contact_channel = "whatsapp";
-  if (!prefersWhatsapp && prefersEmail) patch.preferred_contact_channel = "email";
+  if (explicitPreferredChannel) patch.preferred_contact_channel = explicitPreferredChannel;
   if (detectedBusinessType && !lead?.business_type) patch.business_type = detectedBusinessType;
   if (detectedBusinessActivity && !lead?.business_activity) {
     patch.business_activity = detectedBusinessActivity;
@@ -2426,8 +2562,33 @@ function applyFlowPatch(lead, text) {
 
   switch (step) {
     case "ask_name":
+    case "close_ask_name":
       if (isLikelyValidName(text)) {
         patch.name = norm(text);
+      }
+      break;
+
+    case "close_ask_channel":
+      if (explicitPreferredChannel) {
+        patch.preferred_contact_channel = explicitPreferredChannel;
+      }
+      break;
+
+    case "close_ask_phone":
+      if (detectedPhone) {
+        patch.phone = detectedPhone;
+        patch.preferred_contact_channel = "whatsapp";
+      } else if (explicitPreferredChannel === "email") {
+        patch.preferred_contact_channel = "email";
+      }
+      break;
+
+    case "close_ask_email":
+      if (detectedEmail) {
+        patch.email = detectedEmail;
+        patch.preferred_contact_channel = "email";
+      } else if (explicitPreferredChannel === "whatsapp") {
+        patch.preferred_contact_channel = "whatsapp";
       }
       break;
 
@@ -2513,12 +2674,21 @@ function applyFlowPatch(lead, text) {
   }
 
   const merged = { ...(lead || {}), ...patch };
-  const nextStep = getCurrentStep(merged);
+  const nextStep =
+    getCommercialCloseStep({
+      lead: merged,
+      text,
+      channel,
+      analysisSnapshot,
+    }) || getCurrentStep(merged);
 
   return {
     patch,
     nextStep,
-    nextQuestion: nextStep === "ready_for_ai" ? null : getQuestionForStep(nextStep, merged),
+    nextQuestion:
+      nextStep === "ready_for_ai" || nextStep === "close_ready"
+        ? null
+        : getQuestionForStep(nextStep, merged),
   };
 }
 
@@ -2814,7 +2984,10 @@ async function processIncomingMessage({
     analysisSnapshot = relatedWebAnalysis.payload;
   }
 
-  const flow = applyFlowPatch(leadAfter || {}, userText);
+  const flow = applyFlowPatch(leadAfter || {}, userText, {
+    channel: channel || "web",
+    analysisSnapshot,
+  });
 
   if (Object.keys(flow.patch || {}).length > 0) {
     const updatedLead = {
@@ -2832,18 +3005,12 @@ async function processIncomingMessage({
 
     leadAfter = await loadLeadForConversation();
   } else {
-    const currentStep = getCurrentStep(leadAfter || {});
-    const currentQuestion =
-      currentStep === "ready_for_ai"
-        ? null
-        : getQuestionForStep(currentStep, leadAfter || {});
-
     await upsertLeadFromConversation({
       ...leadAfter,
       account_id: scopedAccountId,
       conversation_id: currentConversationId,
-      current_step: currentStep,
-      last_question: currentQuestion,
+      current_step: flow.nextStep,
+      last_question: flow.nextQuestion,
     });
 
     leadAfter = await loadLeadForConversation();
@@ -3488,15 +3655,86 @@ app.get("/api/admin/overview", requireCrmAuth("super_admin"), async (req, res) =
           .sort()
           .slice(-1)[0] || null;
 
+        const servicesCount = Object.keys(config?.services || {}).length;
+        const websiteUrlsCount = Array.isArray(config?.knowledge_sources?.website_urls)
+          ? config.knowledge_sources.website_urls.filter(Boolean).length
+          : 0;
+        const hasSpreadsheetSource =
+          Boolean(String(config?.knowledge_sources?.spreadsheet_url || "").trim()) ||
+          Boolean(String(config?.knowledge_sources?.spreadsheet_data || "").trim());
+        const hasInternalNotes = Boolean(
+          String(config?.knowledge_sources?.internal_notes || "").trim()
+        );
+        const hasBrandIdentity =
+          Boolean(String(config?.brand?.name || "").trim()) &&
+          (Boolean(String(config?.brand?.website_url || "").trim()) ||
+            Boolean(String(config?.brand?.logo_url || "").trim()));
+        const hasDeliveryChannels =
+          Boolean(String(config?.contact?.public_whatsapp_number || "").trim()) ||
+          Boolean(String(config?.contact?.support_email || "").trim()) ||
+          Boolean(String(config?.integrations?.whatsapp?.phone_number_id || "").trim()) ||
+          Boolean(String(config?.integrations?.email?.from_email || "").trim()) ||
+          Boolean(String(config?.integrations?.lead_forms?.webhook_url || "").trim()) ||
+          Boolean(String(config?.integrations?.automations?.workspace_url || "").trim());
+
+        const setupChecks = [
+          {
+            key: "brand",
+            label: "Marca",
+            ready: hasBrandIdentity,
+            hint: hasBrandIdentity ? "Lista" : "Falta marca base",
+          },
+          {
+            key: "offer",
+            label: "Oferta",
+            ready: servicesCount > 0,
+            hint: servicesCount > 0 ? `${servicesCount} servicios` : "Sin servicios",
+          },
+          {
+            key: "context",
+            label: "Contexto",
+            ready: websiteUrlsCount > 0 || hasSpreadsheetSource || hasInternalNotes,
+            hint:
+              websiteUrlsCount > 0 || hasSpreadsheetSource || hasInternalNotes
+                ? "Fuentes cargadas"
+                : "Sin fuentes",
+          },
+          {
+            key: "delivery",
+            label: "Entrega",
+            ready: hasDeliveryChannels,
+            hint: hasDeliveryChannels ? "Canales listos" : "Falta canal",
+          },
+        ];
+
+        const setupReadyCount = setupChecks.filter((item) => item.ready).length;
+        const nextSetupStep =
+          setupChecks.find((item) => !item.ready)?.label || "Listo para publicar";
+        const setupStatus =
+          setupReadyCount === setupChecks.length
+            ? "ready"
+            : setupReadyCount >= 2
+              ? "in_progress"
+              : "starting";
+
         return {
           ...account,
           brand_name: config?.brand?.name || account.name,
           brand_logo_url: config?.brand?.logo_url || "",
           primary_color: config?.brand?.primary_color || "#6d41f3",
+          product_mode: config?.product?.mode || "full_crm",
           totals: {
             leads: leads.length,
             quotes_sent: quotesSent,
             quotes_accepted: quotesAccepted,
+          },
+          setup_health: {
+            status: setupStatus,
+            progress: `${setupReadyCount}/${setupChecks.length}`,
+            ready_count: setupReadyCount,
+            total_count: setupChecks.length,
+            next_step: nextSetupStep,
+            checks: setupChecks,
           },
           last_activity_at: lastLeadAt,
         };

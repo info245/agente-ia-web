@@ -378,7 +378,7 @@ function extractStandaloneName(text = "") {
 
 function shouldAcceptStandaloneName(existingLead = null, text = "") {
   const currentStep = normalizeText(existingLead?.current_step || "");
-  if (currentStep === "ask_name") return true;
+  if (currentStep === "ask_name" || currentStep === "close_ask_name") return true;
 
   const normalized = normalizeText(text);
   if (
@@ -575,8 +575,6 @@ function extractPreferredContactChannel({ text = "", email, phone }) {
     return "email";
   }
 
-  if (email) return "email";
-  if (phone) return "whatsapp";
   return null;
 }
 
