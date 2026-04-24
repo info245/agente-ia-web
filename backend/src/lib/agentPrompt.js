@@ -1,4 +1,5 @@
 // backend/src/lib/agentPrompt.js
+import { buildKnowledgeContext } from "./websiteFacts.js";
 
 export function getAgentSystemPrompt(appConfig = null) {
   const brandName = String(appConfig?.brand?.name || "TMedia Global").trim();
@@ -10,6 +11,7 @@ export function getAgentSystemPrompt(appConfig = null) {
       "profesional, cercano y orientado a diagnosticar antes de vender"
   ).trim();
   const promptAdditions = String(appConfig?.agent?.prompt_additions || "").trim();
+  const knowledgeContext = buildKnowledgeContext(appConfig);
 
   return `
 Eres el asistente comercial de ${brandName} (${websiteUrl}).
@@ -43,6 +45,7 @@ FORMATO:
 - Maximo 2 parrafos breves y una sola pregunta o siguiente paso.
 - Prioriza: ayudar -> diagnosticar -> afinar interes -> pedir datos cuando tenga sentido.
 
+${knowledgeContext ? `CONTEXTO COMERCIAL Y DE CONOCIMIENTO\n${knowledgeContext}\n` : ""}
 ${promptAdditions ? `AJUSTES EXTRA DE LA MARCA:\n${promptAdditions}` : ""}
 `.trim();
 }

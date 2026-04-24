@@ -53,7 +53,7 @@ import {
 import { uploadBrandLogo } from "./lib/storageStore.js";
 
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
-import { getServiceFacts } from "./lib/websiteFacts.js";
+import { getServiceFacts, getWebsiteFacts } from "./lib/websiteFacts.js";
 import {
   sendLeadEmail,
   sendClientConfirmationEmail,
@@ -1986,10 +1986,7 @@ function inferBrandNameFromSnapshot(snapshot = {}) {
 }
 
 function inferServicesFromSnapshot(snapshot = {}, appConfig = null) {
-  const defaultServices =
-    appConfig?.services && Object.keys(appConfig.services).length
-      ? appConfig.services
-      : {};
+  const defaultServices = getWebsiteFacts(appConfig).services || {};
 
   const blob = [
     snapshot?.title,
