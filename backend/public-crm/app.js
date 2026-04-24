@@ -134,6 +134,8 @@ const el = {
   configAutomationFlowsList: document.getElementById("configAutomationFlowsList"),
   configServicesList: document.getElementById("configServicesListKnowledge"),
   configAddServiceBtn: document.getElementById("configAddServiceBtnKnowledge"),
+  configSuggestServicesBtn: document.getElementById("configSuggestServicesBtn"),
+  configSuggestServicesStatus: document.getElementById("configSuggestServicesStatus"),
   configKnowledgeWebsiteUrls: document.getElementById("configKnowledgeWebsiteUrls"),
   configKnowledgeWebsiteFocus: document.getElementById("configKnowledgeWebsiteFocus"),
   configKnowledgeWebsiteCount: document.getElementById("configKnowledgeWebsiteCount"),
@@ -1123,6 +1125,89 @@ function parseMultilineUrls(value = "") {
     .filter(Boolean);
 }
 
+function splitSpreadsheetLine(raw = "") {
+  const text = String(raw || "");
+  const delimiter = text.includes("\t")
+    ? "\t"
+    : text.includes(";")
+      ? ";"
+      : ",";
+  return text.split(delimiter).map((cell) => String(cell || "").trim());
+}
+
+function parseSpreadsheetRows(raw = "") {
+  const lines = String(raw || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length < 2) return [];
+
+  const headers = splitSpreadsheetLine(lines[0]).map((header) =>
+    String(header || "").trim().toLowerCase()
+  );
+
+  return lines.slice(1).map((line) => {
+    const cells = splitSpreadsheetLine(line);
+    const row = {};
+    headers.forEach((header, index) => {
+      row[header] = String(cells[index] || "").trim();
+    });
+    return row;
+  });
+}
+
+function getSpreadsheetCell(row = {}, candidates = []) {
+  for (const candidate of candidates) {
+    if (row[candidate]) return row[candidate];
+    const fuzzy = Object.keys(row).find((key) => key.includes(candidate));
+    if (fuzzy && row[fuzzy]) return row[fuzzy];
+  }
+  return "";
+}
+
+function parseServicesFromSpreadsheet(raw = "") {
+  const rows = parseSpreadsheetRows(raw);
+  const services = {};
+
+  for (const row of rows) {
+    const name = getSpreadsheetCell(row, ["servicio", "service", "nombre", "producto"]);
+    if (!name) continue;
+
+    services[name] = {
+      url: getSpreadsheetCell(row, ["url", "landing", "pagina", "página"]),
+      min_monthly_fee: getSpreadsheetCell(row, [
+        "precio mensual",
+        "tarifa mensual",
+        "mensual",
+        "monthly fee",
+        "monthly",
+      ]),
+      min_project_fee: getSpreadsheetCell(row, [
+        "precio proyecto",
+        "tarifa proyecto",
+        "proyecto",
+        "project fee",
+        "project",
+      ]),
+      description: getSpreadsheetCell(row, [
+        "descripcion",
+        "descripción",
+        "description",
+        "detalle",
+      ]),
+      notes: getSpreadsheetCell(row, [
+        "notas",
+        "notes",
+        "observaciones",
+        "condiciones",
+      ]),
+    };
+  }
+
+  return services;
+}
+
 function updateKnowledgeUiHints() {
   const websiteCount = parseMultilineUrls(el.configKnowledgeWebsiteUrls?.value || "").length;
   if (el.configKnowledgeWebsiteCount) {
@@ -1241,6 +1326,51 @@ async function importKnowledgeSpreadsheetFile(file) {
   setStatus(
     el.configSaveStatus,
     `CSV cargado correctamente desde ${file.name}. Revisa el mapeo y guarda cuando te encaje.`,
+    "ok"
+  );
+}
+
+function mergeSuggestedServicesIntoEditor(nextServices = {}) {
+  const current = collectServiceConfig();
+  const merged = { ...nextServices };
+
+  for (const [serviceName, facts] of Object.entries(current)) {
+    merged[serviceName] = {
+      ...(merged[serviceName] || {}),
+      ...facts,
+    };
+  }
+
+  renderServiceEditor(merged);
+  return Object.keys(nextServices).length;
+}
+
+function suggestServicesFromSpreadsheet() {
+  const raw = String(el.configKnowledgeSpreadsheetData?.value || "").trim();
+  if (!raw) {
+    setStatus(
+      el.configSuggestServicesStatus,
+      "Pega primero una tabla o sube un CSV para proponer servicios.",
+      "error"
+    );
+    return;
+  }
+
+  const suggested = parseServicesFromSpreadsheet(raw);
+  const count = mergeSuggestedServicesIntoEditor(suggested);
+
+  if (!count) {
+    setStatus(
+      el.configSuggestServicesStatus,
+      "No he detectado una columna clara de servicio. Revisa la primera fila o ajusta el contenido pegado.",
+      "error"
+    );
+    return;
+  }
+
+  setStatus(
+    el.configSuggestServicesStatus,
+    `${count} servicio${count === 1 ? "" : "s"} propuesto${count === 1 ? "" : "s"} desde la tabla. Puedes editarlo todo antes de guardar.`,
     "ok"
   );
 }
@@ -2793,6 +2923,7 @@ el.configSaveBtn.addEventListener("click", saveConfig);
 el.configAddServiceBtn.addEventListener("click", () => {
   el.configServicesList.appendChild(createServiceEditorItem());
 });
+el.configSuggestServicesBtn?.addEventListener("click", suggestServicesFromSpreadsheet);
 el.configLogoFile.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;

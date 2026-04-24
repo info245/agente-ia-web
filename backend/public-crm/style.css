@@ -1348,6 +1348,13 @@ textarea {
   flex-wrap: wrap;
 }
 
+.knowledge-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .knowledge-inline-meta {
   display: inline-flex;
   align-items: center;
