@@ -153,6 +153,14 @@ export const DEFAULT_APP_CONFIG = {
       ],
     },
   },
+  knowledge_sources: {
+    website_urls: [],
+    website_focus: "",
+    spreadsheet_url: "",
+    spreadsheet_data: "",
+    spreadsheet_mapping: "",
+    internal_notes: "",
+  },
   services: {
     "Google Ads": {
       min_monthly_fee: "250 € + IVA",
@@ -261,6 +269,31 @@ function sanitizeServices(services = {}) {
   return result;
 }
 
+function sanitizeKnowledgeSources(value = {}) {
+  const defaults = DEFAULT_APP_CONFIG.knowledge_sources || {};
+  const websiteUrls = Array.isArray(value?.website_urls)
+    ? value.website_urls
+    : String(value?.website_urls || "")
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+  return {
+    website_urls: websiteUrls.map(cleanString).filter(Boolean),
+    website_focus:
+      cleanString(value?.website_focus) || cleanString(defaults.website_focus),
+    spreadsheet_url:
+      cleanString(value?.spreadsheet_url) || cleanString(defaults.spreadsheet_url),
+    spreadsheet_data:
+      cleanString(value?.spreadsheet_data) || cleanString(defaults.spreadsheet_data),
+    spreadsheet_mapping:
+      cleanString(value?.spreadsheet_mapping) ||
+      cleanString(defaults.spreadsheet_mapping),
+    internal_notes:
+      cleanString(value?.internal_notes) || cleanString(defaults.internal_notes),
+  };
+}
+
 function sanitizeValidation(value = {}, defaults = {}) {
   return {
     status: cleanString(value?.status) || cleanString(defaults?.status) || "pending",
@@ -345,6 +378,7 @@ export function sanitizeAppConfig(input = {}) {
   const services = sanitizeServices(input?.services);
   const message_templates = sanitizeMessageTemplates(input?.message_templates);
   const automation_flows = sanitizeAutomationFlows(input?.automation_flows);
+  const knowledge_sources = sanitizeKnowledgeSources(input?.knowledge_sources);
 
   return {
     brand: {
@@ -442,11 +476,12 @@ export function sanitizeAppConfig(input = {}) {
           DEFAULT_APP_CONFIG.integrations.automations.validation
         ),
       },
-    },
-    message_templates,
-    automation_flows,
-    services: Object.keys(services).length
-      ? services
-      : getDefaultAppConfig().services,
+      },
+      message_templates,
+      automation_flows,
+      knowledge_sources,
+      services: Object.keys(services).length
+        ? services
+        : getDefaultAppConfig().services,
   };
 }

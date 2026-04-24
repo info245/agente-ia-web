@@ -72,11 +72,13 @@ const el = {
   configSaveBtn: document.getElementById("configSaveBtn"),
   configSaveStatus: document.getElementById("configSaveStatus"),
   configTabGeneral: document.getElementById("configTabGeneral"),
+  configTabKnowledge: document.getElementById("configTabKnowledge"),
   configTabMessages: document.getElementById("configTabMessages"),
   configTabAutomations: document.getElementById("configTabAutomations"),
   configTabIntegrations: document.getElementById("configTabIntegrations"),
   configTabWebsite: document.getElementById("configTabWebsite"),
   configPanelGeneral: document.getElementById("configPanelGeneral"),
+  configPanelKnowledge: document.getElementById("configPanelKnowledge"),
   configPanelMessages: document.getElementById("configPanelMessages"),
   configPanelAutomations: document.getElementById("configPanelAutomations"),
   configPanelIntegrations: document.getElementById("configPanelIntegrations"),
@@ -130,8 +132,17 @@ const el = {
   configAutomationsLastValidated: document.getElementById("configAutomationsLastValidated"),
   configMessageTemplatesList: document.getElementById("configMessageTemplatesList"),
   configAutomationFlowsList: document.getElementById("configAutomationFlowsList"),
-  configServicesList: document.getElementById("configServicesList"),
-  configAddServiceBtn: document.getElementById("configAddServiceBtn"),
+  configServicesList: document.getElementById("configServicesListKnowledge"),
+  configAddServiceBtn: document.getElementById("configAddServiceBtnKnowledge"),
+  configKnowledgeWebsiteUrls: document.getElementById("configKnowledgeWebsiteUrls"),
+  configKnowledgeWebsiteFocus: document.getElementById("configKnowledgeWebsiteFocus"),
+  configKnowledgeWebsiteCount: document.getElementById("configKnowledgeWebsiteCount"),
+  configKnowledgeSpreadsheetFile: document.getElementById("configKnowledgeSpreadsheetFile"),
+  configKnowledgeSpreadsheetUrl: document.getElementById("configKnowledgeSpreadsheetUrl"),
+  configKnowledgeSpreadsheetData: document.getElementById("configKnowledgeSpreadsheetData"),
+  configKnowledgeSpreadsheetMapping: document.getElementById("configKnowledgeSpreadsheetMapping"),
+  configKnowledgeSpreadsheetHint: document.getElementById("configKnowledgeSpreadsheetHint"),
+  configKnowledgeInternalNotes: document.getElementById("configKnowledgeInternalNotes"),
   adminOverviewGrid: document.getElementById("adminOverviewGrid"),
   adminCreateName: document.getElementById("adminCreateName"),
   adminCreateSlug: document.getElementById("adminCreateSlug"),
@@ -1101,6 +1112,74 @@ function collectServiceConfig() {
   return services;
 }
 
+function parseMultilineUrls(value = "") {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function updateKnowledgeUiHints() {
+  const websiteCount = parseMultilineUrls(el.configKnowledgeWebsiteUrls?.value || "").length;
+  if (el.configKnowledgeWebsiteCount) {
+    el.configKnowledgeWebsiteCount.textContent = `${websiteCount} URL${websiteCount === 1 ? "" : "s"}`;
+  }
+
+  if (el.configKnowledgeSpreadsheetHint) {
+    const dataValue = String(el.configKnowledgeSpreadsheetData?.value || "").trim();
+    const rowCount = dataValue ? dataValue.split(/\r?\n/).filter(Boolean).length : 0;
+    const hasSheetUrl = String(el.configKnowledgeSpreadsheetUrl?.value || "").trim();
+    if (rowCount > 0) {
+      el.configKnowledgeSpreadsheetHint.textContent = `${rowCount} fila${rowCount === 1 ? "" : "s"} cargada${rowCount === 1 ? "" : "s"}`;
+    } else if (hasSheetUrl) {
+      el.configKnowledgeSpreadsheetHint.textContent = "Hoja enlazada";
+    } else {
+      el.configKnowledgeSpreadsheetHint.textContent = "Sin tabla cargada";
+    }
+  }
+}
+
+function renderKnowledgeSources(knowledgeSources = {}) {
+  el.configKnowledgeWebsiteUrls.value = (knowledgeSources?.website_urls || []).join("\n");
+  el.configKnowledgeWebsiteFocus.value = knowledgeSources?.website_focus || "";
+  el.configKnowledgeSpreadsheetUrl.value = knowledgeSources?.spreadsheet_url || "";
+  el.configKnowledgeSpreadsheetData.value = knowledgeSources?.spreadsheet_data || "";
+  el.configKnowledgeSpreadsheetMapping.value = knowledgeSources?.spreadsheet_mapping || "";
+  el.configKnowledgeInternalNotes.value = knowledgeSources?.internal_notes || "";
+  if (el.configKnowledgeSpreadsheetFile) {
+    el.configKnowledgeSpreadsheetFile.value = "";
+  }
+  updateKnowledgeUiHints();
+}
+
+function collectKnowledgeSources() {
+  return {
+    website_urls: parseMultilineUrls(el.configKnowledgeWebsiteUrls?.value || ""),
+    website_focus: String(el.configKnowledgeWebsiteFocus?.value || "").trim(),
+    spreadsheet_url: String(el.configKnowledgeSpreadsheetUrl?.value || "").trim(),
+    spreadsheet_data: String(el.configKnowledgeSpreadsheetData?.value || "").trim(),
+    spreadsheet_mapping: String(el.configKnowledgeSpreadsheetMapping?.value || "").trim(),
+    internal_notes: String(el.configKnowledgeInternalNotes?.value || "").trim(),
+  };
+}
+
+async function importKnowledgeSpreadsheetFile(file) {
+  const text = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("No se pudo leer el CSV."));
+    reader.readAsText(file, "utf-8");
+  });
+
+  el.configKnowledgeSpreadsheetData.value = text.trim();
+  updateKnowledgeUiHints();
+  setStatus(
+    el.configSaveStatus,
+    `CSV cargado correctamente desde ${file.name}. Revisa el mapeo y guarda cuando te encaje.`,
+    "ok"
+  );
+}
+
 function getTemplateOptionsMarkup(selected = "") {
   const templates = state.appConfig?.message_templates || {};
   return MESSAGE_TEMPLATE_ORDER.map((key) => {
@@ -1728,6 +1807,7 @@ function renderConfig() {
   el.configHandoffTargetChannel.value =
     config?.agent?.handoff_target_channel || "whatsapp";
   el.configPromptAdditions.value = config?.agent?.prompt_additions || "";
+  renderKnowledgeSources(config?.knowledge_sources || {});
   el.configWhatsappProvider.value =
     config?.integrations?.whatsapp?.provider || "meta_cloud";
   el.configWhatsappStatusLabel.value =
@@ -1789,16 +1869,19 @@ function renderConfig() {
 
 function setConfigTab(tabName) {
   const isGeneral = tabName === "general";
+  const isKnowledge = tabName === "knowledge";
   const isMessages = tabName === "messages";
   const isAutomations = tabName === "automations";
   const isIntegrations = tabName === "integrations";
   const isWebsite = tabName === "website";
   el.configTabGeneral.classList.toggle("is-active", isGeneral);
+  el.configTabKnowledge?.classList.toggle("is-active", isKnowledge);
   el.configTabMessages.classList.toggle("is-active", isMessages);
   el.configTabAutomations.classList.toggle("is-active", isAutomations);
   el.configTabIntegrations.classList.toggle("is-active", isIntegrations);
   el.configTabWebsite.classList.toggle("is-active", isWebsite);
   el.configPanelGeneral.classList.toggle("is-active", isGeneral);
+  el.configPanelKnowledge?.classList.toggle("is-active", isKnowledge);
   el.configPanelMessages.classList.toggle("is-active", isMessages);
   el.configPanelAutomations.classList.toggle("is-active", isAutomations);
   el.configPanelIntegrations.classList.toggle("is-active", isIntegrations);
@@ -2009,6 +2092,7 @@ async function saveConfig() {
 
   try {
     const services = collectServiceConfig();
+    const knowledge_sources = collectKnowledgeSources();
     const message_templates = collectMessageTemplates();
     const automation_flows = collectAutomationFlows();
 
@@ -2031,6 +2115,7 @@ async function saveConfig() {
         handoff_target_channel: el.configHandoffTargetChannel.value,
         prompt_additions: el.configPromptAdditions.value,
       },
+      knowledge_sources,
       integrations: {
         whatsapp: {
           provider: el.configWhatsappProvider.value,
@@ -2123,7 +2208,20 @@ async function analyzeWebsiteConfig() {
     });
 
     const suggested = data.suggested_config || {};
+    const previousConfig = state.appConfig || {};
     state.appConfig = suggested;
+    const mergedWebsiteUrls = Array.from(
+      new Set([
+        websiteUrl,
+        ...((previousConfig?.knowledge_sources?.website_urls || []).filter(Boolean)),
+        ...((suggested?.knowledge_sources?.website_urls || []).filter(Boolean)),
+      ])
+    );
+    state.appConfig.knowledge_sources = {
+      ...(previousConfig?.knowledge_sources || {}),
+      ...(suggested?.knowledge_sources || {}),
+      website_urls: mergedWebsiteUrls,
+    };
     renderConfig();
 
     const snapshot = data.snapshot || {};
@@ -2141,7 +2239,7 @@ async function analyzeWebsiteConfig() {
       "Analisis completado. Revisa la pestaña General y guarda si te encaja.",
       "ok"
     );
-    setConfigTab("general");
+    setConfigTab("knowledge");
   } catch (error) {
     setStatus(el.configAnalyzeStatus, `No se pudo analizar: ${error.message}`, "error");
   } finally {
@@ -2710,6 +2808,7 @@ el.configValidateAutomationsBtn?.addEventListener("click", () =>
   validateIntegration("automations", el.configValidateAutomationsBtn)
 );
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
+el.configTabKnowledge?.addEventListener("click", () => setConfigTab("knowledge"));
 el.configTabMessages?.addEventListener("click", () => setConfigTab("messages"));
 el.configTabAutomations?.addEventListener("click", () => setConfigTab("automations"));
 el.configTabIntegrations.addEventListener("click", () => setConfigTab("integrations"));
@@ -2723,6 +2822,35 @@ el.sourceFilter.addEventListener("change", () => {
 });
 el.serviceFilter.addEventListener("change", () => {
   reloadSalesData();
+});
+el.configKnowledgeWebsiteUrls?.addEventListener("input", updateKnowledgeUiHints);
+el.configKnowledgeSpreadsheetUrl?.addEventListener("input", updateKnowledgeUiHints);
+el.configKnowledgeSpreadsheetData?.addEventListener("input", updateKnowledgeUiHints);
+el.configKnowledgeSpreadsheetFile?.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const isCsv =
+    file.type === "text/csv" ||
+    file.name.toLowerCase().endsWith(".csv");
+
+  if (!isCsv) {
+    setStatus(
+      el.configSaveStatus,
+      "Por ahora la importacion directa admite CSV. Si vienes de Excel, exporta a CSV o pega las filas en la tabla.",
+      "error"
+    );
+    event.target.value = "";
+    return;
+  }
+
+  try {
+    await importKnowledgeSpreadsheetFile(file);
+  } catch (error) {
+    setStatus(el.configSaveStatus, error.message, "error");
+  } finally {
+    event.target.value = "";
+  }
 });
 el.crmMobileConfigBtn?.addEventListener("click", () => setMainView("config"));
 el.leadPrevBtn.addEventListener("click", () => {

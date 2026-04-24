@@ -659,6 +659,10 @@ textarea {
   margin-inline: auto;
 }
 
+.config-panel[data-config-panel="general"] .services-editor {
+  display: none;
+}
+
 .config-section-intro {
   display: grid;
   gap: 8px;
@@ -1261,6 +1265,140 @@ textarea {
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.88),
     0 14px 30px rgba(83, 110, 160, 0.07);
+}
+
+.knowledge-intro-grid,
+.knowledge-advanced-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.knowledge-mode-card,
+.knowledge-priority-card,
+.knowledge-block {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border-radius: 28px;
+  border: 1px solid rgba(191, 208, 234, 0.84);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,249,255,0.95));
+  box-shadow:
+    0 14px 32px rgba(85, 112, 166, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.82);
+}
+
+.knowledge-mode-card span,
+.knowledge-block-head span,
+.config-pill-label {
+  display: block;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.knowledge-mode-card strong,
+.knowledge-block-head strong,
+.knowledge-priority-card strong {
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
+}
+
+.knowledge-mode-card p,
+.knowledge-block-head p,
+.knowledge-priority-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.knowledge-mode-card.is-accent {
+  background:
+    linear-gradient(135deg, rgba(109, 65, 243, 0.1), rgba(78, 143, 255, 0.08)),
+    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(245,249,255,0.95));
+}
+
+.knowledge-bullet-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text);
+  display: grid;
+  gap: 8px;
+}
+
+.knowledge-priority-card {
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.knowledge-block {
+  margin-bottom: 18px;
+}
+
+.knowledge-block-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.knowledge-inline-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.config-inline-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(109, 65, 243, 0.1);
+  color: var(--accent-dark);
+  font-weight: 800;
+  font-size: 0.8rem;
+}
+
+.knowledge-field,
+.knowledge-file-field {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.82);
+  border: 1px solid rgba(191, 208, 234, 0.78);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.knowledge-field input,
+.knowledge-field textarea,
+.knowledge-file-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(191, 208, 234, 0.86);
+  background: linear-gradient(180deg, rgba(252,254,255,0.98), rgba(245,249,255,0.96));
+  color: var(--text);
+}
+
+.knowledge-field textarea {
+  min-height: 120px;
+}
+
+.knowledge-upload-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 220px minmax(0, 1fr);
 }
 
 .services-editor-head {
@@ -2763,7 +2901,10 @@ textarea {
   .config-integration-card,
   .message-template-card,
   .automation-flow-card,
-  .services-editor {
+  .services-editor,
+  .knowledge-mode-card,
+  .knowledge-priority-card,
+  .knowledge-block {
     padding: 14px;
     border-radius: 20px;
   }
@@ -2821,6 +2962,8 @@ textarea {
   .automation-step-grid,
   .services-editor-list,
   .config-integrations-grid,
+  .knowledge-intro-grid,
+  .knowledge-advanced-grid,
   .quote-grid {
     min-width: 0;
   }
@@ -2866,6 +3009,9 @@ textarea {
   .message-template-card,
   .automation-flow-card,
   .services-editor,
+  .knowledge-mode-card,
+  .knowledge-priority-card,
+  .knowledge-block,
   .crm-config-card .quote-grid label,
   .crm-config-card .config-logo-field {
     padding: 12px;
@@ -2880,6 +3026,13 @@ textarea {
   }
 
   .config-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .knowledge-intro-grid,
+  .knowledge-advanced-grid,
+  .knowledge-upload-row,
+  .knowledge-priority-card {
     grid-template-columns: 1fr;
   }
 

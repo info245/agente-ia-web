@@ -614,9 +614,10 @@
             </div>
 
             <form id="configForm" class="config-form">
-              <div class="config-tabs">
-                <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">General</button>
-                <button id="configTabMessages" type="button" class="config-tab" data-config-tab="messages">Mensajes</button>
+                <div class="config-tabs">
+                  <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">General</button>
+                  <button id="configTabKnowledge" type="button" class="config-tab" data-config-tab="knowledge">Fuentes</button>
+                  <button id="configTabMessages" type="button" class="config-tab" data-config-tab="messages">Mensajes</button>
                 <button id="configTabAutomations" type="button" class="config-tab" data-config-tab="automations">Automatizaciones</button>
                 <button id="configTabIntegrations" type="button" class="config-tab" data-config-tab="integrations">Integraciones</button>
                 <button id="configTabWebsite" type="button" class="config-tab" data-config-tab="website">Desde web</button>
@@ -710,6 +711,125 @@
                     <div id="configServicesList" class="services-editor-list"></div>
                   </div>
                 </div>
+              </section>
+
+              <section id="configPanelKnowledge" class="config-panel" data-config-panel="knowledge">
+                <div class="config-section-intro">
+                  <strong>Fuentes de conocimiento del agente</strong>
+                  <p>Combina una capa manual para asegurar control comercial y una capa avanzada para importar contexto desde tu web, Excel/CSV o notas internas. El agente siempre prioriza lo revisado manualmente.</p>
+                </div>
+
+                <div class="knowledge-intro-grid">
+                  <article class="knowledge-mode-card">
+                    <span>Basico</span>
+                    <strong>Manual y controlado</strong>
+                    <p>Configura servicios, descripciones, URLs y tarifas de referencia para dejar el agente listo desde el primer dia.</p>
+                    <ul class="knowledge-bullet-list">
+                      <li>Servicios y precios orientativos</li>
+                      <li>URL de apoyo por servicio</li>
+                      <li>Notas comerciales y limites</li>
+                    </ul>
+                  </article>
+
+                  <article class="knowledge-mode-card is-accent">
+                    <span>Avanzado</span>
+                    <strong>Web, Excel/CSV y notas internas</strong>
+                    <p>Enriquece el contexto del agente con URLs clave, tablas copiadas desde Excel y documentacion interna para acelerar el onboarding.</p>
+                    <ul class="knowledge-bullet-list">
+                      <li>Multiples URLs de referencia</li>
+                      <li>Importacion simple desde Excel/CSV</li>
+                      <li>FAQs, objeciones y notas internas</li>
+                    </ul>
+                  </article>
+                </div>
+
+                <div class="knowledge-priority-card">
+                  <div>
+                    <span class="config-pill-label">Jerarquia activa</span>
+                    <strong>Manual &gt; Excel/CSV &gt; URLs web</strong>
+                  </div>
+                  <p>Lo revisado a mano manda. Despues usamos tablas importadas para tarifas y catalogo, y por ultimo el contexto extraido de la web para enriquecer el discurso sin inventar.</p>
+                </div>
+
+                <section class="knowledge-block">
+                  <div class="knowledge-block-head">
+                    <div>
+                      <span>Configuracion basica</span>
+                      <strong>Servicios y oferta manual</strong>
+                      <p>Ideal para dejar claro que vendes y con que rango de precios sin depender de scraping ni importaciones.</p>
+                    </div>
+                    <button id="configAddServiceBtnKnowledge" type="button">Añadir servicio</button>
+                  </div>
+                  <div id="configServicesListKnowledge" class="services-editor-list"></div>
+                </section>
+
+                <div class="knowledge-advanced-grid">
+                  <section class="knowledge-block">
+                    <div class="knowledge-block-head">
+                      <div>
+                        <span>URLs de apoyo</span>
+                        <strong>Contexto desde la web</strong>
+                        <p>Pega la home y páginas clave de servicios, casos de éxito o FAQ. Una URL por línea.</p>
+                      </div>
+                      <div class="knowledge-inline-meta">
+                        <span id="configKnowledgeWebsiteCount" class="config-inline-badge">0 URLs</span>
+                      </div>
+                    </div>
+                    <label class="knowledge-field">
+                      URLs relevantes
+                      <textarea id="configKnowledgeWebsiteUrls" rows="7" placeholder="https://tuweb.com&#10;https://tuweb.com/seo&#10;https://tuweb.com/google-ads"></textarea>
+                    </label>
+                    <label class="knowledge-field">
+                      Qué quieres extraer
+                      <textarea id="configKnowledgeWebsiteFocus" rows="4" placeholder="Servicios prioritarios, propuesta de valor, testimonios, FAQs, claims comerciales..."></textarea>
+                    </label>
+                  </section>
+
+                  <section class="knowledge-block">
+                    <div class="knowledge-block-head">
+                      <div>
+                        <span>Excel / CSV</span>
+                        <strong>Tarifas y catálogo comercial</strong>
+                        <p>Puedes pegar aquí filas copiadas desde Excel o subir un CSV exportado para conservar servicios, packs y precios.</p>
+                      </div>
+                      <div class="knowledge-inline-meta">
+                        <span id="configKnowledgeSpreadsheetHint" class="config-inline-badge">Sin tabla cargada</span>
+                      </div>
+                    </div>
+                    <div class="knowledge-upload-row">
+                      <label class="knowledge-file-field">
+                        CSV exportado
+                        <input id="configKnowledgeSpreadsheetFile" type="file" accept=".csv,text/csv" />
+                      </label>
+                      <label class="knowledge-field">
+                        URL de Google Sheet o documento
+                        <input id="configKnowledgeSpreadsheetUrl" type="url" placeholder="https://docs.google.com/spreadsheets/..." />
+                      </label>
+                    </div>
+                    <label class="knowledge-field">
+                      Tabla pegada desde Excel / CSV
+                      <textarea id="configKnowledgeSpreadsheetData" rows="8" placeholder="Servicio,Precio mensual,Precio proyecto,URL&#10;SEO,300,,"></textarea>
+                    </label>
+                    <label class="knowledge-field">
+                      Cómo interpretar esta tabla
+                      <input id="configKnowledgeSpreadsheetMapping" type="text" placeholder="Ejemplo: columna A servicio, B tarifa mensual, C tarifa proyecto, D URL" />
+                    </label>
+                  </section>
+                </div>
+
+                <section class="knowledge-block">
+                  <div class="knowledge-block-head">
+                    <div>
+                      <span>Notas internas</span>
+                      <strong>FAQs, objeciones y matices del negocio</strong>
+                      <p>Añade contexto que no siempre aparece en la web: límites de servicio, casos típicos, diferenciadores o respuestas a objeciones frecuentes.</p>
+                    </div>
+                  </div>
+                  <label class="knowledge-field">
+                    Documentación rápida del agente
+                    <textarea id="configKnowledgeInternalNotes" rows="8" placeholder="Objeciones frecuentes, condiciones comerciales, exclusiones, sector ideal, procesos internos..."></textarea>
+                  </label>
+                </section>
               </section>
 
               <section id="configPanelMessages" class="config-panel" data-config-panel="messages">
