@@ -1401,6 +1401,39 @@ textarea {
   grid-template-columns: 220px minmax(0, 1fr);
 }
 
+.knowledge-preview-block {
+  gap: 16px;
+}
+
+.knowledge-preview-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.knowledge-preview-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(109,65,243,0.08), rgba(78,143,255,0.08));
+  border: 1px solid rgba(191, 208, 234, 0.78);
+}
+
+.knowledge-preview-card span {
+  display: block;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.knowledge-preview-summary {
+  color: var(--text);
+  font-weight: 700;
+  line-height: 1.6;
+}
+
 .services-editor-head {
   display: flex;
   align-items: center;

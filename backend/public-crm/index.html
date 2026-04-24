@@ -830,6 +830,28 @@
                     <textarea id="configKnowledgeInternalNotes" rows="8" placeholder="Objeciones frecuentes, condiciones comerciales, exclusiones, sector ideal, procesos internos..."></textarea>
                   </label>
                 </section>
+
+                <section class="knowledge-block knowledge-preview-block">
+                  <div class="knowledge-block-head">
+                    <div>
+                      <span>Vista previa</span>
+                      <strong>Contexto real que verá la IA</strong>
+                      <p>Comprueba antes de publicar qué servicios, URLs, notas y matices está usando el agente para responder y proponer.</p>
+                    </div>
+                    <button id="configPreviewContextBtn" type="button" class="crm-secondary-btn">Vista previa del contexto</button>
+                  </div>
+                  <div class="knowledge-preview-grid">
+                    <article class="knowledge-preview-card">
+                      <span>Resumen ejecutivo</span>
+                      <div id="configContextPreviewSummary" class="knowledge-preview-summary">Todavía no has generado una vista previa.</div>
+                    </article>
+                    <label class="knowledge-field quote-grid-full">
+                      Contexto consolidado del agente
+                      <textarea id="configContextPreviewOutput" rows="10" readonly placeholder="Aquí verás el contexto que usará la IA para servicios, URLs, hojas y notas internas."></textarea>
+                    </label>
+                  </div>
+                  <div id="configContextPreviewStatus" class="save-status" aria-live="polite"></div>
+                </section>
               </section>
 
               <section id="configPanelMessages" class="config-panel" data-config-panel="messages">

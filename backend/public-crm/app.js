@@ -143,6 +143,10 @@ const el = {
   configKnowledgeSpreadsheetMapping: document.getElementById("configKnowledgeSpreadsheetMapping"),
   configKnowledgeSpreadsheetHint: document.getElementById("configKnowledgeSpreadsheetHint"),
   configKnowledgeInternalNotes: document.getElementById("configKnowledgeInternalNotes"),
+  configPreviewContextBtn: document.getElementById("configPreviewContextBtn"),
+  configContextPreviewSummary: document.getElementById("configContextPreviewSummary"),
+  configContextPreviewOutput: document.getElementById("configContextPreviewOutput"),
+  configContextPreviewStatus: document.getElementById("configContextPreviewStatus"),
   adminOverviewGrid: document.getElementById("adminOverviewGrid"),
   adminCreateName: document.getElementById("adminCreateName"),
   adminCreateSlug: document.getElementById("adminCreateSlug"),
@@ -1163,6 +1167,67 @@ function collectKnowledgeSources() {
   };
 }
 
+function buildConfigPayload() {
+  const services = collectServiceConfig();
+  const knowledge_sources = collectKnowledgeSources();
+  const message_templates = collectMessageTemplates();
+  const automation_flows = collectAutomationFlows();
+
+  return {
+    brand: {
+      name: el.configBrandName.value,
+      website_url: el.configWebsiteUrl.value,
+      logo_url: el.configLogoUrl.value,
+      primary_color: el.configPrimaryColor.value,
+      accent_color: el.configAccentColor.value,
+    },
+    contact: {
+      public_whatsapp_number: el.configPublicWhatsappNumber.value,
+      human_agent_whatsapp_number: el.configHumanWhatsappNumber.value,
+      support_email: el.configSupportEmail.value,
+    },
+    agent: {
+      tone: el.configAgentTone.value,
+      final_cta_label: el.configFinalCtaLabel.value,
+      handoff_target_channel: el.configHandoffTargetChannel.value,
+      prompt_additions: el.configPromptAdditions.value,
+    },
+    knowledge_sources,
+    integrations: {
+      whatsapp: {
+        provider: el.configWhatsappProvider.value,
+        status_label: el.configWhatsappStatusLabel.value,
+        phone_number_id: el.configWhatsappPhoneNumberId.value,
+        business_account_id: el.configWhatsappBusinessAccountId.value,
+        validation: state.appConfig?.integrations?.whatsapp?.validation || {},
+      },
+      lead_forms: {
+        meta_source: el.configMetaLeadSource.value,
+        google_source: el.configGoogleLeadSource.value,
+        sheet_document: el.configLeadSheetDocument.value,
+        sheet_tabs: el.configLeadSheetTabs.value,
+        webhook_url: el.configLeadWebhookUrl.value,
+        validation: state.appConfig?.integrations?.lead_forms?.validation || {},
+      },
+      email: {
+        provider: el.configEmailProvider.value,
+        from_email: el.configEmailFromAddress.value,
+        reply_to_email: el.configEmailReplyTo.value,
+        validation: state.appConfig?.integrations?.email?.validation || {},
+      },
+      automations: {
+        platform: el.configAutomationPlatform.value,
+        workspace_url: el.configAutomationWorkspaceUrl.value,
+        notes: el.configAutomationNotes.value,
+        validation: state.appConfig?.integrations?.automations?.validation || {},
+      },
+    },
+    message_templates,
+    automation_flows,
+    services,
+  };
+}
+
 async function importKnowledgeSpreadsheetFile(file) {
   const text = await new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -2091,64 +2156,7 @@ async function saveConfig() {
   setStatus(el.configSaveStatus, "Guardando configuracion...");
 
   try {
-    const services = collectServiceConfig();
-    const knowledge_sources = collectKnowledgeSources();
-    const message_templates = collectMessageTemplates();
-    const automation_flows = collectAutomationFlows();
-
-    const payload = {
-      brand: {
-        name: el.configBrandName.value,
-        website_url: el.configWebsiteUrl.value,
-        logo_url: el.configLogoUrl.value,
-        primary_color: el.configPrimaryColor.value,
-        accent_color: el.configAccentColor.value,
-      },
-      contact: {
-        public_whatsapp_number: el.configPublicWhatsappNumber.value,
-        human_agent_whatsapp_number: el.configHumanWhatsappNumber.value,
-        support_email: el.configSupportEmail.value,
-      },
-      agent: {
-        tone: el.configAgentTone.value,
-        final_cta_label: el.configFinalCtaLabel.value,
-        handoff_target_channel: el.configHandoffTargetChannel.value,
-        prompt_additions: el.configPromptAdditions.value,
-      },
-      knowledge_sources,
-      integrations: {
-        whatsapp: {
-          provider: el.configWhatsappProvider.value,
-          status_label: el.configWhatsappStatusLabel.value,
-          phone_number_id: el.configWhatsappPhoneNumberId.value,
-          business_account_id: el.configWhatsappBusinessAccountId.value,
-          validation: state.appConfig?.integrations?.whatsapp?.validation || {},
-        },
-        lead_forms: {
-          meta_source: el.configMetaLeadSource.value,
-          google_source: el.configGoogleLeadSource.value,
-          sheet_document: el.configLeadSheetDocument.value,
-          sheet_tabs: el.configLeadSheetTabs.value,
-          webhook_url: el.configLeadWebhookUrl.value,
-          validation: state.appConfig?.integrations?.lead_forms?.validation || {},
-        },
-        email: {
-          provider: el.configEmailProvider.value,
-          from_email: el.configEmailFromAddress.value,
-          reply_to_email: el.configEmailReplyTo.value,
-          validation: state.appConfig?.integrations?.email?.validation || {},
-        },
-        automations: {
-          platform: el.configAutomationPlatform.value,
-          workspace_url: el.configAutomationWorkspaceUrl.value,
-          notes: el.configAutomationNotes.value,
-          validation: state.appConfig?.integrations?.automations?.validation || {},
-        },
-      },
-      message_templates,
-      automation_flows,
-      services,
-    };
+    const payload = buildConfigPayload();
 
     const data = await fetchJson(`${API_BASE}/config`, {
       method: "POST",
@@ -2245,6 +2253,54 @@ async function analyzeWebsiteConfig() {
   } finally {
     el.configAnalyzeWebsiteBtn.disabled = false;
     el.configAnalyzeWebsiteBtn.classList.remove("is-busy");
+  }
+}
+
+async function previewKnowledgeContext() {
+  if (!el.configPreviewContextBtn) return;
+
+  el.configPreviewContextBtn.disabled = true;
+  el.configPreviewContextBtn.classList.add("is-busy");
+  setStatus(el.configContextPreviewStatus, "Construyendo vista previa...");
+
+  try {
+    const payload = buildConfigPayload();
+    const data = await fetchJson(`${API_BASE}/config/context-preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const preview = data.preview || {};
+    const summaryParts = [
+      preview.brand_name ? `Marca: ${preview.brand_name}` : "",
+      preview.service_count >= 0 ? `${preview.service_count} servicio${preview.service_count === 1 ? "" : "s"}` : "",
+      preview.website_url_count > 0 ? `${preview.website_url_count} URL${preview.website_url_count === 1 ? "" : "s"} de referencia` : "Sin URLs de apoyo",
+      preview.has_spreadsheet_data ? "Con tabla comercial" : "Sin tabla comercial",
+      preview.has_internal_notes ? "Con notas internas" : "Sin notas internas",
+    ].filter(Boolean);
+
+    if (el.configContextPreviewSummary) {
+      el.configContextPreviewSummary.textContent = summaryParts.join(" · ");
+    }
+    if (el.configContextPreviewOutput) {
+      el.configContextPreviewOutput.value = preview.context || "";
+    }
+
+    setStatus(
+      el.configContextPreviewStatus,
+      "Vista previa generada. Ya puedes revisar exactamente qué contexto utilizará la IA.",
+      "ok"
+    );
+  } catch (error) {
+    setStatus(
+      el.configContextPreviewStatus,
+      `No se pudo generar la vista previa: ${error.message}`,
+      "error"
+    );
+  } finally {
+    el.configPreviewContextBtn.disabled = false;
+    el.configPreviewContextBtn.classList.remove("is-busy");
   }
 }
 
@@ -2795,6 +2851,7 @@ el.crmSalesLinks.forEach((link) =>
   })
 );
 el.configAnalyzeWebsiteBtn.addEventListener("click", analyzeWebsiteConfig);
+el.configPreviewContextBtn?.addEventListener("click", previewKnowledgeContext);
 el.configValidateWhatsappBtn?.addEventListener("click", () =>
   validateIntegration("whatsapp", el.configValidateWhatsappBtn)
 );

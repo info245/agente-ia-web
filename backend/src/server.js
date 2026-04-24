@@ -37,6 +37,7 @@ import { mergeLeadData } from "./lib/leadMerge.js";
 import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 import { getAppConfig, saveAppConfig } from "./lib/appConfigStore.js";
+import { mergeAppConfig } from "./lib/appConfig.js";
 import {
   listAccounts,
   resolveAccount,
@@ -53,7 +54,7 @@ import {
 import { uploadBrandLogo } from "./lib/storageStore.js";
 
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
-import { getServiceFacts, getWebsiteFacts } from "./lib/websiteFacts.js";
+import { buildKnowledgeContext, getServiceFacts, getWebsiteFacts } from "./lib/websiteFacts.js";
 import {
   sendLeadEmail,
   sendClientConfirmationEmail,
@@ -3554,6 +3555,39 @@ app.post("/api/crm/config", async (req, res) => {
     const account = await resolveRequestAccount(req);
     const config = await saveAppConfig(req.body || {}, { accountId: account.id });
     res.json({ ok: true, config, account });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/config/context-preview", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const currentConfig = await getAppConfig({ accountId: account.id });
+    const mergedConfig = mergeAppConfig({
+      ...currentConfig,
+      ...(req.body || {}),
+    });
+    const context = buildKnowledgeContext(mergedConfig);
+    const websiteUrls = Array.isArray(mergedConfig?.knowledge_sources?.website_urls)
+      ? mergedConfig.knowledge_sources.website_urls.filter(Boolean)
+      : [];
+
+    res.json({
+      ok: true,
+      preview: {
+        brand_name: mergedConfig?.brand?.name || account.name,
+        service_count: Object.keys(getWebsiteFacts(mergedConfig).services || {}).length,
+        website_url_count: websiteUrls.length,
+        has_spreadsheet_data: Boolean(
+          String(mergedConfig?.knowledge_sources?.spreadsheet_data || "").trim()
+        ),
+        has_internal_notes: Boolean(
+          String(mergedConfig?.knowledge_sources?.internal_notes || "").trim()
+        ),
+        context,
+      },
+    });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
