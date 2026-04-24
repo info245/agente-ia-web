@@ -842,7 +842,10 @@
                       <strong>Contexto real que verá la IA</strong>
                       <p>Comprueba antes de publicar qué servicios, URLs, notas y matices está usando el agente para responder y proponer.</p>
                     </div>
-                    <button id="configPreviewContextBtn" type="button" class="crm-secondary-btn">Vista previa del contexto</button>
+                    <div class="knowledge-head-actions">
+                      <button id="configSuggestSetupBtn" type="button">Proponer setup inicial</button>
+                      <button id="configPreviewContextBtn" type="button" class="crm-secondary-btn">Vista previa del contexto</button>
+                    </div>
                   </div>
                   <div class="knowledge-preview-grid">
                     <article class="knowledge-preview-card">
@@ -855,6 +858,7 @@
                     </label>
                   </div>
                   <div id="configContextPreviewStatus" class="save-status" aria-live="polite"></div>
+                  <div id="configSuggestSetupStatus" class="save-status" aria-live="polite"></div>
                 </section>
               </section>
 

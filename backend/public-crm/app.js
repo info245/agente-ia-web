@@ -146,9 +146,11 @@ const el = {
   configKnowledgeSpreadsheetHint: document.getElementById("configKnowledgeSpreadsheetHint"),
   configKnowledgeInternalNotes: document.getElementById("configKnowledgeInternalNotes"),
   configPreviewContextBtn: document.getElementById("configPreviewContextBtn"),
+  configSuggestSetupBtn: document.getElementById("configSuggestSetupBtn"),
   configContextPreviewSummary: document.getElementById("configContextPreviewSummary"),
   configContextPreviewOutput: document.getElementById("configContextPreviewOutput"),
   configContextPreviewStatus: document.getElementById("configContextPreviewStatus"),
+  configSuggestSetupStatus: document.getElementById("configSuggestSetupStatus"),
   adminOverviewGrid: document.getElementById("adminOverviewGrid"),
   adminCreateName: document.getElementById("adminCreateName"),
   adminCreateSlug: document.getElementById("adminCreateSlug"),
@@ -2434,6 +2436,211 @@ async function previewKnowledgeContext() {
   }
 }
 
+function getServiceNamesFromConfigPayload(payload = {}) {
+  return Object.keys(payload?.services || {}).filter(Boolean);
+}
+
+function inferSuggestedTone(payload = {}) {
+  const services = getServiceNamesFromConfigPayload(payload).join(" ").toLowerCase();
+  const notes = [
+    payload?.knowledge_sources?.website_focus,
+    payload?.knowledge_sources?.internal_notes,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (/seo|google ads|sem|meta ads|redes/.test(services)) {
+    return "consultivo, estrategico y orientado a diagnosticar antes de proponer";
+  }
+  if (/diseno|diseño|web|tienda|ecommerce|shopify|woocommerce/.test(`${services} ${notes}`)) {
+    return "cercano, visual y orientado a convertir necesidades en una propuesta clara";
+  }
+  return "profesional, cercano y orientado a diagnosticar antes de vender";
+}
+
+function inferSuggestedPromptAdditions(payload = {}) {
+  const services = getServiceNamesFromConfigPayload(payload);
+  const websiteFocus = String(payload?.knowledge_sources?.website_focus || "").trim();
+  const notes = String(payload?.knowledge_sources?.internal_notes || "").trim();
+  const references = (payload?.knowledge_sources?.website_urls || []).slice(0, 5);
+
+  const parts = [
+    services.length
+      ? `Prioriza estos servicios en el discurso comercial: ${services.join(", ")}.`
+      : "",
+    websiteFocus
+      ? `Cuando uses contexto web, céntrate especialmente en: ${websiteFocus}.`
+      : "",
+    notes
+      ? `Ten presentes estas notas internas y objeciones: ${notes}.`
+      : "",
+    references.length
+      ? `URLs de referencia a considerar: ${references.join(", ")}.`
+      : "",
+    "Si falta información, ofrece una orientación prudente y convierte el siguiente paso en una recomendación concreta, no en un formulario.",
+  ].filter(Boolean);
+
+  return parts.join(" ");
+}
+
+function buildSuggestedTemplates(payload = {}, currentTemplates = {}) {
+  const brand = payload?.brand?.name || "la marca";
+  const primaryService = getServiceNamesFromConfigPayload(payload)[0] || "{servicio}";
+  const prefersWhatsapp = Boolean(String(payload?.contact?.public_whatsapp_number || "").trim());
+  const introChannel = prefersWhatsapp ? "whatsapp" : "email";
+
+  return {
+    whatsapp_first_contact: {
+      ...(currentTemplates?.whatsapp_first_contact || {}),
+      channel: "whatsapp",
+      label: "Primer contacto por WhatsApp",
+      body: `Hola {nombre}, soy parte del equipo de ${brand}. Ya tengo contexto sobre tu interés en ${primaryService} y quiero ayudarte con un siguiente paso claro, sin hacerte repetir información. Si te va bien, seguimos por aquí y te aterrizo la recomendación.`,
+    },
+    email_first_contact: {
+      ...(currentTemplates?.email_first_contact || {}),
+      channel: "email",
+      label: "Primer contacto por email",
+      subject: `Seguimos con tu consulta sobre ${primaryService}`,
+      body: `Hola {nombre},\n\nGracias por escribirnos a ${brand}. Ya he revisado el contexto de tu interés en ${primaryService} y quiero ayudarte con una recomendación clara y accionable.\n\nSi te encaja, responde a este correo y seguimos contigo.\n\nUn saludo,\n${brand}`,
+    },
+    quote_whatsapp: {
+      ...(currentTemplates?.quote_whatsapp || {}),
+      channel: "whatsapp",
+      label: "Envio de propuesta por WhatsApp",
+      body: `Hola {nombre}, te comparto aquí tu propuesta de {servicio}: {link_presupuesto}. Si quieres, la revisamos juntos y resolvemos dudas antes de decidir.`,
+    },
+    quote_email: {
+      ...(currentTemplates?.quote_email || {}),
+      channel: "email",
+      label: "Envio de propuesta por email",
+      subject: "Tu propuesta de {servicio} ya está lista",
+      body: `Hola {nombre},\n\nTe comparto tu propuesta de {servicio}: {link_presupuesto}\n\nSi prefieres verla con un agente, también puedes escribirnos por WhatsApp: {whatsapp_humano}.\n\nUn saludo,\n${brand}`,
+    },
+    recovery_whatsapp: {
+      ...(currentTemplates?.recovery_whatsapp || {}),
+      channel: "whatsapp",
+      label: "Recuperacion por WhatsApp",
+      body: `Hola {nombre}, retomo este hilo porque creo que todavía podemos ayudarte con {servicio}. Si quieres, te dejo aquí una recomendación concreta para tu caso y vemos si tiene sentido avanzar.`,
+    },
+    recovery_email: {
+      ...(currentTemplates?.recovery_email || {}),
+      channel: "email",
+      label: "Recuperacion por email",
+      subject: "Seguimos disponibles para ayudarte con {servicio}",
+      body: `Hola {nombre},\n\nRetomo el contacto porque creo que aún hay recorrido para ayudarte con {servicio}. Si te encaja, podemos retomar la conversación y proponerte un siguiente paso muy concreto.\n\nQuedo pendiente,\n${brand}`,
+    },
+    _preferred_intro_channel: introChannel,
+  };
+}
+
+function buildSuggestedAutomations(payload = {}, currentFlows = {}, templates = {}) {
+  const introChannel = templates._preferred_intro_channel === "whatsapp" ? "whatsapp" : "email";
+  const secondaryChannel = introChannel === "whatsapp" ? "email" : "whatsapp";
+  const introTemplateKey =
+    introChannel === "whatsapp" ? "recovery_whatsapp" : "recovery_email";
+  const secondaryTemplateKey =
+    secondaryChannel === "whatsapp" ? "recovery_whatsapp" : "recovery_email";
+
+  return {
+    lead_recovery: {
+      ...(currentFlows?.lead_recovery || {}),
+      label: "Recuperacion de leads",
+      description:
+        "Secuencia automatica para reactivar oportunidades que pidieron informacion pero dejaron la conversacion a medias.",
+      enabled: true,
+      steps: [
+        {
+          delay_value: "24",
+          delay_unit: "hours",
+          channel: introChannel,
+          template_key: introTemplateKey,
+          active: true,
+        },
+        {
+          delay_value: "72",
+          delay_unit: "hours",
+          channel: secondaryChannel,
+          template_key: secondaryTemplateKey,
+          active: true,
+        },
+      ],
+    },
+    quote_followup: {
+      ...(currentFlows?.quote_followup || {}),
+      label: "Seguimiento de propuesta",
+      description:
+        "Secuencia automatica para propuestas enviadas sin respuesta, combinando un primer toque corto y un recordatorio posterior.",
+      enabled: true,
+      steps: [
+        {
+          delay_value: "24",
+          delay_unit: "hours",
+          channel: "whatsapp",
+          template_key: "quote_whatsapp",
+          active: true,
+        },
+        {
+          delay_value: "72",
+          delay_unit: "hours",
+          channel: "email",
+          template_key: "quote_email",
+          active: true,
+        },
+      ],
+    },
+  };
+}
+
+function suggestOnboardingSetup() {
+  const payload = buildConfigPayload();
+  const serviceNames = getServiceNamesFromConfigPayload(payload);
+
+  if (!serviceNames.length) {
+    setStatus(
+      el.configSuggestSetupStatus,
+      "Añade al menos un servicio o propón servicios desde la tabla antes de generar el setup inicial.",
+      "error"
+    );
+    return;
+  }
+
+  const nextConfig = {
+    ...(state.appConfig || {}),
+    ...payload,
+    agent: {
+      ...(state.appConfig?.agent || {}),
+      ...payload.agent,
+      tone: inferSuggestedTone(payload),
+      prompt_additions: inferSuggestedPromptAdditions(payload),
+    },
+  };
+
+  const suggestedTemplates = buildSuggestedTemplates(
+    nextConfig,
+    state.appConfig?.message_templates || {}
+  );
+  nextConfig.message_templates = {
+    ...(state.appConfig?.message_templates || {}),
+    ...Object.fromEntries(
+      Object.entries(suggestedTemplates).filter(([key]) => !key.startsWith("_"))
+    ),
+  };
+  nextConfig.automation_flows = buildSuggestedAutomations(
+    nextConfig,
+    state.appConfig?.automation_flows || {},
+    suggestedTemplates
+  );
+
+  state.appConfig = nextConfig;
+  renderConfig();
+  setStatus(
+    el.configSuggestSetupStatus,
+    "Setup inicial propuesto. Revisa Mensajes, Automatizaciones y el tono del agente antes de guardar.",
+    "ok"
+  );
+}
+
 async function validateIntegration(type, button) {
   if (!type) return;
   button.disabled = true;
@@ -2924,6 +3131,7 @@ el.configAddServiceBtn.addEventListener("click", () => {
   el.configServicesList.appendChild(createServiceEditorItem());
 });
 el.configSuggestServicesBtn?.addEventListener("click", suggestServicesFromSpreadsheet);
+el.configSuggestSetupBtn?.addEventListener("click", suggestOnboardingSetup);
 el.configLogoFile.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
