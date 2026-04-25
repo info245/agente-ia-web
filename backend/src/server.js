@@ -33,6 +33,15 @@ import {
 } from "./lib/chatStore.js";
 
 import { mergeLeadData } from "./lib/leadMerge.js";
+import {
+  detectStrongCommercialIntent,
+  getCommercialCloseStep,
+  getExplicitPreferredChannel,
+  isCloseFlowStep,
+  isShortAffirmativeResponse,
+  prefersEmailChannel,
+  prefersWhatsAppChannel,
+} from "./lib/closeFlow.js";
 
 import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
@@ -700,82 +709,6 @@ function getCurrentStep(lead) {
   return "ready_for_ai";
 }
 
-const CLOSE_FLOW_STEPS = new Set([
-  "close_ask_name",
-  "close_ask_channel",
-  "close_ask_phone",
-  "close_ask_email",
-  "close_ready",
-]);
-
-function isCloseFlowStep(step) {
-  return CLOSE_FLOW_STEPS.has(String(step || "").trim());
-}
-
-function getExplicitPreferredChannel(text = "") {
-  if (prefersWhatsAppChannel(text)) return "whatsapp";
-  if (prefersEmailChannel(text)) return "email";
-  return null;
-}
-
-function shouldUseCommercialCloseFlow({
-  lead = {},
-  text = "",
-  channel = "web",
-  analysisSnapshot = null,
-} = {}) {
-  if (channel !== "web") return false;
-  if (isCloseFlowStep(lead?.current_step)) return true;
-  if (isGreeting(text)) return false;
-
-  const explicitChannel = getExplicitPreferredChannel(text);
-  const hasValueDelivered = hasAnalysisSnapshot(analysisSnapshot);
-  const hasCommercialContext =
-    hasService(lead) || hasMainGoal(lead) || hasBusinessActivity(lead);
-  const hasExplicitCloseIntent =
-    detectStrongCommercialIntent(text) ||
-    !!explicitChannel ||
-    hasContact(lead);
-
-  if (hasExplicitCloseIntent) return true;
-  if (isShortAffirmativeResponse(text) && (hasValueDelivered || hasCommercialContext)) {
-    return true;
-  }
-
-  return false;
-}
-
-function getCommercialCloseStep({
-  lead = {},
-  text = "",
-  channel = "web",
-  analysisSnapshot = null,
-} = {}) {
-  if (
-    !shouldUseCommercialCloseFlow({
-      lead,
-      text,
-      channel,
-      analysisSnapshot,
-    })
-  ) {
-    return null;
-  }
-
-  if (!hasName(lead)) return "close_ask_name";
-
-  const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
-  if (!preferredChannel) return "close_ask_channel";
-  if (preferredChannel.includes("whatsapp") && !hasPhone(lead)) {
-    return "close_ask_phone";
-  }
-  if (preferredChannel.includes("email") && !lead?.email) {
-    return "close_ask_email";
-  }
-
-  return "close_ready";
-}
-
 function getQuestionForStep(step, lead) {
   const safeName = getSafeLeadName(lead);
 
@@ -1099,20 +1032,6 @@ function sanitizeGoogleAdsWebReply(reply, { lead = null, text = "" } = {}) {
   }
 
   return currentReply;
-}
-
-function isShortAffirmativeResponse(text) {
-  const t = normalizeText(text);
-  return (
-    t === "si" ||
-    t === "sÃ­" ||
-    t === "si por favor" ||
-    t === "sÃ­ por favor" ||
-    t === "vale" ||
-    t === "ok" ||
-    t === "perfecto" ||
-    t === "genial"
-  );
 }
 
 function buildValueThenAskNameReply(analysisSnapshot, lead = null) {
@@ -1454,7 +1373,8 @@ function buildStructuredCloseReply({
     lead,
     text,
     channel,
-    analysisSnapshot,
+    analysisReady: hasAnalysisSnapshot(analysisSnapshot),
+    isGreeting: isGreeting(text),
   });
 
   if (
@@ -1509,44 +1429,6 @@ function buildStructuredCloseReply({
   }
 
   return null;
-}
-
-function detectStrongCommercialIntent(text) {
-  const t = normalizeText(text);
-  return (
-    t.includes("precio") ||
-    t.includes("presupuesto") ||
-    t.includes("cuanto cuesta") ||
-    t.includes("cuÃ¡nto cuesta") ||
-    t.includes("trabajar contigo") ||
-    t.includes("trabajar con vosotros") ||
-    t.includes("empezar") ||
-    t.includes("llamada") ||
-    t.includes("contactar") ||
-    t.includes("whatsapp")
-  );
-}
-
-function prefersWhatsAppChannel(text) {
-  const t = normalizeText(text);
-  return (
-    /\bwhatsapp\b/.test(t) ||
-    /\bwasap\b/.test(t) ||
-    /\bwhats\b/.test(t) ||
-    /\bpor whatsapp\b/.test(t) ||
-    /\bmejor por whatsapp\b/.test(t)
-  );
-}
-
-function prefersEmailChannel(text) {
-  const t = normalizeText(text);
-  return (
-    /\bemail\b/.test(t) ||
-    /\bcorreo\b/.test(t) ||
-    /\bmail\b/.test(t) ||
-    /\bpor email\b/.test(t) ||
-    /\bpor correo\b/.test(t)
-  );
 }
 
 function hasPhone(lead) {
@@ -2503,7 +2385,8 @@ function applyFlowPatch(
     lead: lead || {},
     text,
     channel,
-    analysisSnapshot,
+    analysisReady: hasAnalysisSnapshot(analysisSnapshot),
+    isGreeting: isGreeting(text),
   });
   const step = closeStep || lead?.current_step || getCurrentStep(lead || {});
   const patch = {};
@@ -2679,7 +2562,8 @@ function applyFlowPatch(
       lead: merged,
       text,
       channel,
-      analysisSnapshot,
+      analysisReady: hasAnalysisSnapshot(analysisSnapshot),
+      isGreeting: isGreeting(text),
     }) || getCurrentStep(merged);
 
   return {
