@@ -1868,16 +1868,21 @@ async function createAdminAccount() {
       body: JSON.stringify(payload),
     });
 
+    let creationWarning = "";
     if (data?.account?.id && payload.product_mode === "chat_only") {
-      await fetchJson(`${API_BASE}/config?account_id=${encodeURIComponent(data.account.id)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          product: {
-            mode: "chat_only",
-          },
-        }),
-      });
+      try {
+        await fetchJson(`${API_BASE}/config?account_id=${encodeURIComponent(data.account.id)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            product: {
+              mode: "chat_only",
+            },
+          }),
+        });
+      } catch (error) {
+        creationWarning = String(error?.message || "").trim();
+      }
     }
 
     el.adminCreateName.value = "";
@@ -1895,7 +1900,13 @@ async function createAdminAccount() {
       await handleAccountChange(data.account.id);
       setMainView("config");
     }
-    setStatus(el.adminAccountStatus, "Cuenta creada correctamente.", "ok");
+    setStatus(
+      el.adminAccountStatus,
+      creationWarning
+        ? `Cuenta creada. Falta guardar la configuracion inicial: ${creationWarning}`
+        : "Cuenta creada correctamente.",
+      creationWarning ? "error" : "ok"
+    );
   } catch (error) {
     setStatus(el.adminAccountStatus, `No se pudo crear: ${error.message}`, "error");
   } finally {
