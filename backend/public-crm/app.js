@@ -470,6 +470,15 @@ const el = {
   configSaveStatus: document.getElementById("configSaveStatus"),
   configProductMode: document.getElementById("configProductMode"),
   configProductModeHint: document.getElementById("configProductModeHint"),
+  configWidgetInstallUrl: document.getElementById("configWidgetInstallUrl"),
+  configWidgetRecommendedDomain: document.getElementById("configWidgetRecommendedDomain"),
+  configWidgetEmbedMode: document.getElementById("configWidgetEmbedMode"),
+  configWidgetAllowedDomains: document.getElementById("configWidgetAllowedDomains"),
+  configWidgetSnippet: document.getElementById("configWidgetSnippet"),
+  configWidgetInstallStatus: document.getElementById("configWidgetInstallStatus"),
+  configCopyWidgetUrlBtn: document.getElementById("configCopyWidgetUrlBtn"),
+  configCopyWidgetSnippetBtn: document.getElementById("configCopyWidgetSnippetBtn"),
+  configWidgetPreviewBtn: document.getElementById("configWidgetPreviewBtn"),
   configTabGeneral: document.getElementById("configTabGeneral"),
   configTabKnowledge: document.getElementById("configTabKnowledge"),
   configTabMessages: document.getElementById("configTabMessages"),
@@ -638,6 +647,7 @@ const el = {
   quoteTotal: document.getElementById("quoteTotal"),
   quoteSaveStatus: document.getElementById("quoteSaveStatus"),
   analysisGenerateBtn: document.getElementById("analysisGenerateBtn"),
+  analysisSaveBtn: document.getElementById("analysisSaveBtn"),
   analysisPreviewBtn: document.getElementById("analysisPreviewBtn"),
   analysisSendBtn: document.getElementById("analysisSendBtn"),
   analysisSaveStatus: document.getElementById("analysisSaveStatus"),
@@ -649,6 +659,15 @@ const el = {
   analysisFindingsList: document.getElementById("analysisFindingsList"),
   analysisQuickWinsList: document.getElementById("analysisQuickWinsList"),
   analysisNextStepText: document.getElementById("analysisNextStepText"),
+  analysisEditTitle: document.getElementById("analysisEditTitle"),
+  analysisEditRecommendedService: document.getElementById("analysisEditRecommendedService"),
+  analysisEditHeadline: document.getElementById("analysisEditHeadline"),
+  analysisEditStatus: document.getElementById("analysisEditStatus"),
+  analysisEditSummary: document.getElementById("analysisEditSummary"),
+  analysisEditFindings: document.getElementById("analysisEditFindings"),
+  analysisEditQuickWins: document.getElementById("analysisEditQuickWins"),
+  analysisEditPriorities: document.getElementById("analysisEditPriorities"),
+  analysisEditNextStep: document.getElementById("analysisEditNextStep"),
 };
 
 function fmtDate(value) {
@@ -729,6 +748,88 @@ function withAccountScope(url) {
     next.searchParams.set("account_id", accountId);
   }
   return next.toString();
+}
+
+function getActiveAccount() {
+  return (state.accounts || []).find((account) => String(account?.id || "") === String(state.activeAccountId || "")) || state.accounts?.[0] || null;
+}
+
+function getBaseOrigin() {
+  return window.location.origin.replace(/\/$/, "");
+}
+
+function getRecommendedWidgetDomain(config = state.appConfig || {}) {
+  const websiteUrl = String(config?.brand?.website_url || "").trim();
+  if (!websiteUrl) return "-";
+  try {
+    return new URL(websiteUrl).hostname;
+  } catch (_error) {
+    return websiteUrl.replace(/^https?:\/\//i, "").replace(/\/.*$/, "") || "-";
+  }
+}
+
+function buildWidgetInstallData(config = state.appConfig || {}) {
+  const account = getActiveAccount();
+  const baseOrigin = getBaseOrigin();
+  const widgetUrl = `${baseOrigin}/widget.js`;
+  const installMode = String(config?.widget?.install_mode || "slug").trim() === "id" ? "id" : "slug";
+  const accountSlug = String(account?.slug || "").trim();
+  const accountId = String(account?.id || "").trim();
+  const scopeAttr = installMode === "id"
+    ? accountId
+      ? `data-account-id="${accountId}"`
+      : accountSlug
+        ? `data-account-slug="${accountSlug}"`
+        : ""
+    : accountSlug
+      ? `data-account-slug="${accountSlug}"`
+      : accountId
+        ? `data-account-id="${accountId}"`
+        : "";
+  const snippet = [
+    "<script",
+    `  src="${widgetUrl}"`,
+    `  data-backend="${baseOrigin}"`,
+    scopeAttr ? `  ${scopeAttr}` : "",
+    '  data-position="right"',
+    "></script>",
+  ].filter(Boolean).join("\n");
+
+  return {
+    widgetUrl,
+    recommendedDomain: getRecommendedWidgetDomain(config),
+    installMode,
+    snippet,
+  };
+}
+
+function refreshWidgetInstallPreview() {
+  const configSnapshot = {
+    ...(state.appConfig || {}),
+    brand: {
+      ...(state.appConfig?.brand || {}),
+      website_url: el.configWebsiteUrl?.value || state.appConfig?.brand?.website_url || "",
+    },
+    widget: {
+      ...(state.appConfig?.widget || {}),
+      install_mode: el.configWidgetEmbedMode?.value || state.appConfig?.widget?.install_mode || "slug",
+      allowed_domains: String(el.configWidgetAllowedDomains?.value || "")
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    },
+  };
+  const widgetInstall = buildWidgetInstallData(configSnapshot);
+  if (el.configWidgetInstallUrl) {
+    el.configWidgetInstallUrl.value = widgetInstall.widgetUrl;
+  }
+  if (el.configWidgetRecommendedDomain) {
+    const preferredDomain = configSnapshot.widget.allowed_domains?.[0] || widgetInstall.recommendedDomain;
+    el.configWidgetRecommendedDomain.value = preferredDomain || "-";
+  }
+  if (el.configWidgetSnippet) {
+    el.configWidgetSnippet.value = widgetInstall.snippet;
+  }
 }
 
 function prettyJson(value) {
@@ -2601,6 +2702,10 @@ function buildConfigPayload() {
   const knowledge_sources = collectKnowledgeSources();
   const message_templates = collectMessageTemplates();
   const automation_flows = collectAutomationFlows();
+  const widgetAllowedDomains = String(el.configWidgetAllowedDomains?.value || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 
   return {
     product: {
@@ -2618,14 +2723,18 @@ function buildConfigPayload() {
       human_agent_whatsapp_number: el.configHumanWhatsappNumber.value,
       support_email: el.configSupportEmail.value,
     },
-    agent: {
-      tone: el.configAgentTone.value,
-      final_cta_label: el.configFinalCtaLabel.value,
-      handoff_target_channel: el.configHandoffTargetChannel.value,
-      prompt_additions: el.configPromptAdditions.value,
-    },
-    knowledge_sources,
-    integrations: {
+      agent: {
+        tone: el.configAgentTone.value,
+        final_cta_label: el.configFinalCtaLabel.value,
+        handoff_target_channel: el.configHandoffTargetChannel.value,
+        prompt_additions: el.configPromptAdditions.value,
+      },
+      widget: {
+        install_mode: el.configWidgetEmbedMode?.value || "slug",
+        allowed_domains: widgetAllowedDomains,
+      },
+      knowledge_sources,
+      integrations: {
       whatsapp: {
         provider: el.configWhatsappProvider.value,
         status_label: el.configWhatsappStatusLabel.value,
@@ -3371,6 +3480,26 @@ function renderConfig() {
   renderSectorPresets();
   renderSetupHealth(config);
   updateProductModeUi(config);
+  const widgetInstall = buildWidgetInstallData(config);
+  if (el.configWidgetInstallUrl) {
+    el.configWidgetInstallUrl.value = widgetInstall.widgetUrl;
+  }
+  if (el.configWidgetRecommendedDomain) {
+    el.configWidgetRecommendedDomain.value =
+      (Array.isArray(config?.widget?.allowed_domains) && config.widget.allowed_domains[0]) ||
+      widgetInstall.recommendedDomain;
+  }
+  if (el.configWidgetEmbedMode) {
+    el.configWidgetEmbedMode.value = config?.widget?.install_mode || widgetInstall.installMode || "slug";
+  }
+  if (el.configWidgetAllowedDomains) {
+    el.configWidgetAllowedDomains.value = Array.isArray(config?.widget?.allowed_domains)
+      ? config.widget.allowed_domains.join("\n")
+      : "";
+  }
+  if (el.configWidgetSnippet) {
+    el.configWidgetSnippet.value = widgetInstall.snippet;
+  }
   el.configWhatsappProvider.value =
     config?.integrations?.whatsapp?.provider || "meta_cloud";
   el.configWhatsappStatusLabel.value =
@@ -3492,34 +3621,73 @@ function renderAnalysisList(target, rows = []) {
         item?.detail || item?.text || ""
       )}</li>`;
     })
-    .join("");
+      .join("");
+}
+
+function normaliseAnalysisEditorList(rows = []) {
+  return (rows || [])
+    .map((item) => {
+      if (!item) return "";
+      if (typeof item === "string") return item.trim();
+      const title = String(item?.title || "").trim();
+      const detail = String(item?.detail || item?.text || "").trim();
+      return [title, detail].filter(Boolean).join(": ").trim();
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function parseAnalysisEditorList(value = "") {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function renderAnalysis(analysis) {
   state.selectedAnalysis = analysis || null;
   const content = analysis?.content_json || {};
-
-  el.analysisTitle.textContent =
-    analysis?.title || "Todavia no hay analisis generado";
-  el.analysisHeadline.textContent =
-    content?.headline ||
-    "Cuando generemos el analisis, aqui veras el enfoque recomendado y el resumen ejecutivo.";
-  el.analysisRecommendedService.textContent =
+  const recommendedService =
     analysis?.recommended_service ||
     content?.recommended_service ||
     state.selectedLead?.interest_service ||
     "-";
-  el.analysisStatusLabel.textContent = analysis?.status || "draft";
-  el.analysisSummaryText.textContent =
+  const status = analysis?.status || "draft";
+  const title = analysis?.title || "Todavia no hay analisis generado";
+  const headline =
+    content?.headline ||
+    "Cuando generemos el analisis, aqui veras el enfoque recomendado y el resumen ejecutivo.";
+  const summary =
     content?.summary ||
     "Genera el analisis para obtener una lectura comercial clara y reutilizable.";
-  el.analysisNextStepText.textContent = content?.next_step || "-";
+  const nextStep = content?.next_step || "-";
+
+  el.analysisTitle.textContent = title;
+  el.analysisHeadline.textContent = headline;
+  el.analysisRecommendedService.textContent = recommendedService;
+  el.analysisStatusLabel.textContent = status;
+  el.analysisSummaryText.textContent = summary;
+  el.analysisNextStepText.textContent = nextStep;
   renderAnalysisList(el.analysisFindingsList, content?.findings || []);
   renderAnalysisList(el.analysisQuickWinsList, content?.quick_wins || []);
+
+  if (el.analysisEditTitle) el.analysisEditTitle.value = analysis?.title || "";
+  if (el.analysisEditRecommendedService) {
+    el.analysisEditRecommendedService.value =
+      analysis?.recommended_service || content?.recommended_service || state.selectedLead?.interest_service || "";
+  }
+  if (el.analysisEditHeadline) el.analysisEditHeadline.value = content?.headline || "";
+  if (el.analysisEditStatus) el.analysisEditStatus.value = status;
+  if (el.analysisEditSummary) el.analysisEditSummary.value = content?.summary || "";
+  if (el.analysisEditFindings) el.analysisEditFindings.value = normaliseAnalysisEditorList(content?.findings || []);
+  if (el.analysisEditQuickWins) el.analysisEditQuickWins.value = normaliseAnalysisEditorList(content?.quick_wins || []);
+  if (el.analysisEditPriorities) el.analysisEditPriorities.value = normaliseAnalysisEditorList(content?.priorities || []);
+  if (el.analysisEditNextStep) el.analysisEditNextStep.value = nextStep === "-" ? "" : nextStep;
 
   const hasAnalysis = Boolean(analysis?.id);
   if (el.analysisPreviewBtn) el.analysisPreviewBtn.disabled = !hasAnalysis;
   if (el.analysisSendBtn) el.analysisSendBtn.disabled = !hasAnalysis;
+  if (el.analysisSaveBtn) el.analysisSaveBtn.disabled = !state.selectedLead?.id;
 }
 
 function renderQuote(quote) {
@@ -4477,6 +4645,47 @@ async function generateAnalysis() {
   }
 }
 
+async function saveAnalysis() {
+  if (!state.selectedLead?.id) return;
+
+  const currentContent = state.selectedAnalysis?.content_json || {};
+  const payload = {
+    title: String(el.analysisEditTitle?.value || "").trim(),
+    status: String(el.analysisEditStatus?.value || "draft").trim() || "draft",
+    recommended_service: String(el.analysisEditRecommendedService?.value || "").trim(),
+    content_json: {
+      ...currentContent,
+      headline: String(el.analysisEditHeadline?.value || "").trim(),
+      summary: String(el.analysisEditSummary?.value || "").trim(),
+      findings: parseAnalysisEditorList(el.analysisEditFindings?.value || ""),
+      quick_wins: parseAnalysisEditorList(el.analysisEditQuickWins?.value || ""),
+      priorities: parseAnalysisEditorList(el.analysisEditPriorities?.value || ""),
+      next_step: String(el.analysisEditNextStep?.value || "").trim(),
+      recommended_service: String(el.analysisEditRecommendedService?.value || "").trim(),
+    },
+  };
+
+  el.analysisSaveBtn.disabled = true;
+  el.analysisSaveBtn.classList.add("is-busy");
+  setStatus(el.analysisSaveStatus, "Guardando analisis...");
+
+  try {
+    const data = await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}/analysis`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    renderAnalysis(data.analysis || null);
+    setStatus(el.analysisSaveStatus, "Analisis actualizado.", "ok");
+  } catch (error) {
+    setStatus(el.analysisSaveStatus, `No se pudo guardar: ${error.message}`, "error");
+  } finally {
+    el.analysisSaveBtn.disabled = false;
+    el.analysisSaveBtn.classList.remove("is-busy");
+  }
+}
+
 async function sendAnalysis() {
   if (!state.selectedLead?.id) return;
 
@@ -4498,6 +4707,15 @@ async function sendAnalysis() {
   } finally {
     el.analysisSendBtn.disabled = false;
     el.analysisSendBtn.classList.remove("is-busy");
+  }
+}
+
+async function copyToClipboard(value, successMessage, target = el.configWidgetInstallStatus) {
+  try {
+    await navigator.clipboard.writeText(String(value || ""));
+    setStatus(target, successMessage, "ok");
+  } catch (error) {
+    setStatus(target, `No se pudo copiar: ${error.message}`, "error");
   }
 }
 
@@ -4610,6 +4828,9 @@ el.configProductMode?.addEventListener("change", () => {
 });
 el.configForm?.addEventListener("input", () => renderSetupHealth(buildConfigPayload()));
 el.configForm?.addEventListener("change", () => renderSetupHealth(buildConfigPayload()));
+el.configWidgetEmbedMode?.addEventListener("change", refreshWidgetInstallPreview);
+el.configWidgetAllowedDomains?.addEventListener("input", refreshWidgetInstallPreview);
+el.configWebsiteUrl?.addEventListener("input", refreshWidgetInstallPreview);
 el.configKnowledgeStepPresetBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepPreset"));
 el.configKnowledgeStepServicesBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepServices"));
 el.configKnowledgeStepSourcesBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepSources"));
@@ -4686,11 +4907,26 @@ el.quotePdfBtn.addEventListener("click", () => {
 el.quoteSendEmailBtn.addEventListener("click", () => sendQuote("email"));
 el.quoteSendWhatsappBtn.addEventListener("click", () => sendQuote("whatsapp"));
 el.analysisGenerateBtn?.addEventListener("click", generateAnalysis);
+el.analysisSaveBtn?.addEventListener("click", saveAnalysis);
 el.analysisPreviewBtn?.addEventListener("click", () => {
   if (!state.selectedLead?.id || !state.selectedAnalysis?.id) return;
   window.open(withAccountScope(`/crm/analysis/${state.selectedLead.id}/preview`), "_blank", "noopener,noreferrer");
 });
 el.analysisSendBtn?.addEventListener("click", sendAnalysis);
+el.configCopyWidgetUrlBtn?.addEventListener("click", () => {
+  copyToClipboard(el.configWidgetInstallUrl?.value || "", "URL del widget copiada.");
+});
+el.configCopyWidgetSnippetBtn?.addEventListener("click", () => {
+  copyToClipboard(el.configWidgetSnippet?.value || "", "Script del widget copiado.");
+});
+el.configWidgetPreviewBtn?.addEventListener("click", () => {
+  const account = getActiveAccount();
+  if (!account?.id) {
+    setStatus(el.configWidgetInstallStatus, "Selecciona primero una cuenta para generar la vista previa.", "error");
+    return;
+  }
+  window.open(withAccountScope("/crm/widget-preview"), "_blank", "noopener,noreferrer");
+});
 el.quoteAddItemBtn.addEventListener("click", () => {
   state.quoteItems.push(createEmptyQuoteItem());
   renderQuoteItems();

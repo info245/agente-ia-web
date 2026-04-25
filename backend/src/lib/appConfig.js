@@ -21,6 +21,10 @@ export const DEFAULT_APP_CONFIG = {
     handoff_target_channel: "whatsapp",
     prompt_additions: "",
   },
+  widget: {
+    install_mode: "slug",
+    allowed_domains: [],
+  },
   integrations: {
     whatsapp: {
       provider: "meta_cloud",
@@ -297,6 +301,21 @@ function sanitizeKnowledgeSources(value = {}) {
   };
 }
 
+function sanitizeWidgetConfig(value = {}) {
+  const defaults = DEFAULT_APP_CONFIG.widget || {};
+  const allowedDomains = Array.isArray(value?.allowed_domains)
+    ? value.allowed_domains
+    : String(value?.allowed_domains || "")
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+  return {
+    install_mode: cleanString(value?.install_mode) === "id" ? "id" : cleanString(defaults.install_mode) || "slug",
+    allowed_domains: allowedDomains.map(cleanString).filter(Boolean),
+  };
+}
+
 function sanitizeValidation(value = {}, defaults = {}) {
   return {
     status: cleanString(value?.status) || cleanString(defaults?.status) || "pending",
@@ -382,6 +401,7 @@ export function sanitizeAppConfig(input = {}) {
   const message_templates = sanitizeMessageTemplates(input?.message_templates);
   const automation_flows = sanitizeAutomationFlows(input?.automation_flows);
   const knowledge_sources = sanitizeKnowledgeSources(input?.knowledge_sources);
+  const widget = sanitizeWidgetConfig(input?.widget);
 
   return {
     product: {
@@ -413,17 +433,18 @@ export function sanitizeAppConfig(input = {}) {
         DEFAULT_APP_CONFIG.contact.human_agent_whatsapp_number,
       support_email: cleanString(input?.contact?.support_email),
     },
-    agent: {
-      tone: cleanString(input?.agent?.tone) || DEFAULT_APP_CONFIG.agent.tone,
-      final_cta_label:
-        cleanString(input?.agent?.final_cta_label) ||
-        DEFAULT_APP_CONFIG.agent.final_cta_label,
-      handoff_target_channel:
-        cleanString(input?.agent?.handoff_target_channel) ||
-        DEFAULT_APP_CONFIG.agent.handoff_target_channel,
-      prompt_additions: cleanString(input?.agent?.prompt_additions),
-    },
-    integrations: {
+      agent: {
+        tone: cleanString(input?.agent?.tone) || DEFAULT_APP_CONFIG.agent.tone,
+        final_cta_label:
+          cleanString(input?.agent?.final_cta_label) ||
+          DEFAULT_APP_CONFIG.agent.final_cta_label,
+        handoff_target_channel:
+          cleanString(input?.agent?.handoff_target_channel) ||
+          DEFAULT_APP_CONFIG.agent.handoff_target_channel,
+        prompt_additions: cleanString(input?.agent?.prompt_additions),
+      },
+      widget,
+      integrations: {
       whatsapp: {
         provider:
           cleanString(input?.integrations?.whatsapp?.provider) ||

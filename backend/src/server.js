@@ -92,6 +92,7 @@ import {
 
 const app = express();
 const crmPublicDir = fileURLToPath(new URL("../public-crm", import.meta.url));
+const widgetPublicFile = fileURLToPath(new URL("../../public-widget/widget.js", import.meta.url));
 
 app.use(cors());
 app.options("*", cors());
@@ -105,6 +106,10 @@ app.use(
 );
 app.use(attachCrmUser);
 app.use("/crm", express.static(crmPublicDir));
+app.get("/widget.js", (_req, res) => {
+  res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+  res.sendFile(widgetPublicFile);
+});
 app.get("/crm", (_req, res) => {
   res.sendFile(path.join(crmPublicDir, "index.html"));
 });
@@ -1308,6 +1313,8 @@ Devuelve SOLO JSON valido con esta estructura exacta:
 
 REGLAS:
 - Espanol claro, comercial y profesional.
+- El texto final debe poder enviarse al cliente tal cual.
+- No menciones CRM, lead, origen del lead, canal preferido, WhatsApp interno, email interno ni instrucciones operativas para el equipo.
 - No inventes datos.
 - findings: 2 a 4 elementos.
 - quick_wins: 2 a 4 elementos.
@@ -1383,12 +1390,15 @@ async function buildAnalysisForLead({ lead, account }) {
   }
 
   const appConfig = await getAppConfig({ accountId: account.id });
-  const structured = await generateStructuredAnalysisResult({
-    lead,
-    messages,
-    snapshot,
-    appConfig,
-  });
+  const structured = sanitizeAnalysisForClient(
+    await generateStructuredAnalysisResult({
+      lead,
+      messages,
+      snapshot,
+      appConfig,
+    }),
+    lead
+  );
 
   return {
     analysis: structured,
@@ -2632,6 +2642,120 @@ function applyFlowPatch(
   };
 }
 
+function renderWidgetPreviewHtml({ account, config, baseUrl }) {
+  const accountSlug = String(account?.slug || "").trim();
+  const brandName = String(config?.brand?.name || account?.name || "Chat IA").trim();
+
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preview widget · ${brandName}</title>
+  <style>
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:linear-gradient(180deg,#eef3ff,#f8fbff);color:#172554}
+    .wrap{max-width:960px;margin:0 auto;padding:40px 20px 120px}
+    .card{padding:28px;border-radius:28px;background:#fff;border:1px solid #d6e1ff;box-shadow:0 24px 60px rgba(37,54,110,.12)}
+    .eyebrow{display:inline-block;margin-bottom:10px;color:#6d41f3;font-size:.76rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+    h1{margin:0 0 12px;font-size:2rem}
+    p{margin:0;color:#5c6b92;line-height:1.65}
+    code{display:block;margin-top:18px;padding:14px 16px;border-radius:18px;background:#f6f9ff;border:1px solid #d6e1ff;white-space:pre-wrap}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <span class="eyebrow">Preview del chat</span>
+      <h1>${brandName}</h1>
+      <p>Vista rápida para comprobar branding, posición y carga del widget antes de insertarlo en la web del cliente.</p>
+      <code>&lt;script src="${baseUrl}/widget.js" data-backend="${baseUrl}" data-account-slug="${accountSlug}" data-position="right"&gt;&lt;/script&gt;</code>
+    </section>
+  </div>
+  <script src="${baseUrl}/widget.js" data-backend="${baseUrl}" data-account-slug="${accountSlug}" data-position="right"></script>
+</body>
+</html>`;
+}
+
+function getAnalysisClientLabel(lead = {}) {
+  return lead?.company_name || lead?.business_activity || lead?.name || "la oportunidad";
+}
+
+function buildClientFacingAnalysisNextStep(lead = {}, fallback = "") {
+  const service = String(lead?.interest_service || "").trim();
+  if (service) {
+    return `Aterrizar una propuesta inicial y un plan priorizado de ${service} con foco en impacto, claridad y siguiente paso.`;
+  }
+  return (
+    String(fallback || "").trim() ||
+    "Aterrizar una propuesta inicial con prioridades claras y siguiente paso accionable."
+  );
+}
+
+function sanitizeClientFacingAnalysisText(value, lead = {}, { nextStep = false } = {}) {
+  let text = String(value || "").trim();
+  if (!text) return "";
+
+  const clientLabel = getAnalysisClientLabel(lead);
+  text = text
+    .replace(/\b[Ee]l lead proveniente de [^.]+\.?\s*/g, `${clientLabel} `)
+    .replace(/\b[Ll]ead proveniente de [^.]+\.?\s*/g, `${clientLabel} `)
+    .replace(/\b[Ee]l lead\b/g, clientLabel)
+    .replace(/\b[Cc]ontactar al cliente(?:\s+v[ií]a|\s+por)?\s+WhatsApp[^.]*\.?/g, "")
+    .replace(/\b[Cc]ontactar al cliente(?:\s+v[ií]a|\s+por)?\s+email[^.]*\.?/g, "")
+    .replace(/\b[Cc]ontactar al cliente\b[^.]*\.?/g, "")
+    .replace(/\b[Ee]scribir por WhatsApp\b/g, "")
+    .replace(/\b[Vv][ií]a WhatsApp\b/g, "")
+    .replace(/\b[Pp]or WhatsApp\b/g, "")
+    .replace(/\b[Pp]or email\b/g, "")
+    .replace(/\b[Ee]n CRM\b/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (nextStep && /(contactar al cliente|whatsapp|email)/i.test(String(value || ""))) {
+    return buildClientFacingAnalysisNextStep(lead, text);
+  }
+
+  return text;
+}
+
+function sanitizeClientFacingAnalysisList(items = [], lead = {}, { objectItems = false } = {}) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      if (typeof item === "string") {
+        return sanitizeClientFacingAnalysisText(item, lead);
+      }
+      if (!item || typeof item !== "object") return null;
+      const title = sanitizeClientFacingAnalysisText(item.title || "", lead);
+      const detail = sanitizeClientFacingAnalysisText(item.detail || item.text || "", lead);
+      if (!title && !detail) return null;
+      return objectItems ? { title, detail } : detail || title;
+    })
+    .filter(Boolean);
+}
+
+function sanitizeAnalysisForClient(analysis = {}, lead = {}) {
+  const source = analysis && typeof analysis === "object" ? analysis : {};
+  return {
+    ...source,
+    title: sanitizeClientFacingAnalysisText(source.title || "", lead),
+    headline: sanitizeClientFacingAnalysisText(source.headline || "", lead),
+    summary: sanitizeClientFacingAnalysisText(source.summary || "", lead),
+    findings: sanitizeClientFacingAnalysisList(source.findings, lead, { objectItems: true }),
+    quick_wins: sanitizeClientFacingAnalysisList(source.quick_wins, lead),
+    priorities: sanitizeClientFacingAnalysisList(source.priorities, lead),
+    next_step: sanitizeClientFacingAnalysisText(source.next_step || "", lead, {
+      nextStep: true,
+    }),
+    source_summary: sanitizeClientFacingAnalysisText(source.source_summary || "", lead),
+    recommended_service:
+      sanitizeClientFacingAnalysisText(source.recommended_service || "", lead) ||
+      lead?.interest_service ||
+      "",
+    source_url: String(source.source_url || "").trim(),
+  };
+}
+
 async function processIncomingMessage({
   text,
   conversation_id,
@@ -3751,6 +3875,22 @@ app.post("/api/crm/config", async (req, res) => {
   }
 });
 
+app.get("/crm/widget-preview", async (req, res) => {
+  try {
+    if (!req.crmUser) {
+      return res.status(401).send("Acceso no autorizado");
+    }
+    const account = await resolveRequestAccount(req);
+    const config = await getAppConfig({ accountId: account.id });
+    const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const html = renderWidgetPreviewHtml({ account, config, baseUrl });
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(200).send(html);
+  } catch (error) {
+    return res.status(500).send(error.message);
+  }
+});
+
 app.post("/api/crm/config/context-preview", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
@@ -3960,7 +4100,13 @@ app.get("/api/crm/leads/:leadId/analysis", async (req, res) => {
       return res.status(404).json({ ok: false, error: "Lead no encontrado" });
     }
 
-    const analysis = await getLatestAnalysisByLeadId(req.params.leadId);
+    const analysisRaw = await getLatestAnalysisByLeadId(req.params.leadId);
+    const analysis = analysisRaw
+      ? {
+          ...analysisRaw,
+          content_json: sanitizeAnalysisForClient(analysisRaw.content_json || {}, lead),
+        }
+      : null;
     res.json({ ok: true, analysis });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -4059,7 +4205,13 @@ app.get("/crm/analysis/:leadId/preview", async (req, res) => {
       return res.status(404).send("Lead no encontrado");
     }
 
-    const analysis = await getLatestAnalysisByLeadId(req.params.leadId);
+    const analysisRaw = await getLatestAnalysisByLeadId(req.params.leadId);
+    const analysis = analysisRaw
+      ? {
+          ...analysisRaw,
+          content_json: sanitizeAnalysisForClient(analysisRaw.content_json || {}, lead),
+        }
+      : null;
     if (!analysis) {
       return res.status(404).send("No hay analisis disponible");
     }
@@ -4281,6 +4433,47 @@ app.post("/api/crm/leads/:leadId/analysis/generate", async (req, res) => {
   }
 });
 
+app.put("/api/crm/leads/:leadId/analysis", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
+    const lead =
+      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+
+    if (!lead) {
+      return res.status(404).json({ ok: false, error: "Lead no encontrado" });
+    }
+
+    const current = (await getLatestAnalysisByLeadId(req.params.leadId)) || {};
+    const nextContent = sanitizeAnalysisForClient(
+      {
+        ...(current?.content_json || {}),
+        ...(req.body?.content_json || {}),
+      },
+      lead
+    );
+
+    const saved = await upsertLatestAnalysisForLead(lead, {
+      title: req.body?.title || current?.title || nextContent?.title || "Analisis comercial",
+      status: req.body?.status || current?.status || "draft",
+      recommended_service:
+        req.body?.recommended_service ||
+        current?.recommended_service ||
+        nextContent?.recommended_service ||
+        lead?.interest_service ||
+        "",
+      source_url: req.body?.source_url || current?.source_url || nextContent?.source_url || "",
+      sent_via: current?.sent_via || null,
+      sent_at: current?.sent_at || null,
+      content_json: nextContent,
+    });
+
+    return res.json({ ok: true, analysis: saved });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
   try {
       const account = await resolveRequestAccount(req);
@@ -4390,6 +4583,11 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
         status: "draft",
       });
     }
+
+    analysis = {
+      ...analysis,
+      content_json: sanitizeAnalysisForClient(analysis.content_json || {}, lead),
+    };
 
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const previewUrl = `${baseUrl}/crm/analysis/${lead.id}/preview`;

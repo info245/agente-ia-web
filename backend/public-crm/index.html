@@ -559,6 +559,7 @@
               </div>
               <div class="crm-actions">
                 <button id="analysisGenerateBtn" type="button"><span class="action-icon">✨</span><span>Generar analisis</span></button>
+                <button id="analysisSaveBtn" type="button" class="crm-secondary-btn"><span class="action-icon">✎</span><span>Guardar cambios</span></button>
                 <button id="analysisPreviewBtn" type="button" class="crm-secondary-btn"><span class="action-icon">👁</span><span>Vista previa</span></button>
                 <button id="analysisSendBtn" type="button"><span class="action-icon">✉</span><span>Enviar analisis</span></button>
               </div>
@@ -601,6 +602,64 @@
                   <p id="analysisNextStepText" class="analysis-rich-copy">-</p>
                 </article>
               </div>
+
+              <section class="analysis-editor-card">
+                <div class="analysis-editor-head">
+                  <div>
+                    <span>Edicion del entregable</span>
+                    <strong>Refina el analisis antes de enviarlo</strong>
+                    <p>Haz cambios sobre el titular, resumen, hallazgos y siguiente paso para que el entregable quede listo para compartir con el cliente.</p>
+                  </div>
+                  <div class="analysis-editor-badge">Editable</div>
+                </div>
+
+                <div class="analysis-editor-grid">
+                  <label class="analysis-editor-field">
+                    <span>Titulo</span>
+                    <input id="analysisEditTitle" type="text" />
+                  </label>
+
+                  <label class="analysis-editor-field">
+                    <span>Servicio recomendado</span>
+                    <input id="analysisEditRecommendedService" type="text" />
+                  </label>
+
+                  <label class="analysis-editor-field analysis-editor-field-full">
+                    <span>Subtitulo / enfoque</span>
+                    <input id="analysisEditHeadline" type="text" />
+                  </label>
+
+                  <label class="analysis-editor-field">
+                    <span>Estado</span>
+                    <input id="analysisEditStatus" type="text" />
+                  </label>
+
+                  <label class="analysis-editor-field analysis-editor-field-full">
+                    <span>Resumen ejecutivo</span>
+                    <textarea id="analysisEditSummary" rows="6"></textarea>
+                  </label>
+
+                  <label class="analysis-editor-field">
+                    <span>Hallazgos (una linea por punto)</span>
+                    <textarea id="analysisEditFindings" rows="7"></textarea>
+                  </label>
+
+                  <label class="analysis-editor-field">
+                    <span>Quick wins (una linea por punto)</span>
+                    <textarea id="analysisEditQuickWins" rows="7"></textarea>
+                  </label>
+
+                  <label class="analysis-editor-field">
+                    <span>Prioridades (una linea por punto)</span>
+                    <textarea id="analysisEditPriorities" rows="6"></textarea>
+                  </label>
+
+                  <label class="analysis-editor-field">
+                    <span>Siguiente paso</span>
+                    <textarea id="analysisEditNextStep" rows="6"></textarea>
+                  </label>
+                </div>
+              </section>
             </div>
 
             <div id="analysisSaveStatus" class="save-status" aria-live="polite"></div>
@@ -663,10 +722,57 @@
                         </select>
                       </label>
                     </div>
-                    <div id="configProductModeHint" class="config-product-mode-hint">
+                  <div id="configProductModeHint" class="config-product-mode-hint">
                       Esta cuenta vera captacion, pipeline, presupuestos, analitica y configuracion.
                     </div>
                   </div>
+
+                  <section class="config-install-card quote-grid-full">
+                    <div class="config-install-head">
+                      <div>
+                        <span>Publicar chat</span>
+                        <strong>Codigo de instalacion para la web</strong>
+                        <p>Copia el snippet listo para pegarlo en la web del cliente. Queda ligado a la cuenta activa para que leads, branding y configuracion caigan donde toca.</p>
+                      </div>
+                      <div class="config-install-actions">
+                        <button id="configCopyWidgetUrlBtn" type="button" class="crm-secondary-btn">Copiar URL</button>
+                        <button id="configCopyWidgetSnippetBtn" type="button">Copiar script</button>
+                        <button id="configWidgetPreviewBtn" type="button" class="crm-secondary-btn">Vista previa</button>
+                      </div>
+                    </div>
+
+                    <div class="analysis-editor-grid">
+                      <label class="analysis-editor-field">
+                        <span>URL del widget</span>
+                        <input id="configWidgetInstallUrl" type="text" readonly />
+                      </label>
+
+                      <label class="analysis-editor-field">
+                        <span>Dominio recomendado</span>
+                        <input id="configWidgetRecommendedDomain" type="text" readonly />
+                      </label>
+
+                      <label class="analysis-editor-field">
+                        <span>Modo de instalacion</span>
+                        <select id="configWidgetEmbedMode">
+                          <option value="slug">Recomendado por slug</option>
+                          <option value="id">Fallback por account_id</option>
+                        </select>
+                      </label>
+
+                      <label class="analysis-editor-field">
+                        <span>Dominios previstos</span>
+                        <textarea id="configWidgetAllowedDomains" rows="4" placeholder="t-mediaglobal.com&#10;www.t-mediaglobal.com"></textarea>
+                      </label>
+
+                      <label class="analysis-editor-field analysis-editor-field-full">
+                        <span>Codigo de instalacion</span>
+                        <textarea id="configWidgetSnippet" rows="7" readonly></textarea>
+                      </label>
+                    </div>
+
+                    <div id="configWidgetInstallStatus" class="save-status" aria-live="polite"></div>
+                  </section>
 
                   <label>
                     Marca
