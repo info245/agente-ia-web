@@ -13,6 +13,7 @@ const state = {
   quoteItems: [],
   analytics: null,
   appConfig: null,
+  suggestedSectorPresetKey: "",
 };
 
 const LEAD_PAGE_SIZE = 15;
@@ -61,10 +62,115 @@ const SECTOR_PRESETS = {
         description: "Web enfocada a generar confianza y facilitar el paso a cita o contacto.",
         notes: "Priorizar prueba social, llamadas a la accion y estructura clara por tratamiento.",
       },
+      },
     },
-  },
-  ecommerce: {
-    label: "Ecommerce",
+    esthetic_clinic: {
+      label: "Clinica estetica",
+      kicker: "Valoraciones y tratamientos premium",
+      summary: "Pensado para clinicas esteticas y centros medico-esteticos que necesitan generar confianza y primeras valoraciones.",
+      tone: "cercano, elegante y orientado a confianza, tratamiento y valoracion",
+      prompt_additions:
+        "En clinica estetica prioriza confianza, resultados, autoridad profesional y facilidad para pedir valoracion. Evita promesas exageradas y conduce la conversacion hacia diagnostico, llamada o cita.",
+      website_focus:
+        "tratamientos faciales y corporales, doctores, casos, valoraciones, financiacion, testimonios, preguntas frecuentes y reserva",
+      internal_notes:
+        "Importan mucho la prueba social, la claridad del tratamiento, la confianza en el equipo y la velocidad de respuesta a leads calientes.",
+      services: {
+        SEO: {
+          min_monthly_fee: "400 EUR + IVA",
+          min_project_fee: "",
+          url: "",
+          description: "SEO local y de tratamiento para captar pacientes con intencion alta de valoracion.",
+          notes: "Muy util trabajar tratamientos, before/after, zonas y autoridad medica.",
+        },
+        "Google Ads": {
+          min_monthly_fee: "400 EUR + IVA",
+          min_project_fee: "",
+          url: "",
+          description: "Campanas para primeras valoraciones y captacion por tratamiento o zona.",
+          notes: "Conviene filtrar bien tipo de tratamiento, ticket y urgencia comercial.",
+        },
+        "Diseno Web": {
+          min_monthly_fee: "",
+          min_project_fee: "1500 EUR + IVA",
+          url: "",
+          description: "Web orientada a generar confianza y convertir interes en valoracion o cita.",
+          notes: "Muy importante reforzar testimonios, doctores, tratamientos y CTA visibles.",
+        },
+      },
+    },
+    dental: {
+      label: "Clinica dental",
+    kicker: "Implantes, ortodoncia y primeras visitas",
+    summary: "Pensado para clinicas dentales que necesitan generar confianza y captar primeras valoraciones o citas.",
+    tone: "claro, cercano y orientado a resolver dudas con autoridad y confianza",
+    prompt_additions:
+      "En clinica dental, prioriza confianza, testimonios, especialidades, financiacion y facilidad de reserva. Lleva la conversacion hacia valoracion, llamada o cita.",
+    website_focus:
+      "implantes, ortodoncia, invisalign, estetica dental, primeras visitas, testimonios, financiacion, contacto y reserva",
+    internal_notes:
+      "Importan mucho la confianza, la prueba social, la rapidez de respuesta y explicar tratamientos sin tecnicismos innecesarios.",
+    services: {
+      SEO: {
+        min_monthly_fee: "400 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "SEO local y de tratamiento para captar pacientes con alta intencion de busqueda.",
+        notes: "Hablar de Google Maps, reseñas, ubicacion, tratamientos y especialidades.",
+      },
+      "Google Ads": {
+        min_monthly_fee: "350 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "Campañas para primeras visitas, valoraciones y tratamientos clave.",
+        notes: "Interesa trabajar intencion, zona, coste por lead y calidad de llamada.",
+      },
+      "Diseño Web": {
+        min_monthly_fee: "",
+        min_project_fee: "1400 € + IVA",
+        url: "",
+        description: "Web enfocada a generar confianza y acelerar la reserva de cita.",
+        notes: "Muy relevante reforzar testimonios, casos y llamadas a la accion visibles.",
+      },
+      },
+    },
+    saas: {
+      label: "Software B2B",
+      kicker: "Demos, trials y pipeline",
+      summary: "Pensado para software, SaaS y herramientas digitales que quieren generar demos y oportunidades cualificadas.",
+      tone: "consultivo, preciso y orientado a pipeline, demo y retorno",
+      prompt_additions:
+        "En software B2B prioriza caso de uso, vertical, demo, objeciones y claridad de propuesta de valor. Lleva la conversacion a demo, llamada o prueba.",
+      website_focus:
+        "producto, casos de uso, integraciones, demo, pricing, comparativas, testimonios y captura de demanda",
+      internal_notes:
+        "Importan mucho vertical, ICP, friccion del formulario, claridad del onboarding y argumentos de diferenciacion frente a competidores.",
+      services: {
+        SEO: {
+          min_monthly_fee: "500 EUR + IVA",
+          min_project_fee: "",
+          url: "",
+          description: "SEO para captar demanda con intencion en categorias, problemas y comparativas.",
+          notes: "Muy util trabajar landing por problema, categoria y comparacion con competidores.",
+        },
+        "Google Ads": {
+          min_monthly_fee: "450 EUR + IVA",
+          min_project_fee: "",
+          url: "",
+          description: "Campanas para demos, trials y reuniones comerciales con intencion alta.",
+          notes: "Priorizar search de alta intencion, branded defense y audiencias por sector.",
+        },
+        "Diseno Web": {
+          min_monthly_fee: "",
+          min_project_fee: "1800 EUR + IVA",
+          url: "",
+          description: "Web y landings para explicar producto, demostrar valor y convertir a demo.",
+          notes: "Importa mucho estructura de valor, prueba social, UX de demo y objeciones.",
+        },
+      },
+    },
+    ecommerce: {
+      label: "Ecommerce",
     kicker: "Venta online",
     summary: "Base pensada para tiendas online que quieren vender mas con mejor conversion y adquisicion.",
     tone: "directo, comercial y orientado a conversion, rentabilidad y escalado",
@@ -95,6 +201,41 @@ const SECTOR_PRESETS = {
         url: "",
         description: "Diseño o mejora de ecommerce con foco en conversion y experiencia de compra.",
         notes: "Mencionar checkout, confianza, pasarela de pago, email marketing y automatizaciones.",
+      },
+    },
+  },
+  real_estate: {
+    label: "Inmobiliaria",
+    kicker: "Captacion de compradores y propietarios",
+    summary: "Base para inmobiliarias y promotoras que necesitan leads locales con seguimiento rapido.",
+    tone: "consultivo, agil y centrado en confianza, zona y calidad del lead",
+    prompt_additions:
+      "En inmobiliaria prioriza zona, tipologia de inmueble, confianza y velocidad de contacto. Conduce la conversacion hacia visita, valoracion o llamada.",
+    website_focus:
+      "inmuebles, zonas, valoracion, captacion de propietarios, promociones, testimonios y contacto",
+    internal_notes:
+      "Trabajar tanto comprador como propietario. Importa mucho la respuesta rapida, la autoridad local y el filtrado del lead.",
+    services: {
+      SEO: {
+        min_monthly_fee: "400 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "SEO local por zona, tipologia de inmueble y servicios inmobiliarios.",
+        notes: "Hablar de visibilidad local, posicionamiento por barrio y captacion de propietarios.",
+      },
+      "Google Ads": {
+        min_monthly_fee: "400 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "Campañas para captar interesados y propietarios con alta intencion.",
+        notes: "Muy importante segmentacion geografica, urgencia y seguimiento comercial.",
+      },
+      "Diseño Web": {
+        min_monthly_fee: "",
+        min_project_fee: "1500 € + IVA",
+        url: "",
+        description: "Web para convertir visitas en solicitudes de visita o valoracion.",
+        notes: "Priorizar buscador de inmuebles, confianza y formularios muy visibles.",
       },
     },
   },
@@ -133,8 +274,43 @@ const SECTOR_PRESETS = {
       },
     },
   },
-  legal: {
-    label: "Despacho",
+  academy: {
+    label: "Academia",
+    kicker: "Matriculas y captacion educativa",
+    summary: "Pensado para academias, centros de formacion y cursos que necesitan convertir interes en matriculas o entrevistas.",
+    tone: "claro, didactico y orientado a confianza, resultado y matricula",
+    prompt_additions:
+      "En academias y centros de formacion, prioriza claridad de oferta, modalidad, resultados y proceso de matricula. Haz la conversacion facil y muy orientada a resolver dudas.",
+    website_focus:
+      "cursos, matricula, metodologia, resultados, testimonios, modalidad, precios y contacto",
+    internal_notes:
+      "Importan mucho modalidades, plazas, pruebas sociales y resolver objeciones sobre tiempo, precio y salida profesional.",
+    services: {
+      SEO: {
+        min_monthly_fee: "350 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "SEO para captar demanda organica de cursos y formaciones.",
+        notes: "Hablar de cursos, categorias, campus, modalidad y contenidos de captacion.",
+      },
+      "Google Ads": {
+        min_monthly_fee: "300 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "Campañas para matriculas, entrevistas y solicitudes de informacion.",
+        notes: "Muy util para picos de captacion y cursos concretos con plazo.",
+      },
+      "Diseño Web": {
+        min_monthly_fee: "",
+        min_project_fee: "1200 € + IVA",
+        url: "",
+        description: "Web y landings para aumentar matriculas y solicitudes de informacion.",
+        notes: "Importa mucho claridad, calendario, confianza y formularios sencillos.",
+      },
+    },
+  },
+    legal: {
+      label: "Despacho",
     kicker: "Confianza y autoridad",
     summary: "Base comercial para despachos y profesionales donde la confianza y la claridad pesan mucho.",
     tone: "serio, claro y orientado a generar confianza sin sonar frio ni excesivamente tecnico",
@@ -165,6 +341,76 @@ const SECTOR_PRESETS = {
         url: "",
         description: "Web sobria y clara orientada a confianza, autoridad y conversion a consulta.",
         notes: "Reforzar especialidades, equipo, testimonios y canales de contacto visibles.",
+      },
+      },
+    },
+    hotel_tourism: {
+      label: "Hotel / turismo",
+      kicker: "Reservas directas y captacion local",
+      summary: "Base comercial para hoteles, apartamentos y negocios turisticos que quieren mas reservas directas.",
+      tone: "claro, visual y orientado a reserva, confianza y diferenciacion",
+      prompt_additions:
+        "En turismo prioriza reservas directas, disponibilidad, ubicacion, experiencias y confianza. Lleva la conversacion a reserva, consulta o llamada.",
+      website_focus:
+        "habitaciones, apartamentos, experiencias, reserva directa, ubicacion, opiniones, disponibilidad y ofertas",
+      internal_notes:
+        "Importan mucho fotos, propuesta diferencial, mobile, disponibilidad, reseñas y competir con OTAs sin depender solo de ellas.",
+      services: {
+        SEO: {
+          min_monthly_fee: "350 EUR + IVA",
+          min_project_fee: "",
+          url: "",
+          description: "SEO local y de intencion turistica para ganar visibilidad y reservas directas.",
+          notes: "Trabajar posicionamiento por destino, tipologia, temporada y experiencia.",
+        },
+        "Google Ads": {
+          min_monthly_fee: "350 EUR + IVA",
+          min_project_fee: "",
+          url: "",
+          description: "Campanas para reservas directas, ofertas y captacion por temporada o destino.",
+          notes: "Importa mucho la rentabilidad frente a intermediarios y la demanda de ultima hora.",
+        },
+        "Diseno Web": {
+          min_monthly_fee: "",
+          min_project_fee: "1300 EUR + IVA",
+          url: "",
+          description: "Web enfocada a reserva directa, experiencia visual y confianza inmediata.",
+          notes: "Reforzar motor de reserva, opiniones, disponibilidad y CTA visibles desde movil.",
+        },
+      },
+    },
+    restaurant: {
+      label: "Restaurante",
+    kicker: "Reservas y visibilidad local",
+    summary: "Base comercial para restaurantes y negocios de hosteleria que quieren atraer mas reservas y mejorar presencia digital.",
+    tone: "cercano, agil y muy visual, orientado a reserva y diferenciacion",
+    prompt_additions:
+      "En restauracion y hosteleria prioriza reservas, visibilidad local, propuesta gastronomica y rapidez de contacto. Usa un tono claro y muy accionable.",
+    website_focus:
+      "carta, reservas, ubicacion, menus, eventos, delivery, testimonios y diferenciacion",
+    internal_notes:
+      "Importan fotos, reseñas, Google Maps, reservas directas y diferenciarse por tipo de cocina o experiencia.",
+    services: {
+      SEO: {
+        min_monthly_fee: "300 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "SEO local para mejorar visibilidad en mapas y busquedas cercanas.",
+        notes: "Priorizar maps, reseñas, marca y busquedas por tipo de cocina y zona.",
+      },
+      "Google Ads": {
+        min_monthly_fee: "300 € + IVA",
+        min_project_fee: "",
+        url: "",
+        description: "Campañas para reservas, menus concretos, eventos o delivery.",
+        notes: "Muy util para franjas horarias, campañas locales y promociones puntuales.",
+      },
+      "Diseño Web": {
+        min_monthly_fee: "",
+        min_project_fee: "900 € + IVA",
+        url: "",
+        description: "Web ligera y visual orientada a reservas y contacto directo.",
+        notes: "Importa mucho la experiencia movil, fotos, CTA de reserva y menu visible.",
       },
     },
   },
@@ -205,14 +451,25 @@ const el = {
   crmSidebarFilters: document.getElementById("crmSidebarFilters"),
   crmSidebarFlow: document.getElementById("crmSidebarFlow"),
   crmSalesLinks: [...document.querySelectorAll(".crm-sales-link")],
+  crmSidebarKicker: document.getElementById("crmSidebarKicker"),
   crmBrandEyebrow: document.getElementById("crmBrandEyebrow"),
   crmBrandTitle: document.getElementById("crmBrandTitle"),
   crmSidebarLogo: document.getElementById("crmSidebarLogo"),
   crmSidebarTitle: document.getElementById("crmSidebarTitle"),
+  crmConfigTitle: document.getElementById("crmConfigTitle"),
+  crmConfigCopy: document.getElementById("crmConfigCopy"),
+  configSetupHealthCard: document.getElementById("configSetupHealthCard"),
+  configSetupHealthTitle: document.getElementById("configSetupHealthTitle"),
+  configSetupHealthCopy: document.getElementById("configSetupHealthCopy"),
+  configSetupHealthBadge: document.getElementById("configSetupHealthBadge"),
+  configSetupHealthGrid: document.getElementById("configSetupHealthGrid"),
+  configSetupHealthNext: document.getElementById("configSetupHealthNext"),
   configForm: document.getElementById("configForm"),
   configBackBtn: document.getElementById("configBackBtn"),
   configSaveBtn: document.getElementById("configSaveBtn"),
   configSaveStatus: document.getElementById("configSaveStatus"),
+  configProductMode: document.getElementById("configProductMode"),
+  configProductModeHint: document.getElementById("configProductModeHint"),
   configTabGeneral: document.getElementById("configTabGeneral"),
   configTabKnowledge: document.getElementById("configTabKnowledge"),
   configTabMessages: document.getElementById("configTabMessages"),
@@ -279,7 +536,14 @@ const el = {
   configSuggestServicesBtn: document.getElementById("configSuggestServicesBtn"),
   configSuggestServicesStatus: document.getElementById("configSuggestServicesStatus"),
   configSectorPresetList: document.getElementById("configSectorPresetList"),
+  configSuggestPresetBtn: document.getElementById("configSuggestPresetBtn"),
   configSectorPresetStatus: document.getElementById("configSectorPresetStatus"),
+  configKnowledgeProgressLabel: document.getElementById("configKnowledgeProgressLabel"),
+  configKnowledgeNextHint: document.getElementById("configKnowledgeNextHint"),
+  configKnowledgeStepPresetBtn: document.getElementById("configKnowledgeStepPresetBtn"),
+  configKnowledgeStepServicesBtn: document.getElementById("configKnowledgeStepServicesBtn"),
+  configKnowledgeStepSourcesBtn: document.getElementById("configKnowledgeStepSourcesBtn"),
+  configKnowledgeStepReviewBtn: document.getElementById("configKnowledgeStepReviewBtn"),
   configKnowledgeWebsiteUrls: document.getElementById("configKnowledgeWebsiteUrls"),
   configKnowledgeWebsiteFocus: document.getElementById("configKnowledgeWebsiteFocus"),
   configKnowledgeWebsiteCount: document.getElementById("configKnowledgeWebsiteCount"),
@@ -300,6 +564,7 @@ const el = {
   adminCreateSlug: document.getElementById("adminCreateSlug"),
   adminCreatePlan: document.getElementById("adminCreatePlan"),
   adminCreateStatus: document.getElementById("adminCreateStatus"),
+  adminCreateProductMode: document.getElementById("adminCreateProductMode"),
   adminCreateDefault: document.getElementById("adminCreateDefault"),
   adminCreateAdminEmail: document.getElementById("adminCreateAdminEmail"),
   adminCreateAdminPassword: document.getElementById("adminCreateAdminPassword"),
@@ -422,7 +687,8 @@ function setAuthenticatedUi(isAuthenticated) {
 }
 
 function getDefaultViewForRole() {
-  return state.currentUser?.role === "super_admin" ? "admin" : "sales";
+  if (state.currentUser?.role === "super_admin") return "admin";
+  return canAccessSalesWorkspace() ? "sales" : "config";
 }
 
 function getStoredAccountId() {
@@ -473,12 +739,349 @@ function prettyJson(value) {
   }
 }
 
+function isChatOnlyProductMode(config = state.appConfig) {
+  return String(config?.product?.mode || "").trim() === "chat_only";
+}
+
+function canAccessSalesWorkspace() {
+  return !(isChatOnlyProductMode() && state.currentUser?.role !== "super_admin");
+}
+
+function getProductModeLabel(mode = "") {
+  return mode === "chat_only" ? "Solo chat" : "Chat + CRM";
+}
+
+function computeSetupHealth(config = {}) {
+  const servicesCount = Object.keys(config?.services || {}).length;
+  const websiteUrlsCount = Array.isArray(config?.knowledge_sources?.website_urls)
+    ? config.knowledge_sources.website_urls.filter(Boolean).length
+    : 0;
+  const hasSpreadsheetSource =
+    Boolean(String(config?.knowledge_sources?.spreadsheet_url || "").trim()) ||
+    Boolean(String(config?.knowledge_sources?.spreadsheet_data || "").trim());
+  const hasInternalNotes = Boolean(
+    String(config?.knowledge_sources?.internal_notes || "").trim()
+  );
+  const hasBrandIdentity =
+    Boolean(String(config?.brand?.name || "").trim()) &&
+    (Boolean(String(config?.brand?.website_url || "").trim()) ||
+      Boolean(String(config?.brand?.logo_url || "").trim()));
+  const hasDeliveryChannels =
+    Boolean(String(config?.contact?.public_whatsapp_number || "").trim()) ||
+    Boolean(String(config?.contact?.support_email || "").trim()) ||
+    Boolean(String(config?.integrations?.whatsapp?.phone_number_id || "").trim()) ||
+    Boolean(String(config?.integrations?.email?.from_email || "").trim()) ||
+    Boolean(String(config?.integrations?.lead_forms?.webhook_url || "").trim()) ||
+    Boolean(String(config?.integrations?.automations?.workspace_url || "").trim());
+
+  const checks = [
+    {
+      key: "brand",
+      label: "Marca",
+      ready: hasBrandIdentity,
+      hint: hasBrandIdentity ? "Lista" : "Falta identidad base",
+    },
+    {
+      key: "offer",
+      label: "Oferta",
+      ready: servicesCount > 0,
+      hint: servicesCount > 0 ? `${servicesCount} servicios` : "Sin servicios",
+    },
+    {
+      key: "context",
+      label: "Contexto",
+      ready: websiteUrlsCount > 0 || hasSpreadsheetSource || hasInternalNotes,
+      hint:
+        websiteUrlsCount > 0 || hasSpreadsheetSource || hasInternalNotes
+          ? "Fuentes cargadas"
+          : "Sin fuentes",
+    },
+    {
+      key: "delivery",
+      label: "Entrega",
+      ready: hasDeliveryChannels,
+      hint: hasDeliveryChannels ? "Canales listos" : "Falta canal",
+    },
+  ];
+
+  const readyCount = checks.filter((item) => item.ready).length;
+  const totalCount = checks.length;
+  const nextStep = checks.find((item) => !item.ready)?.label || "Listo para publicar";
+  const status =
+    readyCount === totalCount ? "ready" : readyCount >= 2 ? "in_progress" : "starting";
+
+  return {
+    checks,
+    readyCount,
+    totalCount,
+    nextStep,
+    status,
+  };
+}
+
+function renderSetupHealth(config = state.appConfig) {
+  if (!el.configSetupHealthCard || !el.configSetupHealthGrid) return;
+
+  const health = computeSetupHealth(config || {});
+  const tone =
+    health.status === "ready" ? "ok" : health.status === "in_progress" ? "progress" : "pending";
+  const title =
+    health.status === "ready"
+      ? "Listo para publicar"
+      : health.status === "in_progress"
+        ? "Setup en progreso"
+        : "Setup por empezar";
+  const copy =
+    health.status === "ready"
+      ? "La cuenta ya tiene marca, oferta, contexto y canales mínimos para salir a producción."
+      : health.status === "in_progress"
+        ? "Ya hay una base útil. Remata los bloques pendientes para dejar el agente consistente y publicable."
+        : "Todavía falta aterrizar la base comercial y técnica del agente antes de ponerlo a trabajar.";
+
+  el.configSetupHealthCard.dataset.tone = tone;
+  if (el.configSetupHealthTitle) {
+    el.configSetupHealthTitle.textContent = title;
+  }
+  if (el.configSetupHealthCopy) {
+    el.configSetupHealthCopy.textContent = copy;
+  }
+  if (el.configSetupHealthBadge) {
+    el.configSetupHealthBadge.textContent = `${health.readyCount}/${health.totalCount}`;
+    el.configSetupHealthBadge.dataset.tone = tone;
+  }
+  el.configSetupHealthGrid.innerHTML = health.checks
+    .map(
+      (check) => `
+        <div class="config-setup-health-item ${check.ready ? "is-ready" : ""}">
+          <strong>${escapeHtml(check.label)}</strong>
+          <span>${escapeHtml(check.hint)}</span>
+        </div>
+      `
+    )
+    .join("");
+
+  if (el.configSetupHealthNext) {
+    el.configSetupHealthNext.innerHTML = `
+      <span>Siguiente paso</span>
+      <strong>${escapeHtml(health.nextStep)}</strong>
+    `;
+  }
+}
+
+function updateProductModeUi(config = state.appConfig) {
+  const isChatOnly = isChatOnlyProductMode(config);
+  const allowSales = canAccessSalesWorkspace();
+  const brandName = config?.brand?.name || "TMedia Global";
+  const isChatOnlyEntry = isChatOnly && !allowSales;
+  document.body?.classList.toggle("product-chat-only", isChatOnly);
+  document.body?.classList.toggle("product-chat-entry", isChatOnlyEntry);
+  el.crmPage?.classList.toggle("product-chat-only", isChatOnly);
+  el.crmPage?.classList.toggle("product-chat-entry", isChatOnlyEntry);
+
+  if (el.crmSidebarKicker) {
+    el.crmSidebarKicker.textContent = isChatOnlyEntry ? "Onboarding guiado" : isChatOnly ? "Setup del chat" : "Indice operativo";
+  }
+  if (el.crmBrandEyebrow) {
+    el.crmBrandEyebrow.textContent = brandName;
+  }
+  if (el.crmBrandTitle) {
+    el.crmBrandTitle.textContent = isChatOnly ? "Chat IA" : "CRM Comercial";
+  }
+  if (el.crmSidebarTitle) {
+    el.crmSidebarTitle.textContent = isChatOnly ? "Chat IA" : brandName;
+  }
+  if (el.crmViewSalesBtn) {
+    el.crmViewSalesBtn.textContent = isChatOnly ? "Workspace comercial" : "CRM comercial";
+  }
+  if (el.crmViewConfigBtn) {
+    el.crmViewConfigBtn.textContent = isChatOnlyEntry ? "Onboarding del chat" : isChatOnly ? "Setup del chat" : "Configuracion del agente";
+  }
+  if (el.crmMobileControlsSummary) {
+    el.crmMobileControlsSummary.textContent = isChatOnlyEntry ? "Accesos del setup" : isChatOnly ? "Setup rapido" : "Menu rapido y filtros";
+  }
+  if (el.crmMobileConfigBtn) {
+    el.crmMobileConfigBtn.textContent = isChatOnly ? "Setup" : "Config";
+  }
+  if (el.refreshBtn) {
+    el.refreshBtn.textContent = isChatOnly ? "Actualizar setup" : "Actualizar";
+  }
+  if (el.configBackBtn) {
+    el.configBackBtn.textContent = allowSales ? "Volver al CRM" : "Volver al setup";
+  }
+  if (el.crmConfigTitle) {
+    el.crmConfigTitle.textContent = isChatOnly ? "Setup del chat" : "Configuracion del agente";
+  }
+  if (el.crmConfigCopy) {
+    el.crmConfigCopy.textContent = isChatOnly
+      ? "Configura marca, fuentes, mensajes, automatizaciones e integraciones para dejar el asistente listo sin depender del CRM comercial."
+      : "Gestiona marca, canales, tono, servicios y bootstrap desde web sin invadir la operativa comercial.";
+  }
+
+  document.title = `${isChatOnly ? "Chat IA" : "CRM"} ${brandName}`;
+}
+
+function normalizeKnowledgeCopyLegacy() {
+  const setText = (selector, text) => {
+    if (!text) return;
+    const node = document.querySelector(selector);
+    if (node) node.textContent = text;
+  };
+
+  setText('#configPanelKnowledge .knowledge-onboarding-head p', 'Empieza por el sector, aterriza la oferta, añade contexto útil y revisa exactamente lo que va a usar la IA.');
+  setText('#configKnowledgeStepPreset .knowledge-block-head p', 'Si quieres ir rápido, arranca con una base por tipo de negocio y luego ajusta servicios, mensajes y automatizaciones.');
+  setText('#configKnowledgeStepServices .knowledge-block-head strong', 'Define la oferta que sí o sí quieres controlar');
+  setText('#configKnowledgeStepServices .knowledge-block-head p', 'Ideal para dejar claro qué vendes, con qué enfoque y con qué rango de precios, sin depender de scraping ni importaciones.');
+  setText('#configKnowledgeStepSources .knowledge-block:first-child .knowledge-block-head p', 'Pega la home y páginas clave de servicios, casos de éxito o FAQ. Una URL por línea.');
+  setText('#configKnowledgeStepSources .knowledge-block:nth-child(2) .knowledge-block-head strong', 'Tarifas y catálogo comercial');
+  setText('#configKnowledgeStepSources .knowledge-block:nth-child(2) .knowledge-block-head p', 'Puedes pegar aquí filas copiadas desde Excel o subir un CSV exportado para conservar servicios, packs y precios.');
+  setText('#configKnowledgeStepReview .knowledge-block-head p', 'Comprueba antes de publicar qué servicios, URLs, notas y matices está usando la IA para responder y proponer.');
+  setText('#configContextPreviewSummary', 'Aún no has generado una vista previa del contexto.');
+
+  const websiteFocusField = el.configKnowledgeWebsiteFocus?.closest('label');
+  if (websiteFocusField) {
+    const labelTextNode = [...websiteFocusField.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && String(node.textContent || '').trim());
+    if (labelTextNode) {
+      labelTextNode.textContent = '\n                      Qué quieres extraer\n                      ';
+    }
+  }
+
+  const mappingField = el.configKnowledgeSpreadsheetMapping?.closest('label');
+  if (mappingField) {
+    const labelTextNode = [...mappingField.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && String(node.textContent || '').trim());
+    if (labelTextNode) {
+      labelTextNode.textContent = '\n                      Cómo interpretar esta tabla\n                      ';
+    }
+  }
+
+  const notesField = el.configKnowledgeInternalNotes?.closest('label');
+  if (notesField) {
+    const labelTextNode = [...notesField.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && String(node.textContent || '').trim());
+    if (labelTextNode) {
+      labelTextNode.textContent = '\n                    Documentación rápida del agente\n                    ';
+    }
+  }
+
+  if (el.configKnowledgeWebsiteFocus) {
+    el.configKnowledgeWebsiteFocus.placeholder = 'Servicios prioritarios, propuesta de valor, testimonios, FAQs, claims comerciales...';
+  }
+  if (el.configKnowledgeSpreadsheetMapping) {
+    el.configKnowledgeSpreadsheetMapping.placeholder = 'Ejemplo: columna A servicio, B tarifa mensual, C tarifa proyecto, D URL';
+  }
+  if (el.configContextPreviewOutput) {
+    el.configContextPreviewOutput.placeholder = 'Aquí verás el contexto que usará la IA para servicios, URLs, hojas y notas internas.';
+  }
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function normalizeKnowledgeCopyRuntimeOld() {
+  const setText = (selector, text) => {
+    if (!text) return;
+    const node = document.querySelector(selector);
+    if (node) node.textContent = text;
+  };
+
+  setText("#configPanelKnowledge .knowledge-onboarding-head p", "Empieza por el sector, aterriza la oferta, añade contexto útil y revisa exactamente lo que va a usar la IA.");
+  setText("#configKnowledgeStepPreset .knowledge-block-head p", "Si quieres ir rápido, arranca con una base por tipo de negocio y luego ajusta servicios, mensajes y automatizaciones.");
+  setText("#configKnowledgeStepServices .knowledge-block-head strong", "Define la oferta que sí o sí quieres controlar");
+  setText("#configKnowledgeStepServices .knowledge-block-head p", "Ideal para dejar claro qué vendes, con qué enfoque y con qué rango de precios, sin depender de scraping ni importaciones.");
+  setText("#configKnowledgeStepSources .knowledge-block:first-child .knowledge-block-head p", "Pega la home y páginas clave de servicios, casos de éxito o FAQ. Una URL por línea.");
+  setText("#configKnowledgeStepSources .knowledge-block:nth-child(2) .knowledge-block-head strong", "Tarifas y catálogo comercial");
+  setText("#configKnowledgeStepSources .knowledge-block:nth-child(2) .knowledge-block-head p", "Puedes pegar aquí filas copiadas desde Excel o subir un CSV exportado para conservar servicios, packs y precios.");
+  setText("#configKnowledgeStepReview .knowledge-block-head p", "Comprueba antes de publicar qué servicios, URLs, notas y matices está usando la IA para responder y proponer.");
+  setText("#configContextPreviewSummary", "Aún no has generado una vista previa del contexto.");
+
+  const websiteFocusField = el.configKnowledgeWebsiteFocus?.closest("label");
+  if (websiteFocusField) {
+    const labelTextNode = [...websiteFocusField.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && String(node.textContent || "").trim());
+    if (labelTextNode) {
+      labelTextNode.textContent = "\n                      Qué quieres extraer\n                      ";
+    }
+  }
+
+  const mappingField = el.configKnowledgeSpreadsheetMapping?.closest("label");
+  if (mappingField) {
+    const labelTextNode = [...mappingField.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && String(node.textContent || "").trim());
+    if (labelTextNode) {
+      labelTextNode.textContent = "\n                      Cómo interpretar esta tabla\n                      ";
+    }
+  }
+
+  const notesField = el.configKnowledgeInternalNotes?.closest("label");
+  if (notesField) {
+    const labelTextNode = [...notesField.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && String(node.textContent || "").trim());
+    if (labelTextNode) {
+      labelTextNode.textContent = "\n                    Documentación rápida del agente\n                    ";
+    }
+  }
+
+  if (el.configKnowledgeWebsiteFocus) {
+    el.configKnowledgeWebsiteFocus.placeholder = "Servicios prioritarios, propuesta de valor, testimonios, FAQs, claims comerciales...";
+  }
+  if (el.configKnowledgeSpreadsheetMapping) {
+    el.configKnowledgeSpreadsheetMapping.placeholder = "Ejemplo: columna A servicio, B tarifa mensual, C tarifa proyecto, D URL";
+  }
+  if (el.configContextPreviewOutput) {
+    el.configContextPreviewOutput.placeholder = "Aquí verás el contexto que usará la IA para servicios, URLs, hojas y notas internas.";
+  }
+}
+
+function normalizeKnowledgeCopy() {
+  const setText = (selector, text) => {
+    if (!text) return;
+    const node = document.querySelector(selector);
+    if (node) node.textContent = text;
+  };
+
+  setText("#configPanelKnowledge .knowledge-onboarding-head p", "Empieza por el sector, aterriza la oferta, a\u00f1ade contexto \u00fatil y revisa exactamente lo que va a usar la IA.");
+  setText("#configKnowledgeStepPreset .knowledge-block-head p", "Si quieres ir r\u00e1pido, arranca con una base por tipo de negocio y luego ajusta servicios, mensajes y automatizaciones.");
+  setText("#configKnowledgeStepServices .knowledge-block-head strong", "Define la oferta que s\u00ed o s\u00ed quieres controlar");
+  setText("#configKnowledgeStepServices .knowledge-block-head p", "Ideal para dejar claro qu\u00e9 vendes, con qu\u00e9 enfoque y con qu\u00e9 rango de precios, sin depender de scraping ni importaciones.");
+  setText("#configKnowledgeStepSources .knowledge-block:first-child .knowledge-block-head p", "Pega la home y p\u00e1ginas clave de servicios, casos de \u00e9xito o FAQ. Una URL por l\u00ednea.");
+  setText("#configKnowledgeStepSources .knowledge-block:nth-child(2) .knowledge-block-head strong", "Tarifas y cat\u00e1logo comercial");
+  setText("#configKnowledgeStepSources .knowledge-block:nth-child(2) .knowledge-block-head p", "Puedes pegar aqu\u00ed filas copiadas desde Excel o subir un CSV exportado para conservar servicios, packs y precios.");
+  setText("#configKnowledgeStepReview .knowledge-block-head p", "Comprueba antes de publicar qu\u00e9 servicios, URLs, notas y matices est\u00e1 usando la IA para responder y proponer.");
+  setText("#configContextPreviewSummary", "A\u00fan no has generado una vista previa del contexto.");
+
+  const websiteFocusField = el.configKnowledgeWebsiteFocus?.closest("label");
+  if (websiteFocusField) {
+    const labelTextNode = [...websiteFocusField.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && String(node.textContent || "").trim());
+    if (labelTextNode) {
+      labelTextNode.textContent = "\n                      Qu\u00e9 quieres extraer\n                      ";
+    }
+  }
+
+  const mappingField = el.configKnowledgeSpreadsheetMapping?.closest("label");
+  if (mappingField) {
+    const labelTextNode = [...mappingField.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && String(node.textContent || "").trim());
+    if (labelTextNode) {
+      labelTextNode.textContent = "\n                      C\u00f3mo interpretar esta tabla\n                      ";
+    }
+  }
+
+  const notesField = el.configKnowledgeInternalNotes?.closest("label");
+  if (notesField) {
+    const labelTextNode = [...notesField.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && String(node.textContent || "").trim());
+    if (labelTextNode) {
+      labelTextNode.textContent = "\n                    Documentaci\u00f3n r\u00e1pida del agente\n                    ";
+    }
+  }
+
+  if (el.configKnowledgeWebsiteFocus) {
+    el.configKnowledgeWebsiteFocus.placeholder = "Servicios prioritarios, propuesta de valor, testimonios, FAQs, claims comerciales...";
+  }
+  if (el.configKnowledgeSpreadsheetMapping) {
+    el.configKnowledgeSpreadsheetMapping.placeholder = "Ejemplo: columna A servicio, B tarifa mensual, C tarifa proyecto, D URL";
+  }
+  if (el.configContextPreviewOutput) {
+    el.configContextPreviewOutput.placeholder = "Aqu\u00ed ver\u00e1s el contexto que usar\u00e1 la IA para servicios, URLs, hojas y notas internas.";
+  }
 }
 
 function normalizeAssetUrl(value) {
@@ -511,13 +1114,7 @@ function applyBrandTheme(config = {}) {
   if (el.crmSidebarTitle) {
     el.crmSidebarTitle.textContent = brandName;
   }
-  if (el.crmBrandEyebrow) {
-    el.crmBrandEyebrow.textContent = brandName;
-  }
-  if (el.crmBrandTitle) {
-    el.crmBrandTitle.textContent = "CRM Comercial";
-  }
-  document.title = `CRM ${brandName}`;
+  updateProductModeUi(config);
 }
 
 function updateConfigLogoPreview(value) {
@@ -593,37 +1190,40 @@ function renderIntegrationValidation(type, validation = {}, badgeText = "") {
 }
 
 function setMainView(viewName) {
+  const allowSales = canAccessSalesWorkspace();
   const isAdmin = viewName === "admin";
-  const isConfig = viewName === "config";
+  const requestedConfig = viewName === "config";
   const isMobile = window.matchMedia("(max-width: 980px)").matches;
   const canSeeAdmin = state.currentUser?.role === "super_admin";
   const finalIsAdmin = isAdmin && canSeeAdmin;
-  const isSales = !isConfig && !finalIsAdmin;
+  const isConfig = requestedConfig || (!allowSales && !finalIsAdmin);
+  const isSales = !isConfig && !finalIsAdmin && allowSales;
 
   el.crmViewAdminBtn?.classList.toggle("is-hidden", !canSeeAdmin);
   el.crmViewAdminBtn?.classList.toggle("is-active", finalIsAdmin);
+  el.crmViewSalesBtn.classList.toggle("is-hidden", !allowSales);
   el.crmViewSalesBtn.classList.toggle("is-active", isSales);
   el.crmViewConfigBtn.classList.toggle("is-active", isConfig);
   el.crmViewAdmin.classList.toggle("is-active", finalIsAdmin);
   el.crmViewSales.classList.toggle("is-active", isSales);
   el.crmViewConfig.classList.toggle("is-active", isConfig);
   if (el.crmMobileBottomNav) {
-    el.crmMobileBottomNav.classList.toggle("is-hidden", isConfig || isAdmin);
+    el.crmMobileBottomNav.classList.toggle("is-hidden", isConfig || isAdmin || !allowSales);
   }
   if (el.crmMobileControls) {
-    el.crmMobileControls.classList.toggle("is-hidden", isMobile || isAdmin);
+    el.crmMobileControls.classList.toggle("is-hidden", isMobile || isAdmin || !allowSales);
   }
   if (el.crmSidebar) {
     el.crmSidebar.classList.toggle("is-mobile-sales-hidden", isMobile && isSales);
   }
   if (el.crmSidebarFilters) {
-    el.crmSidebarFilters.classList.toggle("is-hidden", isConfig || isAdmin);
+    el.crmSidebarFilters.classList.toggle("is-hidden", isConfig || isAdmin || !allowSales);
   }
   if (el.crmSidebarFlow) {
-    el.crmSidebarFlow.classList.toggle("is-hidden", isConfig || isAdmin);
+    el.crmSidebarFlow.classList.toggle("is-hidden", isConfig || isAdmin || !allowSales);
   }
   for (const link of el.crmSalesLinks) {
-    link.classList.toggle("is-hidden", isConfig || isAdmin);
+    link.classList.toggle("is-hidden", isConfig || isAdmin || !allowSales);
   }
 }
 
@@ -782,7 +1382,9 @@ function renderAccounts() {
     null;
 
   if (el.accountPlanBadge) {
-    el.accountPlanBadge.textContent = activeAccount?.plan || "Internal";
+    el.accountPlanBadge.textContent = `${activeAccount?.plan || "Internal"} · ${getProductModeLabel(
+      state.appConfig?.product?.mode || activeAccount?.product_mode || "full_crm"
+    )}`;
   }
 
   if (el.accountSelect) {
@@ -803,6 +1405,16 @@ function renderAdminOverview() {
     .map((account) => {
       const isActive = String(account.id) === String(state.activeAccountId);
       const logoUrl = normalizeAssetUrl(account.brand_logo_url);
+      const productMode = String(account.product_mode || "full_crm");
+      const isChatOnlyAccount = productMode === "chat_only";
+      const setupHealth = account.setup_health || {};
+      const setupChecks = Array.isArray(setupHealth.checks) ? setupHealth.checks : [];
+      const setupTone =
+        setupHealth.status === "ready"
+          ? "ok"
+          : setupHealth.status === "in_progress"
+            ? "progress"
+            : "pending";
       return `
         <article class="admin-account-card ${isActive ? "is-active" : ""}">
           <div class="admin-account-head">
@@ -816,6 +1428,7 @@ function renderAdminOverview() {
             <div class="admin-account-badges">
               <span class="pill">${escapeHtml(account.plan || "trial")}</span>
               <span class="pill">${escapeHtml(account.status || "active")}</span>
+              <span class="pill">${escapeHtml(getProductModeLabel(productMode))}</span>
             </div>
           </div>
           <div class="admin-account-metrics">
@@ -823,6 +1436,37 @@ function renderAdminOverview() {
             <div><span>Enviadas</span><strong>${Number(account?.totals?.quotes_sent || 0)}</strong></div>
             <div><span>Aceptadas</span><strong>${Number(account?.totals?.quotes_accepted || 0)}</strong></div>
           </div>
+          <section class="admin-account-health" data-tone="${escapeHtml(setupTone)}">
+            <div class="admin-account-health-head">
+              <div>
+                <span>Salud del setup</span>
+                <strong>${escapeHtml(setupHealth.progress || "0/4")} listo</strong>
+              </div>
+              <span class="status-pill" data-tone="${escapeHtml(setupTone)}">${escapeHtml(
+                setupHealth.status === "ready"
+                  ? "Listo"
+                  : setupHealth.status === "in_progress"
+                    ? "En progreso"
+                    : "Por empezar"
+              )}</span>
+            </div>
+            <div class="admin-account-health-grid">
+              ${setupChecks
+                .map(
+                  (check) => `
+                    <div class="admin-account-health-item ${check.ready ? "is-ready" : ""}">
+                      <strong>${escapeHtml(check.label || "")}</strong>
+                      <span>${escapeHtml(check.hint || "")}</span>
+                    </div>
+                  `
+                )
+                .join("")}
+            </div>
+            <p class="admin-account-health-next">
+              <span>Siguiente paso</span>
+              <strong>${escapeHtml(setupHealth.next_step || "Revisar cuenta")}</strong>
+            </p>
+          </section>
           <div class="admin-account-edit-grid">
             <label>
               Nombre
@@ -854,6 +1498,17 @@ function renderAdminOverview() {
                   .join("")}
               </select>
             </label>
+            <label>
+              Producto
+              <select data-account-field="product_mode" data-account-id="${escapeHtml(account.id)}">
+                ${["full_crm", "chat_only"]
+                  .map(
+                    (option) =>
+                      `<option value="${option}" ${productMode === option ? "selected" : ""}>${option === "chat_only" ? "solo chat" : "chat + crm"}</option>`
+                  )
+                  .join("")}
+              </select>
+            </label>
             <label class="admin-checkbox">
               <input type="checkbox" data-account-field="is_default" data-account-id="${escapeHtml(account.id)}" ${
                 account.is_default ? "checked" : ""
@@ -871,7 +1526,7 @@ function renderAdminOverview() {
               }
               <button type="button" class="crm-secondary-btn" data-save-account="${escapeHtml(account.id)}">Guardar cuenta</button>
               <button type="button" class="crm-secondary-btn" data-open-account="${escapeHtml(account.id)}" data-open-view="config">Configurar</button>
-              <button type="button" class="crm-primary-inline-btn" data-open-account="${escapeHtml(account.id)}" data-open-view="sales">Abrir CRM</button>
+              <button type="button" class="crm-primary-inline-btn" data-open-account="${escapeHtml(account.id)}" data-open-view="${isChatOnlyAccount ? "config" : "sales"}">${isChatOnlyAccount ? "Abrir setup" : "Abrir CRM"}</button>
             </div>
           </div>
         </article>
@@ -895,9 +1550,14 @@ function renderAdminOverview() {
         ...el.adminOverviewGrid.querySelectorAll(`[data-account-id="${accountId}"]`),
       ];
       const payload = {};
+      let productMode = "";
       for (const field of fields) {
         const key = field.getAttribute("data-account-field");
         if (!key) continue;
+        if (key === "product_mode") {
+          productMode = field.value;
+          continue;
+        }
         payload[key] =
           field.type === "checkbox" ? field.checked : field.value;
       }
@@ -911,6 +1571,17 @@ function renderAdminOverview() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+        if (productMode) {
+          await fetchJson(`${API_BASE}/config?account_id=${encodeURIComponent(accountId)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              product: {
+                mode: productMode,
+              },
+            }),
+          });
+        }
         await Promise.all([loadAccounts(), loadAdminOverview(), loadConfig(), loadLeads()]);
         setStatus(el.adminAccountStatus, "Cuenta actualizada.", "ok");
       } catch (error) {
@@ -1078,6 +1749,7 @@ async function createAdminAccount() {
     slug: el.adminCreateSlug.value,
     plan: el.adminCreatePlan.value,
     status: el.adminCreateStatus.value,
+    product_mode: el.adminCreateProductMode.value,
     is_default: el.adminCreateDefault.checked,
     admin_email: el.adminCreateAdminEmail.value,
     admin_password: el.adminCreateAdminPassword.value,
@@ -1095,10 +1767,23 @@ async function createAdminAccount() {
       body: JSON.stringify(payload),
     });
 
+    if (data?.account?.id && payload.product_mode === "chat_only") {
+      await fetchJson(`${API_BASE}/config?account_id=${encodeURIComponent(data.account.id)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product: {
+            mode: "chat_only",
+          },
+        }),
+      });
+    }
+
     el.adminCreateName.value = "";
     el.adminCreateSlug.value = "";
     el.adminCreatePlan.value = "starter";
     el.adminCreateStatus.value = "trial";
+    el.adminCreateProductMode.value = "full_crm";
     el.adminCreateDefault.checked = false;
     el.adminCreateAdminEmail.value = "";
     el.adminCreateAdminPassword.value = "";
@@ -1189,31 +1874,35 @@ function createServiceEditorItem(name = "", facts = {}) {
   item.className = "service-item";
   item.innerHTML = `
     <div class="service-item-head">
-      <strong>Servicio</strong>
+      <div class="service-item-head-copy">
+        <span>Servicio</span>
+        <strong>${escapeHtml(name || "Bloque de servicio")}</strong>
+        <p>Define nombre, URL, tarifas de referencia y el enfoque comercial que debe respetar el agente.</p>
+      </div>
       <button type="button" class="service-remove-btn">Quitar</button>
     </div>
     <div class="service-item-grid">
-      <label>
+      <label class="service-item-field">
         Nombre
         <input type="text" data-field="name" value="${escapeHtml(name)}" />
       </label>
-      <label>
+      <label class="service-item-field">
         URL
         <input type="url" data-field="url" value="${escapeHtml(facts?.url || "")}" />
       </label>
-      <label>
+      <label class="service-item-field">
         Tarifa mensual orientativa
         <input type="text" data-field="min_monthly_fee" value="${escapeHtml(facts?.min_monthly_fee || "")}" />
       </label>
-      <label>
+      <label class="service-item-field">
         Tarifa de proyecto orientativa
         <input type="text" data-field="min_project_fee" value="${escapeHtml(facts?.min_project_fee || "")}" />
       </label>
-      <label class="quote-grid-full">
+      <label class="service-item-field quote-grid-full">
         Descripcion
         <textarea rows="4" data-field="description">${escapeHtml(facts?.description || "")}</textarea>
       </label>
-      <label class="quote-grid-full">
+      <label class="service-item-field quote-grid-full">
         Notas comerciales
         <textarea rows="4" data-field="notes">${escapeHtml(facts?.notes || "")}</textarea>
       </label>
@@ -1281,6 +1970,95 @@ function splitSpreadsheetLine(raw = "") {
   return text.split(delimiter).map((cell) => String(cell || "").trim());
 }
 
+function normalizeSpreadsheetHeading(value = "") {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeSpreadsheetValue(value = "") {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizePriceValue(value = "") {
+  const raw = normalizeSpreadsheetValue(value);
+  if (!raw) return "";
+
+  const compact = raw
+    .replace(/\b(eur|euros?)\b/gi, "EUR")
+    .replace(/\s*\/\s*mes\b/gi, " / mes")
+    .replace(/\s*\/\s*month\b/gi, " / month")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (/(\€|eur|iva)/i.test(compact)) return compact;
+  if (/^\d+(?:[.,]\d+)?$/.test(compact)) return `${compact} EUR + IVA`;
+  return compact;
+}
+
+function parseSpreadsheetMappingHints(raw = "") {
+  const text = String(raw || "").trim();
+  const mapping = {
+    name: [],
+    url: [],
+    monthly: [],
+    project: [],
+    description: [],
+    notes: [],
+  };
+  if (!text) return mapping;
+
+  const aliasMap = {
+    servicio: "name",
+    service: "name",
+    nombre: "name",
+    producto: "name",
+    solucion: "name",
+    url: "url",
+    pagina: "url",
+    página: "url",
+    landing: "url",
+    enlace: "url",
+    mensual: "monthly",
+    "precio mensual": "monthly",
+    "tarifa mensual": "monthly",
+    proyecto: "project",
+    setup: "project",
+    alta: "project",
+    "precio proyecto": "project",
+    descripcion: "description",
+    descripción: "description",
+    detalle: "description",
+    resumen: "description",
+    notas: "notes",
+    observaciones: "notes",
+    condiciones: "notes",
+    comentarios: "notes",
+  };
+
+  text
+    .split(/[,\n;]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((entry) => {
+      const parts = entry.split(/[:=]/).map((item) => item.trim()).filter(Boolean);
+      if (parts.length < 2) return;
+      const left = normalizeSpreadsheetHeading(parts[0]);
+      const right = normalizeSpreadsheetHeading(parts.slice(1).join(" "));
+      const targetKey = aliasMap[left];
+      if (!targetKey || !right) return;
+      if (!mapping[targetKey].includes(right)) {
+        mapping[targetKey].push(right);
+      }
+    });
+
+  return mapping;
+}
+
 function parseSpreadsheetRows(raw = "") {
   const lines = String(raw || "")
     .split(/\r?\n/)
@@ -1290,23 +2068,24 @@ function parseSpreadsheetRows(raw = "") {
   if (lines.length < 2) return [];
 
   const headers = splitSpreadsheetLine(lines[0]).map((header) =>
-    String(header || "").trim().toLowerCase()
+    normalizeSpreadsheetHeading(header)
   );
 
   return lines.slice(1).map((line) => {
     const cells = splitSpreadsheetLine(line);
     const row = {};
     headers.forEach((header, index) => {
-      row[header] = String(cells[index] || "").trim();
+      row[header] = normalizeSpreadsheetValue(cells[index] || "");
     });
     return row;
   });
 }
 
 function getSpreadsheetCell(row = {}, candidates = []) {
-  for (const candidate of candidates) {
+  const normalizedCandidates = candidates.map((candidate) => normalizeSpreadsheetHeading(candidate));
+  for (const candidate of normalizedCandidates) {
     if (row[candidate]) return row[candidate];
-    const fuzzy = Object.keys(row).find((key) => key.includes(candidate));
+    const fuzzy = Object.keys(row).find((key) => key === candidate || key.includes(candidate) || candidate.includes(key));
     if (fuzzy && row[fuzzy]) return row[fuzzy];
   }
   return "";
@@ -1354,6 +2133,79 @@ function parseServicesFromSpreadsheet(raw = "") {
   return services;
 }
 
+function parseServicesFromSpreadsheetEnhanced(raw = "", mappingHints = {}) {
+  const rows = parseSpreadsheetRows(raw);
+  const services = {};
+
+  for (const row of rows) {
+    const name = getSpreadsheetCell(row, [
+      "servicio",
+      "service",
+      "nombre",
+      "producto",
+      "solucion",
+      "solución",
+      "categoria",
+      "categoría",
+      "pack",
+      ...(mappingHints?.name || []),
+    ]);
+    if (!name) continue;
+
+    services[name] = {
+      url: getSpreadsheetCell(row, ["url", "landing", "pagina", "página", "page", "enlace", "link", ...(mappingHints?.url || [])]),
+      min_monthly_fee: normalizePriceValue(
+        getSpreadsheetCell(row, [
+          "precio mensual",
+          "tarifa mensual",
+          "mensual",
+          "monthly fee",
+          "monthly",
+          "retainer",
+          "fee mensual",
+          "cuota mensual",
+          "desde mes",
+          ...(mappingHints?.monthly || []),
+        ])
+      ),
+      min_project_fee: normalizePriceValue(
+        getSpreadsheetCell(row, [
+          "precio proyecto",
+          "tarifa proyecto",
+          "proyecto",
+          "project fee",
+          "project",
+          "setup",
+          "alta",
+          "precio inicial",
+          "one off",
+          ...(mappingHints?.project || []),
+        ])
+      ),
+      description: getSpreadsheetCell(row, [
+        "descripcion",
+        "descripción",
+        "description",
+        "detalle",
+        "resumen",
+        "summary",
+        ...(mappingHints?.description || []),
+      ]),
+      notes: getSpreadsheetCell(row, [
+        "notas",
+        "notes",
+        "observaciones",
+        "condiciones",
+        "comentarios",
+        "comentario",
+        ...(mappingHints?.notes || []),
+      ]),
+    };
+  }
+
+  return services;
+}
+
 function updateKnowledgeUiHints() {
   const websiteCount = parseMultilineUrls(el.configKnowledgeWebsiteUrls?.value || "").length;
   if (el.configKnowledgeWebsiteCount) {
@@ -1368,10 +2220,157 @@ function updateKnowledgeUiHints() {
       el.configKnowledgeSpreadsheetHint.textContent = `${rowCount} fila${rowCount === 1 ? "" : "s"} cargada${rowCount === 1 ? "" : "s"}`;
     } else if (hasSheetUrl) {
       el.configKnowledgeSpreadsheetHint.textContent = "Hoja enlazada";
-    } else {
-      el.configKnowledgeSpreadsheetHint.textContent = "Sin tabla cargada";
+      } else {
+        el.configKnowledgeSpreadsheetHint.textContent = "Sin tabla cargada";
+      }
+    }
+
+  updateKnowledgeOnboardingState();
+}
+
+function updateKnowledgeOnboardingState() {
+  const { stepStates, totalComplete, nextStep } = getKnowledgeOnboardingSnapshot();
+  if (el.configKnowledgeProgressLabel) {
+    el.configKnowledgeProgressLabel.textContent =
+      totalComplete === 4 ? "Setup listo para revisar" : `${totalComplete} de 4 pasos completados`;
+  }
+
+  if (el.configKnowledgeNextHint) {
+    const hintTitle = el.configKnowledgeNextHint.querySelector("strong");
+    const hintBody = el.configKnowledgeNextHint.querySelector("p");
+    const presetLabel = SECTOR_PRESETS[state.suggestedSectorPresetKey]?.label || "tu sector";
+    if (hintTitle) {
+      hintTitle.textContent = nextStep.label;
+    }
+    if (hintBody) {
+      hintBody.textContent =
+        totalComplete === 4
+          ? "Ya tienes el setup cubierto. El siguiente paso util es revisar la vista previa del contexto y guardar."
+          : nextStep.key === "preset"
+            ? "Empieza por el preset que mejor encaje con este negocio para acelerar el resto del setup."
+            : nextStep.key === "services"
+              ? `Ya tienes una base sugerida para ${presetLabel}. Ahora toca dejar clara la oferta base que si o si quieres controlar.`
+              : nextStep.key === "sources"
+                ? "Anade URLs, tabla comercial o notas internas para enriquecer el agente sin perder control."
+                : "Genera la vista previa final para comprobar exactamente que contexto usara la IA antes de guardar.";
     }
   }
+
+  const stepButtons = [
+    { key: "preset", button: el.configKnowledgeStepPresetBtn },
+    { key: "services", button: el.configKnowledgeStepServicesBtn },
+    { key: "sources", button: el.configKnowledgeStepSourcesBtn },
+    { key: "review", button: el.configKnowledgeStepReviewBtn },
+  ];
+
+  stepButtons.forEach(({ key, button }) => {
+    if (!button) return;
+    button.classList.toggle("is-complete", stepStates[key]);
+    const badge = button.querySelector(`[data-step-state="${key}"]`);
+    if (badge) {
+      badge.textContent = stepStates[key] ? "Listo" : "Por hacer";
+    }
+  });
+
+  if (!document.querySelector(".knowledge-step-card.is-active") && nextStep?.targetId) {
+    document
+      .querySelectorAll(".knowledge-step-card")
+      .forEach((card) => card.classList.toggle("is-active", card.getAttribute("data-target") === nextStep.targetId));
+  }
+}
+
+function getKnowledgeStepMeta(stepKey) {
+  const stepMeta = {
+    preset: {
+      key: "preset",
+      label: "Elegir sector",
+      shortLabel: "sector",
+      targetId: "configKnowledgeStepPreset",
+    },
+    services: {
+      key: "services",
+      label: "Definir oferta",
+      shortLabel: "oferta base",
+      targetId: "configKnowledgeStepServices",
+    },
+    sources: {
+      key: "sources",
+      label: "Anadir contexto",
+      shortLabel: "contexto extra",
+      targetId: "configKnowledgeStepSources",
+    },
+    review: {
+      key: "review",
+      label: "Revisar y publicar",
+      shortLabel: "revision final",
+      targetId: "configKnowledgeStepReview",
+    },
+  };
+
+  return stepMeta[stepKey] || stepMeta.review;
+}
+
+function getKnowledgeOnboardingSnapshot() {
+  const servicesCount = Object.keys(collectServiceConfig()).length;
+  const websiteCount = parseMultilineUrls(el.configKnowledgeWebsiteUrls?.value || "").length;
+  const hasSpreadsheetData = Boolean(String(el.configKnowledgeSpreadsheetData?.value || "").trim());
+  const hasSpreadsheetUrl = Boolean(String(el.configKnowledgeSpreadsheetUrl?.value || "").trim());
+  const hasInternalNotes = Boolean(String(el.configKnowledgeInternalNotes?.value || "").trim());
+  const hasReview = Boolean(String(el.configContextPreviewOutput?.value || "").trim());
+
+  const stepStates = {
+    preset: Boolean(state.suggestedSectorPresetKey),
+    services: servicesCount > 0,
+    sources: websiteCount > 0 || hasSpreadsheetData || hasSpreadsheetUrl || hasInternalNotes,
+    review: hasReview,
+  };
+
+  const totalComplete = Object.values(stepStates).filter(Boolean).length;
+  const nextStepKey = !stepStates.preset
+    ? "preset"
+    : !stepStates.services
+      ? "services"
+      : !stepStates.sources
+        ? "sources"
+        : "review";
+
+  return {
+    stepStates,
+    totalComplete,
+    nextStep: getKnowledgeStepMeta(nextStepKey),
+  };
+}
+
+function scrollToKnowledgeTarget(targetId) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  document
+    .querySelectorAll(".knowledge-step-card")
+    .forEach((card) => card.classList.toggle("is-active", card.getAttribute("data-target") === targetId));
+}
+
+function highlightSuggestedKnowledgeFlow() {
+  const payload = buildConfigPayload();
+  const presetKey = inferSectorPresetKey(payload);
+  const preset = SECTOR_PRESETS[presetKey];
+  state.suggestedSectorPresetKey = presetKey;
+  renderSectorPresets();
+
+    if (el.configSectorPresetStatus) {
+      setStatus(
+        el.configSectorPresetStatus,
+      `Te recomiendo empezar por ${preset?.label || "este preset"}. Revísalo y luego termina de aterrizar la oferta base.`,
+        "ok"
+      );
+    }
+}
+
+function focusNextKnowledgeStep() {
+  const { nextStep } = getKnowledgeOnboardingSnapshot();
+  scrollToKnowledgeTarget(nextStep.targetId);
+  return nextStep;
 }
 
 function renderKnowledgeSources(knowledgeSources = {}) {
@@ -1416,7 +2415,7 @@ function renderSectorPresets() {
         .join("");
 
       return `
-        <article class="sector-preset-card">
+        <article class="sector-preset-card ${state.suggestedSectorPresetKey === key ? "is-suggested" : ""}">
           <div class="sector-preset-head">
             <div>
               <span>${escapeHtml(preset.label || "")}</span>
@@ -1424,6 +2423,11 @@ function renderSectorPresets() {
             </div>
             <em>${Object.keys(preset.services || {}).length} servicios</em>
           </div>
+          ${
+            state.suggestedSectorPresetKey === key
+              ? '<div class="sector-preset-recommendation">Recomendado segun tu contexto actual</div>'
+              : ""
+          }
           <div class="sector-preset-chips">${featureList}</div>
           <button type="button" class="crm-secondary-btn" data-sector-preset="${escapeHtml(key)}">
             Aplicar preset
@@ -1504,12 +2508,92 @@ function applySectorPreset(presetKey) {
   );
 
   state.appConfig = nextConfig;
-  renderConfig();
+  state.suggestedSectorPresetKey = presetKey;
+      renderConfig();
+      state.suggestedSectorPresetKey = inferSectorPresetKey(buildConfigPayload());
+      renderSectorPresets();
   setStatus(
     el.configSectorPresetStatus,
     `Preset ${preset.label} aplicado. Ya puedes retocar servicios, mensajes y automatizaciones antes de guardar.`,
     "ok"
   );
+}
+
+function inferSectorPresetKey(payload = {}) {
+  const text = [
+    payload?.brand?.name,
+    payload?.brand?.website_url,
+    payload?.knowledge_sources?.website_focus,
+    payload?.knowledge_sources?.internal_notes,
+    ...Object.keys(payload?.services || {}),
+  ]
+    .filter(Boolean)
+    .join(" \n ")
+    .toLowerCase();
+
+  if (/(clinica estetica|medicina estetica|estetica avanzada|botox|hialuronico|depilacion laser|laser diodo|acido hialuronico|tratamiento facial|tratamiento corporal)/i.test(text)) {
+    return "esthetic_clinic";
+  }
+  if (/(dental|ortodoncia|implante|invisalign|clinica dental)/i.test(text)) {
+    return "dental";
+  }
+  if (/(software|saas|crm|erp|plataforma b2b|demo|trial|herramienta digital|integraciones|onboarding)/i.test(text)) {
+    return "saas";
+  }
+  if (/(shopify|woocommerce|prestashop|ecommerce|tienda online|catalogo|producto|checkout)/i.test(text)) {
+    return "ecommerce";
+  }
+  if (/(hotel|apartamento turistico|apartamentos turisticos|alojamiento|booking|reserva directa|turismo rural|casa rural|hostal|resort)/i.test(text)) {
+    return "hotel_tourism";
+  }
+  if (/(clinica|clinic|paciente|tratamiento|dental|medic|salud|estetica)/i.test(text)) {
+    return "clinic";
+  }
+  if (/(inmobiliaria|inmueble|propiedad|propietario|promotora|piso|casa|alquiler|venta de vivienda)/i.test(text)) {
+    return "real_estate";
+  }
+  if (/(academia|curso|formacion|máster|master|matricula|alumno|estudiante|escuela)/i.test(text)) {
+    return "academy";
+  }
+  if (/(restaurante|carta|reserva|hosteleria|menu|menú|delivery|terraza|comida)/i.test(text)) {
+    return "restaurant";
+  }
+  if (/(abogado|legal|despacho|asesoria|fiscal|juridic|bufete)/i.test(text)) {
+    return "legal";
+  }
+  if (/(agencia|marketing|captacion b2b|leads b2b|consultoria|consultoría|estudio)/i.test(text)) {
+    return "agency";
+  }
+
+  const serviceNames = Object.keys(payload?.services || {}).map((item) => item.toLowerCase());
+  if (serviceNames.some((item) => item.includes("saas") || item.includes("software") || item.includes("demo"))) {
+    return "saas";
+  }
+  if (serviceNames.some((item) => item.includes("tienda") || item.includes("ecommerce"))) {
+    return "ecommerce";
+  }
+  if (serviceNames.some((item) => item.includes("consultor"))) {
+    return "agency";
+  }
+  if (serviceNames.some((item) => item.includes("diseño web") || item.includes("diseño"))) {
+    return "ecommerce";
+  }
+
+  return "agency";
+}
+
+function suggestSectorPreset() {
+  const payload = buildConfigPayload();
+  const presetKey = inferSectorPresetKey(payload);
+  const preset = SECTOR_PRESETS[presetKey];
+  state.suggestedSectorPresetKey = presetKey;
+  renderSectorPresets();
+  setStatus(
+    el.configSectorPresetStatus,
+    `Te recomiendo empezar por ${preset?.label || "este preset"} y después afinar oferta, mensajes y automatizaciones.`,
+    "ok"
+  );
+  scrollToKnowledgeTarget("configKnowledgeStepServices");
 }
 
 function buildConfigPayload() {
@@ -1519,6 +2603,9 @@ function buildConfigPayload() {
   const automation_flows = collectAutomationFlows();
 
   return {
+    product: {
+      mode: el.configProductMode?.value || "full_crm",
+    },
     brand: {
       name: el.configBrandName.value,
       website_url: el.configWebsiteUrl.value,
@@ -1616,7 +2703,8 @@ function suggestServicesFromSpreadsheet() {
     return;
   }
 
-  const suggested = parseServicesFromSpreadsheet(raw);
+  const mappingHints = parseSpreadsheetMappingHints(el.configKnowledgeSpreadsheetMapping?.value || "");
+  const suggested = parseServicesFromSpreadsheetEnhanced(raw, mappingHints);
   const count = mergeSuggestedServicesIntoEditor(suggested);
 
   if (!count) {
@@ -1628,11 +2716,18 @@ function suggestServicesFromSpreadsheet() {
     return;
   }
 
+  const nextPayload = buildConfigPayload();
+  const presetKey = inferSectorPresetKey(nextPayload);
+  const preset = SECTOR_PRESETS[presetKey];
+  state.suggestedSectorPresetKey = presetKey;
+  renderSectorPresets();
+
   setStatus(
     el.configSuggestServicesStatus,
-    `${count} servicio${count === 1 ? "" : "s"} propuesto${count === 1 ? "" : "s"} desde la tabla. Puedes editarlo todo antes de guardar.`,
+    `${count} servicio${count === 1 ? "" : "s"} propuesto${count === 1 ? "" : "s"} desde la tabla. El siguiente paso más útil es revisar ${preset?.label || "el preset sugerido"} antes de guardar.`,
     "ok"
   );
+  focusNextKnowledgeStep();
 }
 
 function getTemplateOptionsMarkup(selected = "") {
@@ -1665,22 +2760,22 @@ function createMessageTemplateCard(key, template = {}) {
       <em>${escapeHtml(key)}</em>
     </div>
     <div class="message-template-fields">
-      <label>
+      <label class="message-template-field">
         Etiqueta interna
         <input type="text" data-field="label" value="${escapeHtml(template.label || "")}" />
       </label>
-      <label>
+      <label class="message-template-field">
         Canal
         <select data-field="channel">
           <option value="whatsapp"${channel === "whatsapp" ? " selected" : ""}>whatsapp</option>
           <option value="email"${isEmail ? " selected" : ""}>email</option>
         </select>
       </label>
-      <label class="quote-grid-full${isEmail ? "" : " is-hidden"}" data-role="subject">
+      <label class="message-template-field quote-grid-full${isEmail ? "" : " is-hidden"}" data-role="subject">
         Asunto
         <input type="text" data-field="subject" value="${escapeHtml(template.subject || "")}" />
       </label>
-      <label class="quote-grid-full">
+      <label class="message-template-field quote-grid-full">
         Cuerpo del mensaje
         <textarea rows="5" data-field="body">${escapeHtml(template.body || "")}</textarea>
       </label>
@@ -1743,11 +2838,11 @@ function createAutomationStepItem(step = {}) {
       <button type="button" class="service-remove-btn automation-step-remove">Quitar</button>
     </div>
     <div class="automation-step-grid">
-      <label>
+      <label class="automation-step-field">
         Espera
         <input type="number" min="0" step="1" data-field="delay_value" value="${escapeHtml(delayValue)}" />
       </label>
-      <label>
+      <label class="automation-step-field">
         Unidad
         <select data-field="delay_unit">
           <option value="minutes"${delayUnit === "minutes" ? " selected" : ""}>minutos</option>
@@ -1755,18 +2850,18 @@ function createAutomationStepItem(step = {}) {
           <option value="days"${delayUnit === "days" ? " selected" : ""}>dias</option>
         </select>
       </label>
-      <label>
+      <label class="automation-step-field">
         Canal
         <select data-field="channel">
           <option value="whatsapp"${channel === "whatsapp" ? " selected" : ""}>whatsapp</option>
           <option value="email"${channel === "email" ? " selected" : ""}>email</option>
         </select>
       </label>
-      <label>
+      <label class="automation-step-field">
         Plantilla
         <select data-field="template_key">${getTemplateOptionsMarkup(templateKey)}</select>
       </label>
-      <label class="automation-step-toggle">
+      <label class="automation-step-field automation-step-toggle">
         <input type="checkbox" data-field="active"${active ? " checked" : ""} />
         <span>Paso activo</span>
       </label>
@@ -1802,11 +2897,11 @@ function createAutomationFlowCard(key, flow = {}) {
       </div>
     </div>
     <div class="automation-flow-fields">
-      <label>
+      <label class="automation-flow-field">
         Nombre visible
         <input type="text" data-field="label" value="${escapeHtml(flow.label || "")}" />
       </label>
-      <label class="quote-grid-full">
+      <label class="automation-flow-field quote-grid-full">
         Descripcion
         <textarea rows="3" data-field="description">${escapeHtml(flow.description || "")}</textarea>
       </label>
@@ -2242,6 +3337,15 @@ function renderConfig() {
   const config = state.appConfig || {};
   applyBrandTheme(config);
 
+  if (el.configProductMode) {
+    el.configProductMode.value = config?.product?.mode || "full_crm";
+  }
+  if (el.configProductModeHint) {
+    el.configProductModeHint.textContent =
+      (config?.product?.mode || "full_crm") === "chat_only"
+        ? "Esta cuenta solo vera configuracion del agente, integraciones y fuentes. El CRM comercial quedara fuera para el cliente."
+        : "Esta cuenta vera captacion, pipeline, presupuestos, analitica y configuracion.";
+  }
   el.configBrandName.value = config?.brand?.name || "";
   el.configWebsiteUrl.value = config?.brand?.website_url || "";
   el.configBootstrapUrl.value = config?.brand?.website_url || "";
@@ -2263,7 +3367,10 @@ function renderConfig() {
     config?.agent?.handoff_target_channel || "whatsapp";
   el.configPromptAdditions.value = config?.agent?.prompt_additions || "";
   renderKnowledgeSources(config?.knowledge_sources || {});
+  normalizeKnowledgeCopy();
   renderSectorPresets();
+  renderSetupHealth(config);
+  updateProductModeUi(config);
   el.configWhatsappProvider.value =
     config?.integrations?.whatsapp?.provider || "meta_cloud";
   el.configWhatsappStatusLabel.value =
@@ -2318,9 +3425,13 @@ function renderConfig() {
   renderMessageTemplates(config?.message_templates || {});
   renderAutomationFlows(config?.automation_flows || {});
   renderServiceEditor(config?.services || {});
+  if (!canAccessSalesWorkspace()) {
+    setMainView("config");
+  }
   if (!el.configBootstrapSummary.value.trim()) {
     el.configBootstrapSummary.value = "";
   }
+  updateKnowledgeOnboardingState();
 }
 
 function setConfigTab(tabName) {
@@ -2493,6 +3604,7 @@ async function loadConfig() {
     state.activeAccountId = data.account.id;
   }
   renderConfig();
+  renderAccounts();
 }
 
 async function loadAnalytics() {
@@ -2557,6 +3669,9 @@ async function saveConfig() {
 
     state.appConfig = data.config || null;
     renderConfig();
+    highlightSuggestedKnowledgeFlow();
+    highlightSuggestedKnowledgeFlow();
+    renderAccounts();
     setStatus(el.configSaveStatus, "Configuracion guardada.", "ok");
   } catch (error) {
     setStatus(el.configSaveStatus, `No se pudo guardar: ${error.message}`, "error");
@@ -2632,6 +3747,7 @@ async function analyzeWebsiteConfig() {
       `Resumen: ${snapshot.summary || "-"}`,
       `Prioridad: ${(snapshot.priorities || [])[0] || "-"}`,
     ].join("\n");
+    const presetLabel = SECTOR_PRESETS[state.suggestedSectorPresetKey]?.label || "tu sector";
 
     setStatus(
       el.configAnalyzeStatus,
@@ -2639,6 +3755,12 @@ async function analyzeWebsiteConfig() {
       "ok"
     );
     setConfigTab("knowledge");
+    const nextStep = focusNextKnowledgeStep();
+    setStatus(
+      el.configAnalyzeStatus,
+      `Web analizada. Te recomiendo empezar por ${presetLabel} y seguir con ${nextStep?.shortLabel || "el siguiente paso del setup"}.`,
+      "ok"
+    );
   } catch (error) {
     setStatus(el.configAnalyzeStatus, `No se pudo analizar: ${error.message}`, "error");
   } finally {
@@ -2671,15 +3793,16 @@ async function previewKnowledgeContext() {
       preview.has_internal_notes ? "Con notas internas" : "Sin notas internas",
     ].filter(Boolean);
 
-    if (el.configContextPreviewSummary) {
-      el.configContextPreviewSummary.textContent = summaryParts.join(" · ");
-    }
-    if (el.configContextPreviewOutput) {
-      el.configContextPreviewOutput.value = preview.context || "";
-    }
+      if (el.configContextPreviewSummary) {
+        el.configContextPreviewSummary.textContent = summaryParts.join(" · ");
+      }
+      if (el.configContextPreviewOutput) {
+        el.configContextPreviewOutput.value = preview.context || "";
+      }
+      updateKnowledgeOnboardingState();
 
-    setStatus(
-      el.configContextPreviewStatus,
+      setStatus(
+        el.configContextPreviewStatus,
       "Vista previa generada. Ya puedes revisar exactamente qué contexto utilizará la IA.",
       "ok"
     );
@@ -2898,6 +4021,7 @@ function suggestOnboardingSetup() {
     "Setup inicial propuesto. Revisa Mensajes, Automatizaciones y el tono del agente antes de guardar.",
     "ok"
   );
+  scrollToKnowledgeTarget("configKnowledgeStepReview");
 }
 
 async function validateIntegration(type, button) {
@@ -3390,6 +4514,7 @@ el.configAddServiceBtn.addEventListener("click", () => {
   el.configServicesList.appendChild(createServiceEditorItem());
 });
 el.configSuggestServicesBtn?.addEventListener("click", suggestServicesFromSpreadsheet);
+el.configSuggestPresetBtn?.addEventListener("click", suggestSectorPreset);
 el.configSuggestSetupBtn?.addEventListener("click", suggestOnboardingSetup);
 el.configLogoFile.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
@@ -3468,6 +4593,27 @@ el.configTabMessages?.addEventListener("click", () => setConfigTab("messages"));
 el.configTabAutomations?.addEventListener("click", () => setConfigTab("automations"));
 el.configTabIntegrations.addEventListener("click", () => setConfigTab("integrations"));
 el.configTabWebsite.addEventListener("click", () => setConfigTab("website"));
+el.configProductMode?.addEventListener("change", () => {
+  if (!el.configProductModeHint) return;
+  updateProductModeUi({
+    ...(state.appConfig || {}),
+    product: {
+      ...(state.appConfig?.product || {}),
+      mode: el.configProductMode.value || "full_crm",
+    },
+  });
+  el.configProductModeHint.textContent =
+    el.configProductMode.value === "chat_only"
+      ? "Esta cuenta solo vera configuracion del agente, integraciones y fuentes. El CRM comercial quedara fuera para el cliente."
+      : "Esta cuenta vera captacion, pipeline, presupuestos, analitica y configuracion.";
+  renderSetupHealth(buildConfigPayload());
+});
+el.configForm?.addEventListener("input", () => renderSetupHealth(buildConfigPayload()));
+el.configForm?.addEventListener("change", () => renderSetupHealth(buildConfigPayload()));
+el.configKnowledgeStepPresetBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepPreset"));
+el.configKnowledgeStepServicesBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepServices"));
+el.configKnowledgeStepSourcesBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepSources"));
+el.configKnowledgeStepReviewBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepReview"));
 el.dateFilter.addEventListener("change", () => handleDateFilterChange(el.dateFilter.value));
 el.mobileDateFilter?.addEventListener("change", () =>
   handleDateFilterChange(el.mobileDateFilter.value)
@@ -3479,22 +4625,30 @@ el.serviceFilter.addEventListener("change", () => {
   reloadSalesData();
 });
 el.configKnowledgeWebsiteUrls?.addEventListener("input", updateKnowledgeUiHints);
+el.configKnowledgeWebsiteFocus?.addEventListener("input", updateKnowledgeUiHints);
 el.configKnowledgeSpreadsheetUrl?.addEventListener("input", updateKnowledgeUiHints);
 el.configKnowledgeSpreadsheetData?.addEventListener("input", updateKnowledgeUiHints);
+el.configKnowledgeSpreadsheetMapping?.addEventListener("input", updateKnowledgeUiHints);
+el.configKnowledgeInternalNotes?.addEventListener("input", updateKnowledgeUiHints);
 el.configKnowledgeSpreadsheetFile?.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) return;
 
-  const isCsv =
-    file.type === "text/csv" ||
-    file.name.toLowerCase().endsWith(".csv");
+  const lowerName = file.name.toLowerCase();
+    const isSupportedDelimitedFile =
+      file.type === "text/csv" ||
+      file.type === "text/plain" ||
+      file.type === "text/tab-separated-values" ||
+      lowerName.endsWith(".csv") ||
+      lowerName.endsWith(".tsv") ||
+      lowerName.endsWith(".txt");
 
-  if (!isCsv) {
-    setStatus(
-      el.configSaveStatus,
-      "Por ahora la importacion directa admite CSV. Si vienes de Excel, exporta a CSV o pega las filas en la tabla.",
-      "error"
-    );
+    if (!isSupportedDelimitedFile) {
+      setStatus(
+        el.configSaveStatus,
+        "Por ahora la importacion directa admite CSV, TSV o TXT. Si vienes de Excel, exporta a uno de esos formatos o pega las filas en la tabla.",
+        "error"
+      );
     event.target.value = "";
     return;
   }

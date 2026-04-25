@@ -1,4 +1,7 @@
 export const DEFAULT_APP_CONFIG = {
+  product: {
+    mode: "full_crm",
+  },
   brand: {
     name: "TMedia Global",
     website_url: "https://t-mediaglobal.com",
@@ -381,6 +384,12 @@ export function sanitizeAppConfig(input = {}) {
   const knowledge_sources = sanitizeKnowledgeSources(input?.knowledge_sources);
 
   return {
+    product: {
+      mode:
+        cleanString(input?.product?.mode) === "chat_only"
+          ? "chat_only"
+          : DEFAULT_APP_CONFIG.product.mode,
+    },
     brand: {
       name: cleanString(input?.brand?.name) || DEFAULT_APP_CONFIG.brand.name,
       website_url:

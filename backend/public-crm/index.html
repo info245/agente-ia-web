@@ -73,7 +73,7 @@
         <div class="crm-sidebar-brand">
           <img id="crmSidebarLogo" class="crm-sidebar-logo-image" src="./assets/tmedia-global-logo.png" alt="TMedia Global" />
           <div>
-            <p class="crm-sidebar-kicker">Indice operativo</p>
+            <p id="crmSidebarKicker" class="crm-sidebar-kicker">Indice operativo</p>
             <strong id="crmSidebarTitle">CRM</strong>
           </div>
         </div>
@@ -182,6 +182,13 @@
                     <option value="active">active</option>
                     <option value="paused">paused</option>
                     <option value="archived">archived</option>
+                  </select>
+                </label>
+                <label>
+                  Producto
+                  <select id="adminCreateProductMode">
+                    <option value="full_crm">chat + crm</option>
+                    <option value="chat_only">solo chat</option>
                   </select>
                 </label>
                 <label class="admin-checkbox">
@@ -604,14 +611,30 @@
           <section id="crm-config" class="crm-card crm-config-card">
             <div class="crm-card-header">
               <div>
-                <h3>Configuracion del agente</h3>
-                <p class="crm-section-copy">Gestiona marca, canales, tono, servicios y bootstrap desde web sin invadir la operativa comercial.</p>
+                <h3 id="crmConfigTitle">Configuracion del agente</h3>
+                <p id="crmConfigCopy" class="crm-section-copy">Gestiona marca, canales, tono, servicios y bootstrap desde web sin invadir la operativa comercial.</p>
               </div>
               <div class="crm-config-header-actions">
                 <button id="configBackBtn" type="button" class="crm-secondary-btn">Volver al CRM</button>
                 <button id="configSaveBtn" type="button">Guardar configuracion</button>
               </div>
             </div>
+
+            <section id="configSetupHealthCard" class="crm-card config-setup-health-card">
+              <div class="config-setup-health-head">
+                <div>
+                  <span>Estado del setup</span>
+                  <strong id="configSetupHealthTitle">Por empezar</strong>
+                  <p id="configSetupHealthCopy">Completa marca, oferta, contexto y entrega para dejar el agente listo para publicar.</p>
+                </div>
+                <span id="configSetupHealthBadge" class="status-pill" data-tone="pending">0/4</span>
+              </div>
+              <div id="configSetupHealthGrid" class="config-setup-health-grid"></div>
+              <p id="configSetupHealthNext" class="config-setup-health-next">
+                <span>Siguiente paso</span>
+                <strong>Define la marca y la oferta base</strong>
+              </p>
+            </section>
 
             <form id="configForm" class="config-form">
                 <div class="config-tabs">
@@ -625,6 +648,26 @@
 
               <section id="configPanelGeneral" class="config-panel is-active" data-config-panel="general">
                 <div class="quote-grid">
+                  <div class="config-product-mode-card quote-grid-full">
+                    <div class="config-product-mode-head">
+                      <div>
+                        <span>Producto activo</span>
+                        <strong>Chat IA o suite completa</strong>
+                        <p>Elige si esta cuenta solo necesita el asistente conversacional o tambien toda la capa comercial del CRM.</p>
+                      </div>
+                      <label class="config-product-mode-select">
+                        Modo
+                        <select id="configProductMode">
+                          <option value="full_crm">Chat + CRM</option>
+                          <option value="chat_only">Solo chat</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div id="configProductModeHint" class="config-product-mode-hint">
+                      Esta cuenta vera captacion, pipeline, presupuestos, analitica y configuracion.
+                    </div>
+                  </div>
+
                   <label>
                     Marca
                     <input id="configBrandName" type="text" />
@@ -751,24 +794,69 @@
                   <p>Lo revisado a mano manda. Despues usamos tablas importadas para tarifas y catalogo, y por ultimo el contexto extraido de la web para enriquecer el discurso sin inventar.</p>
                 </div>
 
-                <section class="knowledge-block">
+                <section class="knowledge-onboarding-card">
+                  <div class="knowledge-onboarding-head">
+                    <div>
+                      <span>Setup guiado</span>
+                      <strong>Deja el agente listo en 4 pasos</strong>
+                      <p>Empieza por el sector, aterriza la oferta, añade contexto útil y revisa exactamente lo que va a usar la IA.</p>
+                    </div>
+                    <div id="configKnowledgeProgressLabel" class="config-inline-badge">0 de 4 pasos listos</div>
+                  </div>
+                  <div id="configKnowledgeNextHint" class="knowledge-next-hint">
+                    <span>Siguiente paso recomendado</span>
+                    <strong>Elige sector</strong>
+                    <p>Empieza por el preset que mejor encaje con este negocio para acelerar el resto del setup.</p>
+                  </div>
+                  <div class="knowledge-steps-grid">
+                    <button id="configKnowledgeStepPresetBtn" type="button" class="knowledge-step-card" data-target="configKnowledgeStepPreset">
+                      <span>Paso 1</span>
+                      <strong>Elige sector</strong>
+                      <p>Aplica un preset o deja que te recomendemos el punto de partida.</p>
+                      <em data-step-state="preset">Por hacer</em>
+                    </button>
+                    <button id="configKnowledgeStepServicesBtn" type="button" class="knowledge-step-card" data-target="configKnowledgeStepServices">
+                      <span>Paso 2</span>
+                      <strong>Define oferta</strong>
+                      <p>Añade servicios, tarifas y páginas clave para fijar la propuesta comercial.</p>
+                      <em data-step-state="services">Por hacer</em>
+                    </button>
+                    <button id="configKnowledgeStepSourcesBtn" type="button" class="knowledge-step-card" data-target="configKnowledgeStepSources">
+                      <span>Paso 3</span>
+                      <strong>Añade contexto</strong>
+                      <p>Sube tabla, pega URLs o documenta notas internas para enriquecer el agente.</p>
+                      <em data-step-state="sources">Por hacer</em>
+                    </button>
+                    <button id="configKnowledgeStepReviewBtn" type="button" class="knowledge-step-card" data-target="configKnowledgeStepReview">
+                      <span>Paso 4</span>
+                      <strong>Revisa y publica</strong>
+                      <p>Genera el contexto final y valida lo que usara la IA antes de guardar.</p>
+                      <em data-step-state="review">Por hacer</em>
+                    </button>
+                  </div>
+                </section>
+
+                <section id="configKnowledgeStepPreset" class="knowledge-block">
                   <div class="knowledge-block-head">
                     <div>
                       <span>Presets por sector</span>
-                      <strong>Punto de partida comercial</strong>
-                      <p>Si quieres acelerar el onboarding, aplica una base por tipo de negocio y luego ajusta servicios, mensajes y automatizaciones a tu gusto.</p>
+                        <strong>Elige el mejor punto de partida</strong>
+                        <p>Si quieres ir rápido, arranca con una base por tipo de negocio y luego ajusta servicios, mensajes y automatizaciones.</p>
+                    </div>
+                    <div class="knowledge-head-actions">
+                      <button id="configSuggestPresetBtn" type="button" class="crm-secondary-btn">Sugerir preset</button>
                     </div>
                   </div>
                   <div id="configSectorPresetList" class="sector-preset-grid"></div>
                   <div id="configSectorPresetStatus" class="save-status" aria-live="polite"></div>
                 </section>
 
-                <section class="knowledge-block">
+                <section id="configKnowledgeStepServices" class="knowledge-block">
                   <div class="knowledge-block-head">
                     <div>
                       <span>Configuracion basica</span>
-                      <strong>Servicios y oferta manual</strong>
-                      <p>Ideal para dejar claro que vendes y con que rango de precios sin depender de scraping ni importaciones.</p>
+                        <strong>Define la oferta que sí o sí quieres controlar</strong>
+                        <p>Ideal para dejar claro qué vendes, con qué enfoque y con qué rango de precios, sin depender de scraping ni importaciones.</p>
                     </div>
                     <div class="knowledge-head-actions">
                       <button id="configSuggestServicesBtn" type="button" class="crm-secondary-btn">Proponer desde tabla</button>
@@ -779,7 +867,7 @@
                   <div id="configSuggestServicesStatus" class="save-status" aria-live="polite"></div>
                 </section>
 
-                <div class="knowledge-advanced-grid">
+                <div id="configKnowledgeStepSources" class="knowledge-advanced-grid">
                   <section class="knowledge-block">
                     <div class="knowledge-block-head">
                       <div>
@@ -814,8 +902,8 @@
                     </div>
                     <div class="knowledge-upload-row">
                       <label class="knowledge-file-field">
-                        CSV exportado
-                        <input id="configKnowledgeSpreadsheetFile" type="file" accept=".csv,text/csv" />
+                        CSV, TSV o texto exportado
+                        <input id="configKnowledgeSpreadsheetFile" type="file" accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain" />
                       </label>
                       <label class="knowledge-field">
                         URL de Google Sheet o documento
@@ -847,12 +935,12 @@
                   </label>
                 </section>
 
-                <section class="knowledge-block knowledge-preview-block">
+                <section id="configKnowledgeStepReview" class="knowledge-block knowledge-preview-block">
                   <div class="knowledge-block-head">
                     <div>
                       <span>Vista previa</span>
-                      <strong>Contexto real que verá la IA</strong>
-                      <p>Comprueba antes de publicar qué servicios, URLs, notas y matices está usando el agente para responder y proponer.</p>
+                        <strong>Revisa el contexto final del agente</strong>
+                        <p>Comprueba antes de publicar qué servicios, URLs, notas y matices está usando la IA para responder y proponer.</p>
                     </div>
                     <div class="knowledge-head-actions">
                       <button id="configSuggestSetupBtn" type="button">Proponer setup inicial</button>
@@ -862,7 +950,7 @@
                   <div class="knowledge-preview-grid">
                     <article class="knowledge-preview-card">
                       <span>Resumen ejecutivo</span>
-                      <div id="configContextPreviewSummary" class="knowledge-preview-summary">Todavía no has generado una vista previa.</div>
+                        <div id="configContextPreviewSummary" class="knowledge-preview-summary">Aún no has generado una vista previa del contexto.</div>
                     </article>
                     <label class="knowledge-field quote-grid-full">
                       Contexto consolidado del agente

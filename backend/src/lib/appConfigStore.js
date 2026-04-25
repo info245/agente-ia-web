@@ -83,7 +83,47 @@ export async function getAppConfig({ force = false, accountId = null } = {}) {
 
 export async function saveAppConfig(input = {}, { accountId = null } = {}) {
   const account = await resolveAccount(accountId);
-  const sanitized = sanitizeAppConfig(input);
+  const currentConfig = await getAppConfig({ force: true, accountId: account.id });
+  const sanitized = sanitizeAppConfig({
+    ...currentConfig,
+    ...(input || {}),
+    product: {
+      ...(currentConfig?.product || {}),
+      ...(input?.product || {}),
+    },
+    brand: {
+      ...(currentConfig?.brand || {}),
+      ...(input?.brand || {}),
+    },
+    contact: {
+      ...(currentConfig?.contact || {}),
+      ...(input?.contact || {}),
+    },
+    agent: {
+      ...(currentConfig?.agent || {}),
+      ...(input?.agent || {}),
+    },
+    integrations: {
+      ...(currentConfig?.integrations || {}),
+      ...(input?.integrations || {}),
+    },
+    knowledge_sources: {
+      ...(currentConfig?.knowledge_sources || {}),
+      ...(input?.knowledge_sources || {}),
+    },
+    message_templates: {
+      ...(currentConfig?.message_templates || {}),
+      ...(input?.message_templates || {}),
+    },
+    automation_flows: {
+      ...(currentConfig?.automation_flows || {}),
+      ...(input?.automation_flows || {}),
+    },
+    services: {
+      ...(currentConfig?.services || {}),
+      ...(input?.services || {}),
+    },
+  });
   const merged = mergeAppConfig(sanitized);
 
   const { data, error } = await supabase
