@@ -8,11 +8,15 @@ test("accepts a plain name only when the close flow is explicitly asking for it"
   const accepted = extractLeadDataFromText("Antonio", {
     current_step: "close_ask_name",
   });
+  const acceptedWithAccent = extractLeadDataFromText("David López", {
+    current_step: "close_ask_name",
+  });
   const rejected = extractLeadDataFromText("Antonio", {
     current_step: "close_ask_channel",
   });
 
   assert.equal(accepted.name, "Antonio");
+  assert.equal(acceptedWithAccent.name, "David López");
   assert.equal(rejected.name, null);
 });
 
@@ -36,6 +40,18 @@ test("does not infer contact channel just because a phone or email appears", () 
   assert.equal(phoneResult.preferred_contact_channel, null);
   assert.equal(emailResult.email, "antonio@example.com");
   assert.equal(emailResult.preferred_contact_channel, null);
+});
+
+test("does not treat phone-like numbers as budget", () => {
+  const phoneLike = extractLeadDataFromText("608339316", {
+    current_step: "close_ask_phone",
+  });
+  const explicitBudget = extractLeadDataFromText("700 eur", {
+    current_step: "ask_budget",
+  });
+
+  assert.equal(phoneLike.budget_range, null);
+  assert.equal(explicitBudget.budget_range?.includes("700"), true);
 });
 
 test("does not confuse 'emailing' with choosing email as contact channel", () => {

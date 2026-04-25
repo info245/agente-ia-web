@@ -400,7 +400,7 @@ function isLikelyValidName(value) {
 
   if (!words.length || words.length > 4) return false;
 
-  const allowedWord = /^[A-Za-zÃÃ‰ÃÃ“ÃšÃ¡Ã©Ã­Ã³ÃºÃ‘Ã±ÃœÃ¼'-]+$/;
+  const allowedWord = /^[\p{L}'-]+$/u;
   if (!words.every((w) => allowedWord.test(w))) return false;
 
   return true;
@@ -477,8 +477,52 @@ function shouldMarkChatCompleted(lead, reply) {
   return isCompletedLeadData(lead) && isClosingReply(reply);
 }
 
+function isFarewellOrThanks(text = "") {
+  const t = normalizeText(text);
+  return (
+    t === "gracias" ||
+    t === "muchas gracias" ||
+    t === "ok gracias" ||
+    t === "vale gracias" ||
+    t === "perfecto gracias" ||
+    t === "genial gracias" ||
+    t === "no gracias" ||
+    t === "gracias de momento" ||
+    t === "eso es todo" ||
+    t === "nada mas" ||
+    t === "nada más" ||
+    t === "hasta luego"
+  );
+}
+
+function looksLikeExplicitBudgetMessage(text = "", lead = null) {
+  const raw = String(text || "").trim();
+  const t = normalizeText(raw);
+  if (!raw) return false;
+  if (raw.replace(/\D/g, "").length >= 8) return false;
+
+  if (/^\d{2,6}$/.test(raw)) {
+    return normalizeText(lead?.current_step || "") === "ask_budget";
+  }
+
+  return (
+    /€|eur|euro/i.test(raw) ||
+    t.includes("presupuesto") ||
+    t.includes("precio") ||
+    t.includes("inversion") ||
+    t.includes("inversión") ||
+    t.includes("al mes") ||
+    t.includes("/mes") ||
+    t.includes("mensual") ||
+    t.includes("cuanto cuesta") ||
+    t.includes("cuánto cuesta") ||
+    t.includes("entre ")
+  );
+}
+
 function normalizeBudget(text) {
   const t = String(text || "").trim();
+  if (!looksLikeExplicitBudgetMessage(t, null)) return null;
 
   const m1 = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(â‚¬|eur)\b/i);
   if (m1) {
@@ -1413,6 +1457,18 @@ function buildStructuredCloseReply({
   }
 
   const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
+
+  if (closeStep === "close_ready" && isFarewellOrThanks(text)) {
+    if (preferredChannel.includes("whatsapp") && hasPhone(lead)) {
+      return `Perfecto, ${safeName}. Queda todo preparado para seguir por WhatsApp con el contexto de lo que hemos visto.`;
+    }
+    if (preferredChannel.includes("email") && lead?.email) {
+      return `Perfecto, ${safeName}. Queda todo preparado y te lo envío por email con lo que hemos revisado.`;
+    }
+    return safeName
+      ? `Perfecto, ${safeName}. Queda todo preparado y seguimos desde aquí cuando quieras.`
+      : "Perfecto. Queda todo preparado y seguimos desde aquí cuando quieras.";
+  }
 
   if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
     return hasAnalysisSnapshot(analysisSnapshot)
@@ -2690,6 +2746,13 @@ async function processIncomingMessage({
     }
   }
 
+  if (
+    incoming.budget_range &&
+    !looksLikeExplicitBudgetMessage(userText, leadBefore)
+  ) {
+    incoming.budget_range = null;
+  }
+
   const mergedLeadBase = mergeLeadData({
     currentLead: leadBefore || {},
     extractedLead: incoming,
@@ -3152,7 +3215,13 @@ ${ragContext}
     });
   }
 
-  const chatCompleted = shouldMarkChatCompleted(leadAfter, reply);
+  const chatCompleted =
+    shouldMarkChatCompleted(leadAfter, reply) ||
+    (
+      isCompletedLeadData(leadAfter) &&
+      normalizeText(leadAfter?.current_step || "") === "close_ready" &&
+      isFarewellOrThanks(userText)
+    );
 
   if (chatCompleted) {
     try {

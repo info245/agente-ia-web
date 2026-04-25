@@ -426,7 +426,37 @@ function extractUrgency(text = "") {
 }
 
 function extractBudget(text = "") {
-  const t = String(text);
+  const t = String(text || "").trim();
+  const budgetNorm = normalizeText(t);
+  const normalized = budgetNorm;
+  const plainNumber = t.match(/^\d{2,6}$/);
+  if (plainNumber) {
+    const num = Number(plainNumber[0]);
+    if (Number.isFinite(num) && num >= 10) return `${num} â‚¬`;
+  }
+
+  const hasBudgetHint =
+    normalized.includes("presupuesto") ||
+    normalized.includes("cuanto cuesta") ||
+    normalized.includes("cuánto cuesta") ||
+    normalized.includes("precio") ||
+    normalized.includes("inversion") ||
+    normalized.includes("inversión") ||
+    normalized.includes("al mes") ||
+    normalized.includes("/mes") ||
+    normalized.includes("mensual");
+
+  if (hasBudgetHint) {
+    const hintedNumber = t.match(/\b(\d{2,6})\b/);
+    if (hintedNumber) {
+      const num = Number(hintedNumber[1]);
+      if (Number.isFinite(num) && num >= 10) return `${num} â‚¬`;
+    }
+  }
+  const digitsOnly = t.replace(/\D/g, "");
+
+  if (!t) return null;
+  if (digitsOnly.length >= 8) return null;
 
   const between = t.match(
     /entre\s+(\d{2,6})\s*(€|eur)?\s+y\s+(\d{2,6})\s*(€|eur)?/i
@@ -439,7 +469,7 @@ function extractBudget(text = "") {
     if (Number.isFinite(num) && num >= 10) return `${num} €`;
   }
 
-  const normalized = normalizeText(t);
+  const normalizedBudget = normalizeText(t);
   if (normalized.includes("menos de 500")) return "menos de 500 €";
   if (normalized.includes("alrededor de 500")) return "500 €";
   if (normalized.includes("alrededor de 1000")) return "1000 €";
