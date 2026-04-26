@@ -1703,6 +1703,25 @@ function renderAdminOverview() {
       button.classList.add("is-busy");
       setStatus(el.adminAccountStatus, "Eliminando cuenta...");
       try {
+        if (String(accountId) === String(state.activeAccountId || "")) {
+          const fallbackAccount =
+            (state.accounts || []).find(
+              (account) => account.is_default && String(account.id) !== String(accountId)
+            ) ||
+            (state.accounts || []).find(
+              (account) => String(account.id) !== String(accountId)
+            ) ||
+            null;
+
+          if (!fallbackAccount) {
+            throw new Error(
+              "No hay otra cuenta disponible para cambiar el foco antes de borrar esta."
+            );
+          }
+
+          await handleAccountChange(fallbackAccount.id);
+        }
+
         await fetchJson(`${window.location.origin}/api/admin/accounts/${accountId}`, {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },

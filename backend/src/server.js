@@ -3663,9 +3663,13 @@ app.get("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) =
 app.post("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) => {
   try {
     const account = await createAccount(req.body || {});
+    const requestedProductMode =
+      String(req.body?.product_mode || "").trim() === "chat_only"
+        ? "chat_only"
+        : "full_crm";
     try {
       await saveAppConfig(
-        getBlankAppConfig({ productMode: account.product_mode }),
+        getBlankAppConfig({ productMode: requestedProductMode }),
         { accountId: account.id }
       );
     } catch (_error) {
@@ -3685,7 +3689,14 @@ app.post("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) 
         status: "active",
       });
     }
-    res.json({ ok: true, account, client_admin: clientAdmin });
+    res.json({
+      ok: true,
+      account: {
+        ...account,
+        product_mode: requestedProductMode,
+      },
+      client_admin: clientAdmin,
+    });
   } catch (error) {
     const message = String(error?.message || "");
     if (message.includes("accounts_pkey") || message.includes("accounts_slug_key")) {
