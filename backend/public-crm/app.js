@@ -972,7 +972,7 @@ function renderSetupHealth(config = state.appConfig) {
 function updateProductModeUi(config = state.appConfig) {
   const isChatOnly = isChatOnlyProductMode(config);
   const allowSales = canAccessSalesWorkspace();
-  const brandName = config?.brand?.name || "TMedia Global";
+  const brandName = config?.brand?.name || getActiveAccount()?.name || "TMedia Global";
   document.body?.classList.remove("product-chat-only", "product-chat-entry");
   el.crmPage?.classList.remove("product-chat-only", "product-chat-entry");
 

@@ -46,8 +46,9 @@ import {
 import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 import { getAppConfig, saveAppConfig } from "./lib/appConfigStore.js";
-import { getBlankAppConfig, mergeAppConfig } from "./lib/appConfig.js";
+import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
 import {
+  getDefaultAccount,
   listAccounts,
   resolveAccount,
   createAccount,
@@ -3921,10 +3922,14 @@ app.post("/api/crm/config/context-preview", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
     const currentConfig = await getAppConfig({ accountId: account.id });
-    const mergedConfig = mergeAppConfig({
+    const mergedInput = {
       ...currentConfig,
       ...(req.body || {}),
-    });
+    };
+    const mergedConfig =
+      account.id === getDefaultAccount().id
+        ? mergeAppConfig(mergedInput)
+        : sanitizeAppConfig(mergedInput);
     const context = buildKnowledgeContext(mergedConfig);
     const websiteUrls = Array.isArray(mergedConfig?.knowledge_sources?.website_urls)
       ? mergedConfig.knowledge_sources.website_urls.filter(Boolean)

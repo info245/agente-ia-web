@@ -139,7 +139,10 @@ export async function saveAppConfig(input = {}, { accountId = null } = {}) {
       ...(input?.services || {}),
     },
   });
-  const merged = mergeAppConfig(sanitized);
+  const merged =
+    account.id === getDefaultAccount().id
+      ? mergeAppConfig(sanitized)
+      : sanitizeAppConfig(sanitized);
 
   const { data, error } = await supabase
     .from("app_settings")
