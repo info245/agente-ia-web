@@ -46,7 +46,7 @@ import {
 import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 import { getAppConfig, saveAppConfig } from "./lib/appConfigStore.js";
-import { mergeAppConfig } from "./lib/appConfig.js";
+import { getBlankAppConfig, mergeAppConfig } from "./lib/appConfig.js";
 import {
   listAccounts,
   resolveAccount,
@@ -3663,6 +3663,14 @@ app.get("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) =
 app.post("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) => {
   try {
     const account = await createAccount(req.body || {});
+    try {
+      await saveAppConfig(
+        getBlankAppConfig({ productMode: account.product_mode }),
+        { accountId: account.id }
+      );
+    } catch (_error) {
+      // No bloqueamos la creacion de la cuenta si falla el seed inicial de config.
+    }
     const adminEmail = String(req.body?.admin_email || "").trim();
     const adminPassword = String(req.body?.admin_password || "").trim();
 
@@ -3679,6 +3687,13 @@ app.post("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) 
     }
     res.json({ ok: true, account, client_admin: clientAdmin });
   } catch (error) {
+    const message = String(error?.message || "");
+    if (message.includes("accounts_pkey") || message.includes("accounts_slug_key")) {
+      return res.status(400).json({
+        ok: false,
+        error: "Ya existe una cuenta con ese slug. Usa otro o abre la cuenta ya creada.",
+      });
+    }
     res.status(500).json({ ok: false, error: error.message });
   }
 });

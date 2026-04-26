@@ -952,7 +952,8 @@ textarea {
 }
 
 .config-panel.is-active {
-  display: block;
+  display: grid;
+  gap: 22px;
   min-width: 0;
   overflow: hidden;
 }
@@ -1298,7 +1299,7 @@ textarea {
 .automation-flow-fields,
 .automation-step-grid {
   display: grid;
-  gap: 14px;
+  gap: 18px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -1345,7 +1346,7 @@ textarea {
 
 .message-template-fields textarea,
 .automation-flow-fields textarea {
-  min-height: 144px;
+  min-height: 168px;
   resize: vertical;
   line-height: 1.58;
 }
@@ -1729,9 +1730,8 @@ textarea {
 
 .knowledge-onboarding-card {
   display: grid;
-  gap: 18px;
-  margin-bottom: 18px;
-  padding: 22px;
+  gap: 22px;
+  padding: 24px;
   border-radius: 28px;
   border: 1px solid rgba(191, 208, 234, 0.84);
   background:
@@ -1772,8 +1772,8 @@ textarea {
 
 .knowledge-steps-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .knowledge-next-hint {
@@ -1888,20 +1888,16 @@ textarea {
   color: var(--accent-dark);
 }
 
-.knowledge-block {
-  margin-bottom: 18px;
-}
-
 .sector-preset-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
 }
 
 .sector-preset-card {
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  gap: 16px;
+  padding: 20px;
   border-radius: 22px;
   border: 1px solid rgba(191, 208, 234, 0.84);
   background:
@@ -2136,7 +2132,7 @@ textarea {
 
 .services-editor-list {
   display: grid;
-  gap: 22px;
+  gap: 26px;
   min-width: 0;
 }
 
@@ -3134,6 +3130,10 @@ textarea {
 
 @media (max-width: 900px) {
   .config-setup-health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sector-preset-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

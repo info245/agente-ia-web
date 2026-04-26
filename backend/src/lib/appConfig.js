@@ -212,18 +212,163 @@ export const DEFAULT_APP_CONFIG = {
   },
 };
 
+export const BLANK_APP_CONFIG = {
+  product: {
+    mode: "full_crm",
+  },
+  brand: {
+    name: "",
+    website_url: "",
+    logo_url: "",
+    primary_color: "#6d41f3",
+    accent_color: "#8d58ff",
+  },
+  contact: {
+    public_whatsapp_number: "",
+    human_agent_whatsapp_number: "",
+    support_email: "",
+  },
+  agent: {
+    tone: "",
+    final_cta_label: "",
+    handoff_target_channel: "whatsapp",
+    prompt_additions: "",
+  },
+  widget: {
+    install_mode: "slug",
+    allowed_domains: [],
+  },
+  integrations: {
+    whatsapp: {
+      provider: "meta_cloud",
+      phone_number_id: "",
+      business_account_id: "",
+      status_label: "Pendiente de conectar",
+      validation: {
+        status: "pending",
+        last_validated_at: "",
+        message: "Sin validar todavia",
+      },
+    },
+    lead_forms: {
+      meta_source: "google_sheets",
+      google_source: "webhook_n8n",
+      sheet_document: "",
+      sheet_tabs: "",
+      webhook_url: "",
+      validation: {
+        status: "pending",
+        last_validated_at: "",
+        message: "Sin validar todavia",
+      },
+    },
+    email: {
+      provider: "smtp",
+      from_email: "",
+      reply_to_email: "",
+      validation: {
+        status: "pending",
+        last_validated_at: "",
+        message: "Sin validar todavia",
+      },
+    },
+    automations: {
+      platform: "n8n",
+      workspace_url: "",
+      notes: "",
+      validation: {
+        status: "pending",
+        last_validated_at: "",
+        message: "Sin validar todavia",
+      },
+    },
+  },
+  message_templates: {
+    whatsapp_first_contact: {
+      channel: "whatsapp",
+      label: "Primer contacto por WhatsApp",
+      subject: "",
+      body: "",
+    },
+    email_first_contact: {
+      channel: "email",
+      label: "Primer contacto por email",
+      subject: "",
+      body: "",
+    },
+    quote_whatsapp: {
+      channel: "whatsapp",
+      label: "Envio de propuesta por WhatsApp",
+      subject: "",
+      body: "",
+    },
+    quote_email: {
+      channel: "email",
+      label: "Envio de propuesta por email",
+      subject: "",
+      body: "",
+    },
+    recovery_whatsapp: {
+      channel: "whatsapp",
+      label: "Recuperacion por WhatsApp",
+      subject: "",
+      body: "",
+    },
+    recovery_email: {
+      channel: "email",
+      label: "Recuperacion por email",
+      subject: "",
+      body: "",
+    },
+  },
+  automation_flows: {
+    lead_recovery: {
+      label: "Recuperacion de leads",
+      description: "",
+      enabled: false,
+      steps: [],
+    },
+    quote_followup: {
+      label: "Seguimiento de propuesta",
+      description: "",
+      enabled: false,
+      steps: [],
+    },
+  },
+  knowledge_sources: {
+    website_urls: [],
+    website_focus: "",
+    spreadsheet_url: "",
+    spreadsheet_data: "",
+    spreadsheet_mapping: "",
+    internal_notes: "",
+  },
+  services: {},
+};
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function mergeDeep(base, patch) {
+function mergeDeep(base, patch, parentKey = "") {
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
     return clone(base);
+  }
+
+  if (
+    Object.keys(patch).length === 0 &&
+    ["services", "knowledge_sources", "message_templates", "automation_flows", "widget"].includes(parentKey)
+  ) {
+    return {};
   }
 
   const output = Array.isArray(base) ? [...base] : { ...base };
 
   for (const [key, value] of Object.entries(patch)) {
+    if (["services", "knowledge_sources", "message_templates", "automation_flows", "widget"].includes(key)) {
+      output[key] = clone(value);
+      continue;
+    }
     if (
       value &&
       typeof value === "object" &&
@@ -232,7 +377,7 @@ function mergeDeep(base, patch) {
       typeof base[key] === "object" &&
       !Array.isArray(base[key])
     ) {
-      output[key] = mergeDeep(base[key], value);
+      output[key] = mergeDeep(base[key], value, key);
     } else {
       output[key] = value;
     }
@@ -245,6 +390,12 @@ export function getDefaultAppConfig() {
   return clone(DEFAULT_APP_CONFIG);
 }
 
+export function getBlankAppConfig({ productMode = "full_crm" } = {}) {
+  const next = clone(BLANK_APP_CONFIG);
+  next.product.mode = productMode === "chat_only" ? "chat_only" : "full_crm";
+  return next;
+}
+
 export function mergeAppConfig(overrides = null) {
   return mergeDeep(getDefaultAppConfig(), overrides || {});
 }
@@ -252,6 +403,11 @@ export function mergeAppConfig(overrides = null) {
 function cleanString(value) {
   if (value === undefined || value === null) return "";
   return String(value).trim();
+}
+
+function resolveString(value, fallback = "") {
+  if (value === undefined || value === null) return cleanString(fallback);
+  return cleanString(value);
 }
 
 function sanitizeServices(services = {}) {
@@ -277,7 +433,6 @@ function sanitizeServices(services = {}) {
 }
 
 function sanitizeKnowledgeSources(value = {}) {
-  const defaults = DEFAULT_APP_CONFIG.knowledge_sources || {};
   const websiteUrls = Array.isArray(value?.website_urls)
     ? value.website_urls
     : String(value?.website_urls || "")
@@ -287,22 +442,15 @@ function sanitizeKnowledgeSources(value = {}) {
 
   return {
     website_urls: websiteUrls.map(cleanString).filter(Boolean),
-    website_focus:
-      cleanString(value?.website_focus) || cleanString(defaults.website_focus),
-    spreadsheet_url:
-      cleanString(value?.spreadsheet_url) || cleanString(defaults.spreadsheet_url),
-    spreadsheet_data:
-      cleanString(value?.spreadsheet_data) || cleanString(defaults.spreadsheet_data),
-    spreadsheet_mapping:
-      cleanString(value?.spreadsheet_mapping) ||
-      cleanString(defaults.spreadsheet_mapping),
-    internal_notes:
-      cleanString(value?.internal_notes) || cleanString(defaults.internal_notes),
+    website_focus: cleanString(value?.website_focus),
+    spreadsheet_url: cleanString(value?.spreadsheet_url),
+    spreadsheet_data: cleanString(value?.spreadsheet_data),
+    spreadsheet_mapping: cleanString(value?.spreadsheet_mapping),
+    internal_notes: cleanString(value?.internal_notes),
   };
 }
 
 function sanitizeWidgetConfig(value = {}) {
-  const defaults = DEFAULT_APP_CONFIG.widget || {};
   const allowedDomains = Array.isArray(value?.allowed_domains)
     ? value.allowed_domains
     : String(value?.allowed_domains || "")
@@ -311,7 +459,7 @@ function sanitizeWidgetConfig(value = {}) {
         .filter(Boolean);
 
   return {
-    install_mode: cleanString(value?.install_mode) === "id" ? "id" : cleanString(defaults.install_mode) || "slug",
+    install_mode: cleanString(value?.install_mode) === "id" ? "id" : "slug",
     allowed_domains: allowedDomains.map(cleanString).filter(Boolean),
   };
 }
@@ -341,12 +489,8 @@ function sanitizeMessageTemplates(value = {}) {
         cleanString(incoming?.label) ||
         cleanString(templateDefaults?.label) ||
         key,
-      subject:
-        cleanString(incoming?.subject) ||
-        cleanString(templateDefaults?.subject),
-      body:
-        cleanString(incoming?.body) ||
-        cleanString(templateDefaults?.body),
+      subject: resolveString(incoming?.subject, templateDefaults?.subject),
+      body: resolveString(incoming?.body, templateDefaults?.body),
     };
   }
 
@@ -379,14 +523,13 @@ function sanitizeAutomationFlows(value = {}) {
         cleanString(flowDefaults?.label) ||
         key,
       description:
-        cleanString(incoming?.description) ||
-        cleanString(flowDefaults?.description),
+        resolveString(incoming?.description, flowDefaults?.description),
       enabled:
         typeof incoming?.enabled === "boolean"
           ? incoming.enabled
           : flowDefaults?.enabled !== false,
       steps: sanitizeAutomationSteps(
-        Array.isArray(incoming?.steps) && incoming.steps.length
+        Array.isArray(incoming?.steps)
           ? incoming.steps
           : flowDefaults?.steps || []
       ),
@@ -402,53 +545,51 @@ export function sanitizeAppConfig(input = {}) {
   const automation_flows = sanitizeAutomationFlows(input?.automation_flows);
   const knowledge_sources = sanitizeKnowledgeSources(input?.knowledge_sources);
   const widget = sanitizeWidgetConfig(input?.widget);
+  const defaults =
+    input?.product?.mode === "chat_only" || cleanString(input?.product?.mode) === "chat_only"
+      ? getBlankAppConfig({ productMode: "chat_only" })
+      : getDefaultAppConfig();
 
   return {
     product: {
       mode:
         cleanString(input?.product?.mode) === "chat_only"
           ? "chat_only"
-          : DEFAULT_APP_CONFIG.product.mode,
+          : defaults.product.mode,
     },
     brand: {
-      name: cleanString(input?.brand?.name) || DEFAULT_APP_CONFIG.brand.name,
-      website_url:
-        cleanString(input?.brand?.website_url) ||
-        DEFAULT_APP_CONFIG.brand.website_url,
-      logo_url:
-        cleanString(input?.brand?.logo_url) || DEFAULT_APP_CONFIG.brand.logo_url,
-      primary_color:
-        cleanString(input?.brand?.primary_color) ||
-        DEFAULT_APP_CONFIG.brand.primary_color,
-      accent_color:
-        cleanString(input?.brand?.accent_color) ||
-        DEFAULT_APP_CONFIG.brand.accent_color,
+      name: resolveString(input?.brand?.name, defaults.brand.name),
+      website_url: resolveString(input?.brand?.website_url, defaults.brand.website_url),
+      logo_url: resolveString(input?.brand?.logo_url, defaults.brand.logo_url),
+      primary_color: resolveString(input?.brand?.primary_color, defaults.brand.primary_color),
+      accent_color: resolveString(input?.brand?.accent_color, defaults.brand.accent_color),
     },
     contact: {
-      public_whatsapp_number: cleanString(
-        input?.contact?.public_whatsapp_number
+      public_whatsapp_number: resolveString(input?.contact?.public_whatsapp_number),
+      human_agent_whatsapp_number: resolveString(
+        input?.contact?.human_agent_whatsapp_number,
+        defaults.contact.human_agent_whatsapp_number
       ),
-      human_agent_whatsapp_number:
-        cleanString(input?.contact?.human_agent_whatsapp_number) ||
-        DEFAULT_APP_CONFIG.contact.human_agent_whatsapp_number,
-      support_email: cleanString(input?.contact?.support_email),
+      support_email: resolveString(input?.contact?.support_email),
     },
       agent: {
-        tone: cleanString(input?.agent?.tone) || DEFAULT_APP_CONFIG.agent.tone,
-        final_cta_label:
-          cleanString(input?.agent?.final_cta_label) ||
-          DEFAULT_APP_CONFIG.agent.final_cta_label,
-        handoff_target_channel:
-          cleanString(input?.agent?.handoff_target_channel) ||
-          DEFAULT_APP_CONFIG.agent.handoff_target_channel,
-        prompt_additions: cleanString(input?.agent?.prompt_additions),
+        tone: resolveString(input?.agent?.tone, defaults.agent.tone),
+        final_cta_label: resolveString(
+          input?.agent?.final_cta_label,
+          defaults.agent.final_cta_label
+        ),
+        handoff_target_channel: resolveString(
+          input?.agent?.handoff_target_channel,
+          defaults.agent.handoff_target_channel
+        ),
+        prompt_additions: resolveString(input?.agent?.prompt_additions),
       },
       widget,
       integrations: {
       whatsapp: {
         provider:
           cleanString(input?.integrations?.whatsapp?.provider) ||
-          DEFAULT_APP_CONFIG.integrations.whatsapp.provider,
+          defaults.integrations.whatsapp.provider,
         phone_number_id: cleanString(
           input?.integrations?.whatsapp?.phone_number_id
         ),
@@ -457,19 +598,19 @@ export function sanitizeAppConfig(input = {}) {
         ),
         status_label:
           cleanString(input?.integrations?.whatsapp?.status_label) ||
-          DEFAULT_APP_CONFIG.integrations.whatsapp.status_label,
+          defaults.integrations.whatsapp.status_label,
         validation: sanitizeValidation(
           input?.integrations?.whatsapp?.validation,
-          DEFAULT_APP_CONFIG.integrations.whatsapp.validation
+          defaults.integrations.whatsapp.validation
         ),
       },
       lead_forms: {
         meta_source:
           cleanString(input?.integrations?.lead_forms?.meta_source) ||
-          DEFAULT_APP_CONFIG.integrations.lead_forms.meta_source,
+          defaults.integrations.lead_forms.meta_source,
         google_source:
           cleanString(input?.integrations?.lead_forms?.google_source) ||
-          DEFAULT_APP_CONFIG.integrations.lead_forms.google_source,
+          defaults.integrations.lead_forms.google_source,
         sheet_document: cleanString(
           input?.integrations?.lead_forms?.sheet_document
         ),
@@ -477,41 +618,42 @@ export function sanitizeAppConfig(input = {}) {
         webhook_url: cleanString(input?.integrations?.lead_forms?.webhook_url),
         validation: sanitizeValidation(
           input?.integrations?.lead_forms?.validation,
-          DEFAULT_APP_CONFIG.integrations.lead_forms.validation
+          defaults.integrations.lead_forms.validation
         ),
       },
       email: {
         provider:
           cleanString(input?.integrations?.email?.provider) ||
-          DEFAULT_APP_CONFIG.integrations.email.provider,
+          defaults.integrations.email.provider,
         from_email: cleanString(input?.integrations?.email?.from_email),
         reply_to_email: cleanString(
           input?.integrations?.email?.reply_to_email
         ),
         validation: sanitizeValidation(
           input?.integrations?.email?.validation,
-          DEFAULT_APP_CONFIG.integrations.email.validation
+          defaults.integrations.email.validation
         ),
       },
       automations: {
         platform:
           cleanString(input?.integrations?.automations?.platform) ||
-          DEFAULT_APP_CONFIG.integrations.automations.platform,
+          defaults.integrations.automations.platform,
         workspace_url: cleanString(
           input?.integrations?.automations?.workspace_url
         ),
         notes: cleanString(input?.integrations?.automations?.notes),
         validation: sanitizeValidation(
           input?.integrations?.automations?.validation,
-          DEFAULT_APP_CONFIG.integrations.automations.validation
+          defaults.integrations.automations.validation
         ),
       },
       },
       message_templates,
       automation_flows,
       knowledge_sources,
-      services: Object.keys(services).length
-        ? services
-        : getDefaultAppConfig().services,
+      services:
+        Object.prototype.hasOwnProperty.call(input || {}, "services")
+          ? services
+          : defaults.services,
   };
 }

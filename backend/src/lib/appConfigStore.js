@@ -1,5 +1,6 @@
 import { supabase } from "./supabase.js";
 import {
+  getBlankAppConfig,
   getDefaultAppConfig,
   mergeAppConfig,
   sanitizeAppConfig,
@@ -65,7 +66,10 @@ export async function getAppConfig({ force = false, accountId = null } = {}) {
 
   if (error) {
     if (hasSettingsTableError(error)) {
-      const fallback = getDefaultAppConfig();
+      const fallback =
+        account.id === getDefaultAccount().id
+          ? getDefaultAppConfig()
+          : getBlankAppConfig({ productMode: account.product_mode });
       setCache(account.id, fallback);
       return fallback;
     }
@@ -75,7 +79,14 @@ export async function getAppConfig({ force = false, accountId = null } = {}) {
   const rows = data || [];
   const exact = rows.find((row) => row.key === scopedKey);
   const legacy = rows.find((row) => row.key === defaultKey);
-  const merged = mergeAppConfig(exact?.value || legacy?.value || {});
+  const baseConfig =
+    account.id === getDefaultAccount().id
+      ? getDefaultAppConfig()
+      : getBlankAppConfig({ productMode: account.product_mode });
+  const rawConfig = exact?.value || legacy?.value || baseConfig;
+  const merged = account.id === getDefaultAccount().id
+    ? mergeAppConfig(rawConfig || {})
+    : sanitizeAppConfig(rawConfig || baseConfig);
 
   setCache(account.id, merged);
   return merged;
@@ -102,6 +113,10 @@ export async function saveAppConfig(input = {}, { accountId = null } = {}) {
     agent: {
       ...(currentConfig?.agent || {}),
       ...(input?.agent || {}),
+    },
+    widget: {
+      ...(currentConfig?.widget || {}),
+      ...(input?.widget || {}),
     },
     integrations: {
       ...(currentConfig?.integrations || {}),

@@ -973,41 +973,38 @@ function updateProductModeUi(config = state.appConfig) {
   const isChatOnly = isChatOnlyProductMode(config);
   const allowSales = canAccessSalesWorkspace();
   const brandName = config?.brand?.name || "TMedia Global";
-  const isChatOnlyEntry = isChatOnly && !allowSales;
-  document.body?.classList.toggle("product-chat-only", isChatOnly);
-  document.body?.classList.toggle("product-chat-entry", isChatOnlyEntry);
-  el.crmPage?.classList.toggle("product-chat-only", isChatOnly);
-  el.crmPage?.classList.toggle("product-chat-entry", isChatOnlyEntry);
+  document.body?.classList.remove("product-chat-only", "product-chat-entry");
+  el.crmPage?.classList.remove("product-chat-only", "product-chat-entry");
 
   if (el.crmSidebarKicker) {
-    el.crmSidebarKicker.textContent = isChatOnlyEntry ? "Onboarding guiado" : isChatOnly ? "Setup del chat" : "Indice operativo";
+    el.crmSidebarKicker.textContent = isChatOnly ? "Setup del chat" : "Indice operativo";
   }
   if (el.crmBrandEyebrow) {
     el.crmBrandEyebrow.textContent = brandName;
   }
   if (el.crmBrandTitle) {
-    el.crmBrandTitle.textContent = isChatOnly ? "Chat IA" : "CRM Comercial";
+    el.crmBrandTitle.textContent = "CRM Comercial";
   }
   if (el.crmSidebarTitle) {
-    el.crmSidebarTitle.textContent = isChatOnly ? "Chat IA" : brandName;
+    el.crmSidebarTitle.textContent = brandName;
   }
   if (el.crmViewSalesBtn) {
-    el.crmViewSalesBtn.textContent = isChatOnly ? "Workspace comercial" : "CRM comercial";
+    el.crmViewSalesBtn.textContent = "CRM comercial";
   }
   if (el.crmViewConfigBtn) {
-    el.crmViewConfigBtn.textContent = isChatOnlyEntry ? "Onboarding del chat" : isChatOnly ? "Setup del chat" : "Configuracion del agente";
+    el.crmViewConfigBtn.textContent = isChatOnly ? "Setup del chat" : "Configuracion del agente";
   }
   if (el.crmMobileControlsSummary) {
-    el.crmMobileControlsSummary.textContent = isChatOnlyEntry ? "Accesos del setup" : isChatOnly ? "Setup rapido" : "Menu rapido y filtros";
+    el.crmMobileControlsSummary.textContent = isChatOnly ? "Setup rapido" : "Menu rapido y filtros";
   }
   if (el.crmMobileConfigBtn) {
     el.crmMobileConfigBtn.textContent = isChatOnly ? "Setup" : "Config";
   }
   if (el.refreshBtn) {
-    el.refreshBtn.textContent = isChatOnly ? "Actualizar setup" : "Actualizar";
+    el.refreshBtn.textContent = "Actualizar";
   }
   if (el.configBackBtn) {
-    el.configBackBtn.textContent = allowSales ? "Volver al CRM" : "Volver al setup";
+    el.configBackBtn.textContent = allowSales ? "Volver al CRM" : "Volver";
   }
   if (el.crmConfigTitle) {
     el.crmConfigTitle.textContent = isChatOnly ? "Setup del chat" : "Configuracion del agente";
@@ -1018,7 +1015,7 @@ function updateProductModeUi(config = state.appConfig) {
       : "Gestiona marca, canales, tono, servicios y bootstrap desde web sin invadir la operativa comercial.";
   }
 
-  document.title = `${isChatOnly ? "Chat IA" : "CRM"} ${brandName}`;
+  document.title = `CRM ${brandName}`;
 }
 
 function normalizeKnowledgeCopyLegacy() {
@@ -1868,23 +1865,6 @@ async function createAdminAccount() {
       body: JSON.stringify(payload),
     });
 
-    let creationWarning = "";
-    if (data?.account?.id && payload.product_mode === "chat_only") {
-      try {
-        await fetchJson(`${API_BASE}/config?account_id=${encodeURIComponent(data.account.id)}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            product: {
-              mode: "chat_only",
-            },
-          }),
-        });
-      } catch (error) {
-        creationWarning = String(error?.message || "").trim();
-      }
-    }
-
     el.adminCreateName.value = "";
     el.adminCreateSlug.value = "";
     el.adminCreatePlan.value = "starter";
@@ -1902,10 +1882,8 @@ async function createAdminAccount() {
     }
     setStatus(
       el.adminAccountStatus,
-      creationWarning
-        ? `Cuenta creada. Falta guardar la configuracion inicial: ${creationWarning}`
-        : "Cuenta creada correctamente.",
-      creationWarning ? "error" : "ok"
+      "Cuenta creada correctamente.",
+      "ok"
     );
   } catch (error) {
     setStatus(el.adminAccountStatus, `No se pudo crear: ${error.message}`, "error");
