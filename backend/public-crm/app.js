@@ -3980,7 +3980,7 @@ function inferSuggestedPromptAdditions(payload = {}) {
 
 function buildSuggestedTemplates(payload = {}, currentTemplates = {}) {
   const brand = payload?.brand?.name || "la marca";
-  const primaryService = getServiceNamesFromConfigPayload(payload)[0] || "{servicio}";
+  const primaryService = "{servicio}";
   const prefersWhatsapp = Boolean(String(payload?.contact?.public_whatsapp_number || "").trim());
   const introChannel = prefersWhatsapp ? "whatsapp" : "email";
 
