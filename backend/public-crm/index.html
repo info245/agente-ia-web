@@ -904,57 +904,36 @@
                   <div class="knowledge-onboarding-head">
                     <div>
                       <span>Setup guiado</span>
-                      <strong>Deja el agente listo en 4 pasos</strong>
-                      <p>Empieza por el sector, aterriza la oferta, añade contexto útil y revisa exactamente lo que va a usar la IA.</p>
+                      <strong>Deja el agente listo en 3 pasos</strong>
+                      <p>Define la oferta real, añade contexto útil y revisa exactamente lo que va a usar la IA.</p>
                     </div>
-                    <div id="configKnowledgeProgressLabel" class="config-inline-badge">0 de 4 pasos listos</div>
+                    <div id="configKnowledgeProgressLabel" class="config-inline-badge">0 de 3 pasos listos</div>
                   </div>
                   <div id="configKnowledgeNextHint" class="knowledge-next-hint">
                     <span>Siguiente paso recomendado</span>
-                    <strong>Elige sector</strong>
-                    <p>Empieza por el preset que mejor encaje con este negocio para acelerar el resto del setup.</p>
+                    <strong>Define oferta</strong>
+                    <p>Empieza por los servicios, tarifas y límites que sí quieres controlar desde el agente.</p>
                   </div>
                   <div class="knowledge-steps-grid">
-                    <button id="configKnowledgeStepPresetBtn" type="button" class="knowledge-step-card" data-target="configKnowledgeStepPreset">
-                      <span>Paso 1</span>
-                      <strong>Elige sector</strong>
-                      <p>Aplica un preset o deja que te recomendemos el punto de partida.</p>
-                      <em data-step-state="preset">Por hacer</em>
-                    </button>
                     <button id="configKnowledgeStepServicesBtn" type="button" class="knowledge-step-card" data-target="configKnowledgeStepServices">
-                      <span>Paso 2</span>
+                      <span>Paso 1</span>
                       <strong>Define oferta</strong>
                       <p>Añade servicios, tarifas y páginas clave para fijar la propuesta comercial.</p>
                       <em data-step-state="services">Por hacer</em>
                     </button>
                     <button id="configKnowledgeStepSourcesBtn" type="button" class="knowledge-step-card" data-target="configKnowledgeStepSources">
-                      <span>Paso 3</span>
+                      <span>Paso 2</span>
                       <strong>Añade contexto</strong>
                       <p>Sube tabla, pega URLs o documenta notas internas para enriquecer el agente.</p>
                       <em data-step-state="sources">Por hacer</em>
                     </button>
                     <button id="configKnowledgeStepReviewBtn" type="button" class="knowledge-step-card" data-target="configKnowledgeStepReview">
-                      <span>Paso 4</span>
+                      <span>Paso 3</span>
                       <strong>Revisa y publica</strong>
                       <p>Genera el contexto final y valida lo que usara la IA antes de guardar.</p>
                       <em data-step-state="review">Por hacer</em>
                     </button>
                   </div>
-                </section>
-
-                <section id="configKnowledgeStepPreset" class="knowledge-block">
-                  <div class="knowledge-block-head">
-                    <div>
-                      <span>Presets por sector</span>
-                        <strong>Elige el mejor punto de partida</strong>
-                        <p>Si quieres ir rápido, arranca con una base por tipo de negocio y luego ajusta servicios, mensajes y automatizaciones.</p>
-                    </div>
-                    <div class="knowledge-head-actions">
-                      <button id="configSuggestPresetBtn" type="button" class="crm-secondary-btn">Sugerir preset</button>
-                    </div>
-                  </div>
-                  <div id="configSectorPresetList" class="sector-preset-grid"></div>
-                  <div id="configSectorPresetStatus" class="save-status" aria-live="polite"></div>
                 </section>
 
                 <section id="configKnowledgeStepServices" class="knowledge-block">

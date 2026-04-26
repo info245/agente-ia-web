@@ -1137,8 +1137,7 @@ function normalizeKnowledgeCopy() {
     if (node) node.textContent = text;
   };
 
-  setText("#configPanelKnowledge .knowledge-onboarding-head p", "Empieza por el sector, aterriza la oferta, a\u00f1ade contexto \u00fatil y revisa exactamente lo que va a usar la IA.");
-  setText("#configKnowledgeStepPreset .knowledge-block-head p", "Si quieres ir r\u00e1pido, arranca con una base por tipo de negocio y luego ajusta servicios, mensajes y automatizaciones.");
+  setText("#configPanelKnowledge .knowledge-onboarding-head p", "Define primero la oferta base, a\u00f1ade contexto \u00fatil y revisa exactamente lo que va a usar la IA.");
   setText("#configKnowledgeStepServices .knowledge-block-head strong", "Define la oferta que s\u00ed o s\u00ed quieres controlar");
   setText("#configKnowledgeStepServices .knowledge-block-head p", "Ideal para dejar claro qu\u00e9 vendes, con qu\u00e9 enfoque y con qu\u00e9 rango de precios, sin depender de scraping ni importaciones.");
   setText("#configKnowledgeStepSources .knowledge-block:first-child .knowledge-block-head p", "Pega la home y p\u00e1ginas clave de servicios, casos de \u00e9xito o FAQ. Una URL por l\u00ednea.");
@@ -2341,24 +2340,21 @@ function updateKnowledgeOnboardingState() {
   const { stepStates, totalComplete, nextStep } = getKnowledgeOnboardingSnapshot();
   if (el.configKnowledgeProgressLabel) {
     el.configKnowledgeProgressLabel.textContent =
-      totalComplete === 4 ? "Setup listo para revisar" : `${totalComplete} de 4 pasos completados`;
+      totalComplete === 3 ? "Setup listo para revisar" : `${totalComplete} de 3 pasos completados`;
   }
 
   if (el.configKnowledgeNextHint) {
     const hintTitle = el.configKnowledgeNextHint.querySelector("strong");
     const hintBody = el.configKnowledgeNextHint.querySelector("p");
-    const presetLabel = SECTOR_PRESETS[state.suggestedSectorPresetKey]?.label || "tu sector";
     if (hintTitle) {
       hintTitle.textContent = nextStep.label;
     }
     if (hintBody) {
       hintBody.textContent =
-        totalComplete === 4
+        totalComplete === 3
           ? "Ya tienes el setup cubierto. El siguiente paso util es revisar la vista previa del contexto y guardar."
-          : nextStep.key === "preset"
-            ? "Empieza por el preset que mejor encaje con este negocio para acelerar el resto del setup."
-            : nextStep.key === "services"
-              ? `Ya tienes una base sugerida para ${presetLabel}. Ahora toca dejar clara la oferta base que si o si quieres controlar.`
+          : nextStep.key === "services"
+              ? "Empieza por dejar clara la oferta base que si o si quieres controlar desde el agente."
               : nextStep.key === "sources"
                 ? "Anade URLs, tabla comercial o notas internas para enriquecer el agente sin perder control."
                 : "Genera la vista previa final para comprobar exactamente que contexto usara la IA antes de guardar.";
@@ -2366,7 +2362,6 @@ function updateKnowledgeOnboardingState() {
   }
 
   const stepButtons = [
-    { key: "preset", button: el.configKnowledgeStepPresetBtn },
     { key: "services", button: el.configKnowledgeStepServicesBtn },
     { key: "sources", button: el.configKnowledgeStepSourcesBtn },
     { key: "review", button: el.configKnowledgeStepReviewBtn },
@@ -2390,12 +2385,6 @@ function updateKnowledgeOnboardingState() {
 
 function getKnowledgeStepMeta(stepKey) {
   const stepMeta = {
-    preset: {
-      key: "preset",
-      label: "Elegir sector",
-      shortLabel: "sector",
-      targetId: "configKnowledgeStepPreset",
-    },
     services: {
       key: "services",
       label: "Definir oferta",
@@ -2428,16 +2417,13 @@ function getKnowledgeOnboardingSnapshot() {
   const hasReview = Boolean(String(el.configContextPreviewOutput?.value || "").trim());
 
   const stepStates = {
-    preset: Boolean(state.suggestedSectorPresetKey),
     services: servicesCount > 0,
     sources: websiteCount > 0 || hasSpreadsheetData || hasSpreadsheetUrl || hasInternalNotes,
     review: hasReview,
   };
 
   const totalComplete = Object.values(stepStates).filter(Boolean).length;
-  const nextStepKey = !stepStates.preset
-    ? "preset"
-    : !stepStates.services
+  const nextStepKey = !stepStates.services
       ? "services"
       : !stepStates.sources
         ? "sources"
@@ -2461,19 +2447,7 @@ function scrollToKnowledgeTarget(targetId) {
 }
 
 function highlightSuggestedKnowledgeFlow() {
-  const payload = buildConfigPayload();
-  const presetKey = inferSectorPresetKey(payload);
-  const preset = SECTOR_PRESETS[presetKey];
-  state.suggestedSectorPresetKey = presetKey;
-  renderSectorPresets();
-
-    if (el.configSectorPresetStatus) {
-      setStatus(
-        el.configSectorPresetStatus,
-      `Te recomiendo empezar por ${preset?.label || "este preset"}. Revísalo y luego termina de aterrizar la oferta base.`,
-        "ok"
-      );
-    }
+  focusNextKnowledgeStep();
 }
 
 function focusNextKnowledgeStep() {
@@ -2515,40 +2489,12 @@ function buildPresetFeatureList(preset = {}) {
 }
 
 function renderSectorPresets() {
-  if (!el.configSectorPresetList) return;
-
-  el.configSectorPresetList.innerHTML = Object.entries(SECTOR_PRESETS)
-    .map(([key, preset]) => {
-      const featureList = buildPresetFeatureList(preset)
-        .map((item) => `<span class="sector-preset-chip">${escapeHtml(item)}</span>`)
-        .join("");
-
-      return `
-        <article class="sector-preset-card ${state.suggestedSectorPresetKey === key ? "is-suggested" : ""}">
-          <div class="sector-preset-head">
-            <div>
-              <span>${escapeHtml(preset.label || "")}</span>
-              <strong>${escapeHtml(preset.summary || "")}</strong>
-            </div>
-            <em>${Object.keys(preset.services || {}).length} servicios</em>
-          </div>
-          ${
-            state.suggestedSectorPresetKey === key
-              ? '<div class="sector-preset-recommendation">Recomendado segun tu contexto actual</div>'
-              : ""
-          }
-          <div class="sector-preset-chips">${featureList}</div>
-          <button type="button" class="crm-secondary-btn" data-sector-preset="${escapeHtml(key)}">
-            Aplicar preset
-          </button>
-        </article>
-      `;
-    })
-    .join("");
-
-  el.configSectorPresetList.querySelectorAll("[data-sector-preset]").forEach((button) => {
-    button.addEventListener("click", () => applySectorPreset(button.getAttribute("data-sector-preset")));
-  });
+  if (el.configSectorPresetList) {
+    el.configSectorPresetList.innerHTML = "";
+  }
+  if (el.configSectorPresetStatus) {
+    setStatus(el.configSectorPresetStatus, "");
+  }
 }
 
 function mergePresetServices(currentServices = {}, presetServices = {}) {
@@ -2692,16 +2638,13 @@ function inferSectorPresetKey(payload = {}) {
 }
 
 function suggestSectorPreset() {
-  const payload = buildConfigPayload();
-  const presetKey = inferSectorPresetKey(payload);
-  const preset = SECTOR_PRESETS[presetKey];
-  state.suggestedSectorPresetKey = presetKey;
-  renderSectorPresets();
-  setStatus(
-    el.configSectorPresetStatus,
-    `Te recomiendo empezar por ${preset?.label || "este preset"} y después afinar oferta, mensajes y automatizaciones.`,
-    "ok"
-  );
+  if (el.configSectorPresetStatus) {
+    setStatus(
+      el.configSectorPresetStatus,
+      "Empieza por definir la oferta base y luego completa el contexto comercial del agente.",
+      "ok"
+    );
+  }
   scrollToKnowledgeTarget("configKnowledgeStepServices");
 }
 
@@ -2833,15 +2776,9 @@ function suggestServicesFromSpreadsheet() {
     return;
   }
 
-  const nextPayload = buildConfigPayload();
-  const presetKey = inferSectorPresetKey(nextPayload);
-  const preset = SECTOR_PRESETS[presetKey];
-  state.suggestedSectorPresetKey = presetKey;
-  renderSectorPresets();
-
   setStatus(
     el.configSuggestServicesStatus,
-    `${count} servicio${count === 1 ? "" : "s"} propuesto${count === 1 ? "" : "s"} desde la tabla. El siguiente paso más útil es revisar ${preset?.label || "el preset sugerido"} antes de guardar.`,
+    `${count} servicio${count === 1 ? "" : "s"} propuesto${count === 1 ? "" : "s"} desde la tabla. El siguiente paso mas util es revisar la oferta base y completar el contexto antes de guardar.`,
     "ok"
   );
   focusNextKnowledgeStep();
@@ -3923,7 +3860,6 @@ async function analyzeWebsiteConfig() {
       `Resumen: ${snapshot.summary || "-"}`,
       `Prioridad: ${(snapshot.priorities || [])[0] || "-"}`,
     ].join("\n");
-    const presetLabel = SECTOR_PRESETS[state.suggestedSectorPresetKey]?.label || "tu sector";
 
     setStatus(
       el.configAnalyzeStatus,
@@ -3934,7 +3870,7 @@ async function analyzeWebsiteConfig() {
     const nextStep = focusNextKnowledgeStep();
     setStatus(
       el.configAnalyzeStatus,
-      `Web analizada. Te recomiendo empezar por ${presetLabel} y seguir con ${nextStep?.shortLabel || "el siguiente paso del setup"}.`,
+      `Web analizada. El siguiente paso mas util es seguir con ${nextStep?.shortLabel || "el siguiente paso del setup"}.`,
       "ok"
     );
   } catch (error) {
@@ -4740,7 +4676,6 @@ el.configAddServiceBtn.addEventListener("click", () => {
   el.configServicesList.appendChild(createServiceEditorItem());
 });
 el.configSuggestServicesBtn?.addEventListener("click", suggestServicesFromSpreadsheet);
-el.configSuggestPresetBtn?.addEventListener("click", suggestSectorPreset);
 el.configSuggestSetupBtn?.addEventListener("click", suggestOnboardingSetup);
 el.configLogoFile.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
@@ -4839,7 +4774,6 @@ el.configForm?.addEventListener("change", () => renderSetupHealth(buildConfigPay
 el.configWidgetEmbedMode?.addEventListener("change", refreshWidgetInstallPreview);
 el.configWidgetAllowedDomains?.addEventListener("input", refreshWidgetInstallPreview);
 el.configWebsiteUrl?.addEventListener("input", refreshWidgetInstallPreview);
-el.configKnowledgeStepPresetBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepPreset"));
 el.configKnowledgeStepServicesBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepServices"));
 el.configKnowledgeStepSourcesBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepSources"));
 el.configKnowledgeStepReviewBtn?.addEventListener("click", () => scrollToKnowledgeTarget("configKnowledgeStepReview"));
