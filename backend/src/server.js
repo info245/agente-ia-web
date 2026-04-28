@@ -539,6 +539,27 @@ function getSafeLeadName(lead) {
   return isLikelyValidName(candidate) ? String(candidate).trim() : null;
 }
 
+function getConfiguredServiceNames(appConfig = null) {
+  return Object.keys(appConfig?.services || {})
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+}
+
+function buildConfiguredServicesPrompt(appConfig = null, { fallback = "" } = {}) {
+  const services = getConfiguredServiceNames(appConfig);
+  if (!services.length) {
+    return (
+      fallback ||
+      "Puedo ayudarte a revisar tu web, tu negocio o el objetivo que quieres conseguir. Si quieres, cuéntame qué te preocupa más y te doy una primera orientación."
+    );
+  }
+  if (services.length === 1) {
+    return `Puedo ayudarte con ${services[0]}. Si quieres, cuéntame tu caso o compárteme tu web y te doy una primera orientación.`;
+  }
+  const readable = services.slice(0, 4).join(", ");
+  return `Puedo ayudarte con ${readable}. Si quieres, dime por dónde prefieres empezar o compárteme tu web para orientarte mejor.`;
+}
+
 function hasName(lead) {
   return !!getSafeLeadName(lead);
 }
@@ -908,7 +929,7 @@ function getQuestionForStep(step, lead) {
     case "ask_business_activity":
       return "Perfecto. ¿A qué te dedicas exactamente o cuál es vuestra actividad principal?";
     case "ask_service":
-      return "Gracias. ¿Qué servicio te interesa ahora mismo: SEO, Google Ads, Redes Sociales, Diseño Web o Consultoría Digital?";
+      return "Gracias. ¿Qué te gustaría revisar ahora mismo de tu negocio o de tu proyecto?";
     case "ask_goal":
       return "Entendido. ¿Cuál es tu objetivo principal ahora mismo?";
     case "ask_budget":
@@ -1219,12 +1240,15 @@ function buildAmbiguousProductPromotionReply(text = "", appConfig = null) {
   if (detectService(text) || extractFirstUrlFromText(text)) return null;
 
   const brandName = String(appConfig?.brand?.name || "TMedia Global").trim();
+  const servicesPrompt = buildConfiguredServicesPrompt(appConfig, {
+    fallback: `${brandName} puede ayudarte a orientar la consulta si me explicas primero qué quieres promocionar o qué objetivo buscas.`,
+  });
   const intro = mentionsFreeOrCollab
     ? "¿A qué te refieres exactamente con promocionar productos gratuitos?"
     : "¿A qué te refieres exactamente con promocionar ese producto o stock?";
 
   return [
-    `${intro} En ${brandName} somos una agencia de marketing digital: trabajamos SEO, Google Ads, publicidad en redes sociales, diseño web, consultoría, automatización e IA para ayudar a captar clientes y vender mejor.`,
+    `${intro} ${servicesPrompt}`,
     "Si lo que quieres es mover stock o lanzar una promoción, podemos enfocarlo como campañas y estrategia comercial; si hablas de una colaboración por producto gratis, cuéntame qué producto quieres promocionar.",
   ].join("\n\n");
 }
@@ -1729,7 +1753,7 @@ function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
         break;
       case "interest_service":
         if (!hasService(lead)) {
-          return "¿Qué quieres revisar primero: web, SEO, Google Ads o captación?";
+          return "¿Qué quieres revisar primero de tu negocio, de tu web o del objetivo que quieres conseguir?";
         }
         break;
       case "preferred_channel":
@@ -1781,12 +1805,15 @@ function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
   return null;
 }
 
-function buildModeInstructions({ mode, phase, lead, analysisSnapshot, channel, text }) {
+function buildModeInstructions({ mode, phase, lead, analysisSnapshot, channel, text, appConfig = null }) {
   const analysisBlock = summarizeAnalysisSnapshot(analysisSnapshot);
   const missingLeadQuestion =
     phase === "deepen" || phase === "close"
       ? getMissingLeadQuestion(lead, { lateOnly: true })
       : null;
+  const servicePrompt = buildConfiguredServicesPrompt(appConfig, {
+    fallback: "Ofrece caminos claros: revisar la web, el negocio o el objetivo que quiere conseguir el usuario.",
+  });
   const suggestWhatsApp = shouldOfferWhatsAppTransition({
     channel,
     snapshot: analysisSnapshot,
@@ -1799,7 +1826,7 @@ function buildModeInstructions({ mode, phase, lead, analysisSnapshot, channel, t
 MODO: diagnostic_web
 - Este chat web debe reducir fricciÃ³n.
 - Empieza ayudando, no interrogando.
-- Ofrece caminos claros: revisar web, SEO, Google Ads o captaciÃ³n.
+- ${servicePrompt}
 - Si hay URL o anÃ¡lisis, entrega un mini diagnÃ³stico Ãºtil y breve.
 - Si el servicio es Google Ads y todavÃ­a no has visto campaÃ±as ni datos reales, no hables de diagnosticar campaÃ±as como si ya las hubieras analizado.
 - En Google Ads, si aÃºn no hay contexto suficiente, pregunta si ya tienen campaÃ±as activas o si parten de cero.
@@ -3402,6 +3429,7 @@ ${d.chunk}
       analysisSnapshot,
       channel: channel || "web",
       text: userText,
+      appConfig,
     });
 
     const systemPrompt = `
@@ -3460,7 +3488,7 @@ ${ragContext}
     if (!reply) {
       reply =
         conversationPhase === "discover"
-          ? "Puedo ayudarte a revisar tu web, SEO, Google Ads o captaciÃ³n. Si quieres, pÃ¡same tu URL o dime quÃ© te preocupa mÃ¡s y te doy una primera orientaciÃ³n."
+          ? buildConfiguredServicesPrompt(appConfig)
           : "Si quieres, sigo contigo sobre ese punto y te digo cuÃ¡l serÃ­a la prioridad mÃ¡s sensata.";
     }
 
@@ -4148,18 +4176,18 @@ app.get("/api/widget/config", async (req, res) => {
     const account = await resolveRequestAccount(req);
     const config = await getAppConfig({ accountId: account.id });
     const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const publicConfig = {
-      account: {
-        id: account.id,
-        slug: account.slug,
-        name: account.name,
-      },
-      brand: {
-        name: config?.brand?.name || "Agente IA",
-        logo_url: resolvePublicAssetUrl(baseUrl, config?.brand?.logo_url),
-        primary_color: config?.brand?.primary_color || "#6d41f3",
-        accent_color: config?.brand?.accent_color || "#8d58ff",
-      },
+      const publicConfig = {
+        account: {
+          id: account.id,
+          slug: account.slug,
+          name: account.name,
+        },
+        brand: {
+          name: config?.brand?.name || account.name || "Chat IA",
+          logo_url: resolvePublicAssetUrl(baseUrl, config?.brand?.logo_url),
+          primary_color: config?.brand?.primary_color || "#1f2937",
+          accent_color: config?.brand?.accent_color || "#2563eb",
+        },
       contact: {
         public_whatsapp_number: config?.contact?.public_whatsapp_number || "",
       },
@@ -4300,10 +4328,10 @@ app.post("/api/crm/config/context-preview", async (req, res) => {
       ...currentConfig,
       ...(req.body || {}),
     };
-    const mergedConfig =
-      account.id === getDefaultAccount().id
-        ? mergeAppConfig(mergedInput)
-        : sanitizeAppConfig(mergedInput);
+      const mergedConfig =
+        account.id === getDefaultAccount().id
+          ? mergeAppConfig(mergedInput)
+          : sanitizeAppConfig(mergedInput, { useBlankDefaults: true });
     const context = buildKnowledgeContext(mergedConfig);
     const websiteUrls = Array.isArray(mergedConfig?.knowledge_sources?.website_urls)
       ? mergedConfig.knowledge_sources.website_urls.filter(Boolean)

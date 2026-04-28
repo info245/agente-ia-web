@@ -1,4 +1,4 @@
-import { getDefaultAppConfig, mergeAppConfig } from "./appConfig.js";
+import { sanitizeAppConfig } from "./appConfig.js";
 
 function normalizeServiceName(value) {
   return String(value || "").trim().toLowerCase();
@@ -106,7 +106,7 @@ function mergeServiceFacts(base = {}, incoming = {}) {
 }
 
 function getSpreadsheetServices(appConfig = null) {
-  const merged = mergeAppConfig(appConfig || {});
+  const merged = sanitizeAppConfig(appConfig || {});
   const rows = parseSpreadsheetRows(
     merged?.knowledge_sources?.spreadsheet_data || ""
   );
@@ -137,8 +137,8 @@ function summariseServices(services = {}) {
 }
 
 export function getWebsiteFacts(appConfig = null) {
-  const merged = mergeAppConfig(appConfig || {});
-  const manualServices = merged.services || getDefaultAppConfig().services;
+  const merged = sanitizeAppConfig(appConfig || {});
+  const manualServices = merged.services || {};
   const spreadsheetServices = getSpreadsheetServices(merged);
   const services = { ...spreadsheetServices };
 

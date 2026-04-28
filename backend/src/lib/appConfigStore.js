@@ -86,7 +86,7 @@ export async function getAppConfig({ force = false, accountId = null } = {}) {
   const rawConfig = exact?.value || legacy?.value || baseConfig;
   const merged = account.id === getDefaultAccount().id
     ? mergeAppConfig(rawConfig || {})
-    : sanitizeAppConfig(rawConfig || baseConfig);
+    : sanitizeAppConfig(rawConfig || baseConfig, { useBlankDefaults: true });
 
   setCache(account.id, merged);
   return merged;
@@ -138,11 +138,11 @@ export async function saveAppConfig(input = {}, { accountId = null } = {}) {
       ...(currentConfig?.services || {}),
       ...(input?.services || {}),
     },
-  });
+  }, { useBlankDefaults: account.id !== getDefaultAccount().id });
   const merged =
     account.id === getDefaultAccount().id
       ? mergeAppConfig(sanitized)
-      : sanitizeAppConfig(sanitized);
+      : sanitizeAppConfig(sanitized, { useBlankDefaults: true });
 
   const { data, error } = await supabase
     .from("app_settings")
@@ -165,7 +165,10 @@ export async function saveAppConfig(input = {}, { accountId = null } = {}) {
     throw error;
   }
 
-  const finalConfig = mergeAppConfig(data?.value || merged);
+  const finalConfig =
+    account.id === getDefaultAccount().id
+      ? mergeAppConfig(data?.value || merged)
+      : sanitizeAppConfig(data?.value || merged, { useBlankDefaults: true });
   setCache(account.id, finalConfig);
   return finalConfig;
 }

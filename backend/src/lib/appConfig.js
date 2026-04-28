@@ -232,8 +232,8 @@ export const BLANK_APP_CONFIG = {
     name: "",
     website_url: "",
     logo_url: "",
-    primary_color: "#6d41f3",
-    accent_color: "#8d58ff",
+    primary_color: "",
+    accent_color: "",
   },
   contact: {
     public_whatsapp_number: "",
@@ -563,23 +563,24 @@ function sanitizeAutomationFlows(value = {}) {
   return result;
 }
 
-export function sanitizeAppConfig(input = {}) {
+export function sanitizeAppConfig(input = {}, options = {}) {
   const services = sanitizeServices(input?.services);
   const message_templates = sanitizeMessageTemplates(input?.message_templates);
   const automation_flows = sanitizeAutomationFlows(input?.automation_flows);
   const knowledge_sources = sanitizeKnowledgeSources(input?.knowledge_sources);
   const widget = sanitizeWidgetConfig(input?.widget);
-  const defaults =
+  const requestedMode =
     input?.product?.mode === "chat_only" || cleanString(input?.product?.mode) === "chat_only"
-      ? getBlankAppConfig({ productMode: "chat_only" })
+      ? "chat_only"
+      : "full_crm";
+  const defaults =
+    options?.useBlankDefaults || requestedMode === "chat_only"
+      ? getBlankAppConfig({ productMode: requestedMode })
       : getDefaultAppConfig();
 
   return {
     product: {
-      mode:
-        cleanString(input?.product?.mode) === "chat_only"
-          ? "chat_only"
-          : defaults.product.mode,
+      mode: requestedMode === "chat_only" ? "chat_only" : defaults.product.mode,
     },
     brand: {
       name: resolveString(input?.brand?.name, defaults.brand.name),

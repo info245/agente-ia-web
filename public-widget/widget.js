@@ -8,13 +8,13 @@
   const accountIdFromAttr = currentScript?.getAttribute("data-account-id");
   const accountSlugFromAttr = currentScript?.getAttribute("data-account-slug");
 
-  const CONFIG = {
-    backendBaseUrl: backendFromAttr || "https://tmedia-global-ai.onrender.com",
-    channel: "web",
-    brandName: brandFromAttr || "Agente IA",
-    position: posFromAttr === "left" ? "left" : "right",
-    primaryColor: colorFromAttr || "#111827",
-    accentColor: "#8d58ff",
+    const CONFIG = {
+      backendBaseUrl: backendFromAttr || "https://tmedia-global-ai.onrender.com",
+      channel: "web",
+      brandName: brandFromAttr || "Agente IA",
+      position: posFromAttr === "left" ? "left" : "right",
+      primaryColor: colorFromAttr || "#1f2937",
+      accentColor: "#2563eb",
     logoUrl: "",
     accountId: accountIdFromAttr || "",
     accountSlug: accountSlugFromAttr || "",
