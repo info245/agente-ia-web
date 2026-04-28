@@ -126,7 +126,7 @@ const CRM_AUTH_SECRET =
   "tmedia-dev-auth-secret";
 const CRM_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const CRM_PUBLIC_BASE_URL = String(
-  process.env.CRM_PUBLIC_BASE_URL || process.env.PUBLIC_APP_URL || "https://t-mediaglobal.com"
+  process.env.CRM_PUBLIC_BASE_URL || process.env.PUBLIC_APP_URL || "https://tmedia-global-ai.onrender.com"
 ).replace(/\/$/, "");
 const GOOGLE_OAUTH_CLIENT_ID = String(process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim();
 const GOOGLE_OAUTH_CLIENT_SECRET = String(process.env.GOOGLE_OAUTH_CLIENT_SECRET || "").trim();
@@ -1204,6 +1204,29 @@ function sanitizeGoogleAdsWebReply(reply, { lead = null, text = "" } = {}) {
   }
 
   return currentReply;
+}
+
+function buildAmbiguousProductPromotionReply(text = "", appConfig = null) {
+  const t = normalizeText(text);
+  const mentionsProductContext =
+    /\b(producto|productos|stock|inventario|catalogo|cat[aá]logo)\b/i.test(t);
+  const mentionsPromotionContext =
+    /\b(promocion|promocionar|promover|publicitar|anunciar|campana|campanas|campa[nñ]a|campa[nñ]as)\b/i.test(t);
+  const mentionsFreeOrCollab =
+    /\b(gratis|gratuito|gratuitos|gratuita|gratuitas|regalo|colaboracion|colaborar|intercambio)\b/i.test(t);
+
+  if (!mentionsProductContext || !mentionsPromotionContext) return null;
+  if (detectService(text) || extractFirstUrlFromText(text)) return null;
+
+  const brandName = String(appConfig?.brand?.name || "TMedia Global").trim();
+  const intro = mentionsFreeOrCollab
+    ? "¿A qué te refieres exactamente con promocionar productos gratuitos?"
+    : "¿A qué te refieres exactamente con promocionar ese producto o stock?";
+
+  return [
+    `${intro} En ${brandName} somos una agencia de marketing digital: trabajamos SEO, Google Ads, publicidad en redes sociales, diseño web, consultoría, automatización e IA para ayudar a captar clientes y vender mejor.`,
+    "Si lo que quieres es mover stock o lanzar una promoción, podemos enfocarlo como campañas y estrategia comercial; si hablas de una colaboración por producto gratis, cuéntame qué producto quieres promocionar.",
+  ].join("\n\n");
 }
 
 function buildValueThenAskNameReply(analysisSnapshot, lead = null) {
@@ -3244,6 +3267,10 @@ async function processIncomingMessage({
 
   let reply = null;
   const appConfig = await getAppConfig({ accountId: scopedAccountId }).catch(() => null);
+  const ambiguousProductPromotionReply = buildAmbiguousProductPromotionReply(
+    userText,
+    appConfig
+  );
   const conversationMode = getConversationMode({
     channel: channel || "web",
     currentAnalysis: analysisSnapshot,
@@ -3285,6 +3312,10 @@ async function processIncomingMessage({
       lead: leadAfter || relatedWebLead || {},
       analysisSnapshot,
     });
+  }
+
+  if (!reply && ambiguousProductPromotionReply) {
+    reply = ambiguousProductPromotionReply;
   }
 
   if (!reply) {
