@@ -529,6 +529,10 @@ const el = {
   configEmailProvider: document.getElementById("configEmailProvider"),
   configEmailFromAddress: document.getElementById("configEmailFromAddress"),
   configEmailReplyTo: document.getElementById("configEmailReplyTo"),
+  configEmailGoogleClientId: document.getElementById("configEmailGoogleClientId"),
+  configEmailGoogleClientSecret: document.getElementById("configEmailGoogleClientSecret"),
+  configEmailGoogleConnectedMeta: document.getElementById("configEmailGoogleConnectedMeta"),
+  configConnectGoogleEmailBtn: document.getElementById("configConnectGoogleEmailBtn"),
   configEmailSmtpHost: document.getElementById("configEmailSmtpHost"),
   configEmailSmtpPort: document.getElementById("configEmailSmtpPort"),
   configEmailSmtpUser: document.getElementById("configEmailSmtpUser"),
@@ -1463,6 +1467,33 @@ async function fetchOptionalJson(url, options = {}) {
   return { ok: res.ok, status: res.status, data };
 }
 
+function consumeEmailOauthRedirectStatus() {
+  const url = new URL(window.location.href);
+  const status = String(url.searchParams.get("email_oauth") || "").trim();
+  const message = String(url.searchParams.get("email_oauth_message") || "").trim();
+  if (!status) return;
+
+  if (status === "connected") {
+    setStatus(
+      el.configSaveStatus,
+      message
+        ? `Cuenta de Google conectada: ${message}. Ya puedes validar o guardar la configuracion.`
+        : "Cuenta de Google conectada correctamente.",
+      "ok"
+    );
+  } else {
+    setStatus(
+      el.configSaveStatus,
+      message || "No se pudo completar la conexion con Google.",
+      "error"
+    );
+  }
+
+  url.searchParams.delete("email_oauth");
+  url.searchParams.delete("email_oauth_message");
+  window.history.replaceState({}, "", url);
+}
+
 function renderAccounts() {
   if (!el.accountSelect) return;
 
@@ -2078,6 +2109,9 @@ function getEmailProviderDefaults(provider = "smtp") {
   if (normalized === "gmail") {
     return { host: "smtp.gmail.com", port: "465", secure: "true" };
   }
+  if (normalized === "google_oauth") {
+    return { host: "smtp.gmail.com", port: "465", secure: "true" };
+  }
   if (normalized === "resend") {
     return { host: "smtp.resend.com", port: "465", secure: "true" };
   }
@@ -2098,6 +2132,20 @@ function syncEmailProviderDefaults({ force = false } = {}) {
   }
   if (el.configEmailSmtpSecure && (force || !String(el.configEmailSmtpSecure.value || "").trim())) {
     el.configEmailSmtpSecure.value = defaults.secure;
+  }
+}
+
+function syncEmailOauthMeta(config = state.appConfig) {
+  if (!el.configEmailGoogleConnectedMeta) return;
+  const emailConfig = config?.integrations?.email || {};
+  const connectedEmail = String(emailConfig?.google_connected_email || "").trim();
+  const connectedAt = formatDateTime(emailConfig?.oauth_connected_at);
+  if (connectedEmail) {
+    el.configEmailGoogleConnectedMeta.textContent = connectedAt
+      ? `Cuenta conectada: ${connectedEmail} · ${connectedAt}`
+      : `Cuenta conectada: ${connectedEmail}`;
+  } else {
+    el.configEmailGoogleConnectedMeta.textContent = "Sin cuenta conectada todavia.";
   }
 }
 
@@ -2738,6 +2786,8 @@ function buildConfigPayload() {
         provider: el.configEmailProvider.value,
         from_email: el.configEmailFromAddress.value,
         reply_to_email: el.configEmailReplyTo.value,
+        google_client_id: el.configEmailGoogleClientId?.value || "",
+        google_client_secret: el.configEmailGoogleClientSecret?.value || "",
         smtp_host: el.configEmailSmtpHost?.value || "",
         smtp_port: el.configEmailSmtpPort?.value || "",
         smtp_user: el.configEmailSmtpUser?.value || "",
@@ -3507,6 +3557,14 @@ function renderConfig() {
     config?.integrations?.email?.from_email || "";
   el.configEmailReplyTo.value =
     config?.integrations?.email?.reply_to_email || "";
+  if (el.configEmailGoogleClientId) {
+    el.configEmailGoogleClientId.value =
+      config?.integrations?.email?.google_client_id || "";
+  }
+  if (el.configEmailGoogleClientSecret) {
+    el.configEmailGoogleClientSecret.value =
+      config?.integrations?.email?.google_client_secret || "";
+  }
   if (el.configEmailSmtpHost) {
     el.configEmailSmtpHost.value = config?.integrations?.email?.smtp_host || "";
   }
@@ -3525,6 +3583,7 @@ function renderConfig() {
       config?.integrations?.email?.smtp_secure === false ? "false" : "true";
   }
   syncEmailProviderDefaults();
+  syncEmailOauthMeta(config);
   el.configAutomationPlatform.value =
     config?.integrations?.automations?.platform || "n8n";
   el.configAutomationWorkspaceUrl.value =
@@ -4216,6 +4275,34 @@ async function validateIntegration(type, button) {
   }
 }
 
+async function connectGoogleEmail() {
+  if (!el.configConnectGoogleEmailBtn) return;
+  el.configConnectGoogleEmailBtn.disabled = true;
+  el.configConnectGoogleEmailBtn.classList.add("is-busy");
+  setStatus(el.configSaveStatus, "Preparando conexion con Google...");
+
+  try {
+    const payload = buildConfigPayload();
+    await fetchJson(`${API_BASE}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await fetchJson(`${API_BASE}/integrations/email/google/connect-url`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
+    window.location.href = data.auth_url;
+  } catch (error) {
+    setStatus(el.configSaveStatus, `No se pudo iniciar Google: ${error.message}`, "error");
+    el.configConnectGoogleEmailBtn.disabled = false;
+    el.configConnectGoogleEmailBtn.classList.remove("is-busy");
+  }
+}
+
 async function saveLead() {
   if (!state.selectedLead) return;
 
@@ -4802,6 +4889,7 @@ el.configValidateEmailBtn?.addEventListener("click", () =>
   validateIntegration("email", el.configValidateEmailBtn)
 );
 el.configEmailProvider?.addEventListener("change", () => syncEmailProviderDefaults({ force: true }));
+el.configConnectGoogleEmailBtn?.addEventListener("click", connectGoogleEmail);
 el.configValidateAutomationsBtn?.addEventListener("click", () =>
   validateIntegration("automations", el.configValidateAutomationsBtn)
 );
@@ -4944,6 +5032,7 @@ window.addEventListener("resize", syncMobileAdaptiveUi);
 async function bootstrapCrm() {
   await loadAccounts();
   await Promise.all([loadLeads(), loadConfig(), loadAdminOverview()]);
+  consumeEmailOauthRedirectStatus();
 }
 
 async function startCrm() {

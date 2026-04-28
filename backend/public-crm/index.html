@@ -1192,6 +1192,7 @@
                         <select id="configEmailProvider">
                           <option value="smtp">SMTP</option>
                           <option value="gmail">Gmail</option>
+                          <option value="google_oauth">Google conectado (OAuth)</option>
                           <option value="resend">Resend</option>
                           <option value="sendgrid">SendGrid</option>
                           <option value="manual">Manual</option>
@@ -1207,6 +1208,25 @@
                         Reply-to
                         <input id="configEmailReplyTo" type="email" placeholder="soporte@tuempresa.com" />
                       </label>
+
+                      <label>
+                        Google Client ID
+                        <input id="configEmailGoogleClientId" type="text" placeholder="xxxxxxxx.apps.googleusercontent.com" />
+                      </label>
+
+                      <label>
+                        Google Client Secret
+                        <input id="configEmailGoogleClientSecret" type="password" placeholder="GOCSPX-..." />
+                      </label>
+
+                      <div class="config-oauth-card quote-grid-full">
+                        <div>
+                          <strong>Conectar Gmail</strong>
+                          <p>Autoriza la cuenta de Google Workspace o Gmail que enviara los correos de esta cuenta cuando uses Google conectado (OAuth).</p>
+                          <small id="configEmailGoogleConnectedMeta">Sin cuenta conectada todavia.</small>
+                        </div>
+                        <button id="configConnectGoogleEmailBtn" type="button" class="crm-secondary-btn">Conectar Gmail</button>
+                      </div>
 
                       <label>
                         SMTP host

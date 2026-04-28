@@ -61,6 +61,9 @@ function getProviderDefaults(provider = "smtp") {
   if (normalized === "gmail") {
     return { host: "smtp.gmail.com", port: 465, secure: true };
   }
+  if (normalized === "google_oauth") {
+    return { host: "smtp.gmail.com", port: 465, secure: true };
+  }
   if (normalized === "resend") {
     return { host: "smtp.resend.com", port: 465, secure: true };
   }
@@ -86,12 +89,30 @@ function resolveEmailRuntimeConfig(emailConfig = null) {
         : String(process.env.SMTP_SECURE || "true").toLowerCase() === "true";
   const user = String(emailConfig?.smtp_user || process.env.SMTP_USER || "").trim();
   const pass = String(emailConfig?.smtp_pass || process.env.SMTP_PASS || "").trim();
-  const fromAddress = String(emailConfig?.from_email || fallbackFrom || user || "").trim();
+  const googleClientId = String(emailConfig?.google_client_id || "").trim();
+  const googleClientSecret = String(emailConfig?.google_client_secret || "").trim();
+  const googleRefreshToken = String(emailConfig?.google_refresh_token || "").trim();
+  const googleAccessToken = String(emailConfig?.google_access_token || "").trim();
+  const googleConnectedEmail = String(
+    emailConfig?.google_connected_email || emailConfig?.from_email || ""
+  ).trim();
+  const fromAddress = String(
+    emailConfig?.from_email || googleConnectedEmail || fallbackFrom || user || ""
+  ).trim();
   const clientFromAddress = String(
-    emailConfig?.from_email || process.env.LEADS_CLIENT_EMAIL_FROM || fallbackClientFrom || user || ""
+    emailConfig?.from_email ||
+      googleConnectedEmail ||
+      process.env.LEADS_CLIENT_EMAIL_FROM ||
+      fallbackClientFrom ||
+      user ||
+      ""
   ).trim();
   const replyToAddress = String(
-    emailConfig?.reply_to_email || process.env.LEADS_EMAIL_REPLY_TO || user || ""
+    emailConfig?.reply_to_email ||
+      googleConnectedEmail ||
+      process.env.LEADS_EMAIL_REPLY_TO ||
+      user ||
+      ""
   ).trim();
 
   return {
@@ -104,10 +125,40 @@ function resolveEmailRuntimeConfig(emailConfig = null) {
     fromAddress,
     clientFromAddress,
     replyToAddress,
+    googleClientId,
+    googleClientSecret,
+    googleRefreshToken,
+    googleAccessToken,
+    googleConnectedEmail,
   };
 }
 
 function createTransporter(runtime) {
+  if (runtime.provider === "google_oauth") {
+    if (
+      !runtime.googleClientId ||
+      !runtime.googleClientSecret ||
+      !runtime.googleRefreshToken ||
+      !runtime.googleConnectedEmail
+    ) {
+      throw new Error(
+        "Falta conectar Google. Completa Client ID, Client Secret y autoriza la cuenta de Gmail."
+      );
+    }
+
+    return nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        type: "OAuth2",
+        user: runtime.googleConnectedEmail,
+        clientId: runtime.googleClientId,
+        clientSecret: runtime.googleClientSecret,
+        refreshToken: runtime.googleRefreshToken,
+        accessToken: runtime.googleAccessToken || undefined,
+      },
+    });
+  }
+
   if (!runtime.host || !runtime.user || !runtime.pass) {
     throw new Error("Faltan SMTP host, usuario o password para este proveedor.");
   }

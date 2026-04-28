@@ -158,7 +158,9 @@ const schedulerState = {
   automationRunning: false,
   whatsappRunning: false,
 };
+const googleEmailOauthStates = new Map();
 const PROCESSED_MESSAGE_TTL_MS = 1000 * 60 * 60;
+const GOOGLE_EMAIL_OAUTH_TTL_MS = 1000 * 60 * 15;
 
 function cleanupProcessedMessages() {
   const now = Date.now();
@@ -183,6 +185,89 @@ function hasProcessedWhatsAppMessage(messageId) {
 
 function norm(v) {
   return String(v || "").trim();
+}
+
+function buildPublicBaseUrl(req) {
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+function cleanupGoogleEmailOauthStates() {
+  const now = Date.now();
+  for (const [token, item] of googleEmailOauthStates.entries()) {
+    if (!item?.expiresAt || item.expiresAt <= now) {
+      googleEmailOauthStates.delete(token);
+    }
+  }
+}
+
+function createGoogleEmailOauthState({ accountId = "", userId = "" } = {}) {
+  cleanupGoogleEmailOauthStates();
+  const token = crypto.randomBytes(24).toString("hex");
+  googleEmailOauthStates.set(token, {
+    accountId,
+    userId,
+    expiresAt: Date.now() + GOOGLE_EMAIL_OAUTH_TTL_MS,
+  });
+  return token;
+}
+
+function consumeGoogleEmailOauthState(token) {
+  cleanupGoogleEmailOauthStates();
+  const key = String(token || "").trim();
+  if (!key) return null;
+  const item = googleEmailOauthStates.get(key) || null;
+  googleEmailOauthStates.delete(key);
+  return item;
+}
+
+function buildGoogleEmailRedirectUri(req) {
+  return `${buildPublicBaseUrl(req)}/oauth/google/email/callback`;
+}
+
+async function exchangeGoogleEmailCode({
+  code,
+  clientId,
+  clientSecret,
+  redirectUri,
+}) {
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+      grant_type: "authorization_code",
+    }),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const detail =
+      payload?.error_description || payload?.error || "No se pudo intercambiar el codigo con Google.";
+    throw new Error(detail);
+  }
+
+  return payload || {};
+}
+
+async function fetchGoogleConnectedEmail(accessToken) {
+  const response = await fetch("https://www.googleapis.com/oauth2/v2/userinfo?alt=json", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.email) {
+    const detail = payload?.error?.message || "No se pudo recuperar el email conectado de Google.";
+    throw new Error(detail);
+  }
+
+  return String(payload.email || "").trim();
 }
 
 async function resolveRequestAccount(req) {
@@ -2376,11 +2461,27 @@ async function validateIntegrationConfig(type, config = {}) {
     if (!item.from_email) {
       return buildValidationResult("pending", "Falta el email de salida.", checkedAt);
     }
+    if (String(item.provider || "").trim().toLowerCase() === "google_oauth") {
+      if (!item.google_client_id || !item.google_client_secret) {
+        return buildValidationResult(
+          "pending",
+          "Faltan Google Client ID y Client Secret para conectar Gmail.",
+          checkedAt
+        );
+      }
+      if (!item.google_refresh_token || !item.google_connected_email) {
+        return buildValidationResult(
+          "pending",
+          "Todavia no has conectado la cuenta de Gmail. Pulsa \"Conectar Gmail\".",
+          checkedAt
+        );
+      }
+    }
     try {
       await verifyEmailTransport(item);
       return buildValidationResult(
         "connected",
-        `Email validado con proveedor ${item.provider || "smtp"}.`,
+        `Email validado con proveedor ${item.provider || "smtp"}${item.google_connected_email ? ` (${item.google_connected_email})` : ""}.`,
         checkedAt
       );
     } catch (error) {
@@ -3865,6 +3966,45 @@ app.get("/api/crm/config", async (_req, res) => {
   }
 });
 
+app.post("/api/crm/integrations/email/google/connect-url", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const config = await getAppConfig({ accountId: account.id });
+    const emailConfig = config?.integrations?.email || {};
+    const clientId = String(emailConfig?.google_client_id || "").trim();
+    const clientSecret = String(emailConfig?.google_client_secret || "").trim();
+
+    if (!clientId || !clientSecret) {
+      return res.status(400).json({
+        ok: false,
+        error: "Completa Google Client ID y Google Client Secret antes de conectar Gmail.",
+      });
+    }
+
+    const stateToken = createGoogleEmailOauthState({
+      accountId: account.id,
+      userId: req.crmUser?.id || "",
+    });
+    const redirectUri = buildGoogleEmailRedirectUri(req);
+    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    authUrl.searchParams.set("client_id", clientId);
+    authUrl.searchParams.set("redirect_uri", redirectUri);
+    authUrl.searchParams.set("response_type", "code");
+    authUrl.searchParams.set("scope", "https://mail.google.com/ https://www.googleapis.com/auth/userinfo.email");
+    authUrl.searchParams.set("access_type", "offline");
+    authUrl.searchParams.set("prompt", "consent");
+    authUrl.searchParams.set("state", stateToken);
+
+    return res.json({
+      ok: true,
+      auth_url: authUrl.toString(),
+      redirect_uri: redirectUri,
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/api/widget/config", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
@@ -3893,6 +4033,92 @@ app.get("/api/widget/config", async (req, res) => {
     res.json({ ok: true, config: publicConfig });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/oauth/google/email/callback", async (req, res) => {
+  const code = String(req.query?.code || "").trim();
+  const stateToken = String(req.query?.state || "").trim();
+  const callbackState = consumeGoogleEmailOauthState(stateToken);
+  const baseUrl = buildPublicBaseUrl(req);
+  const redirectUrl = new URL(`${baseUrl}/crm`);
+
+  try {
+    if (!code || !callbackState?.accountId) {
+      throw new Error("La autorizacion de Google no devolvio un estado valido.");
+    }
+
+    const account = await resolveAccount(callbackState.accountId);
+    const currentConfig = await getAppConfig({ accountId: account.id });
+    const emailConfig = currentConfig?.integrations?.email || {};
+    const clientId = String(emailConfig?.google_client_id || "").trim();
+    const clientSecret = String(emailConfig?.google_client_secret || "").trim();
+
+    if (!clientId || !clientSecret) {
+      throw new Error("Faltan Google Client ID y Google Client Secret en la cuenta.");
+    }
+
+    const redirectUri = buildGoogleEmailRedirectUri(req);
+    const tokenPayload = await exchangeGoogleEmailCode({
+      code,
+      clientId,
+      clientSecret,
+      redirectUri,
+    });
+    const accessToken = String(tokenPayload?.access_token || "").trim();
+    const refreshToken =
+      String(tokenPayload?.refresh_token || "").trim() ||
+      String(emailConfig?.google_refresh_token || "").trim();
+
+    if (!refreshToken) {
+      throw new Error(
+        "Google no devolvio refresh token. Vuelve a conectar la cuenta aceptando todos los permisos."
+      );
+    }
+
+    const connectedEmail = await fetchGoogleConnectedEmail(accessToken);
+    const expiresAt = tokenPayload?.expires_in
+      ? new Date(Date.now() + Number(tokenPayload.expires_in) * 1000).toISOString()
+      : "";
+
+    await saveAppConfig(
+      {
+        integrations: {
+          email: {
+            ...emailConfig,
+            provider: "google_oauth",
+            from_email: String(emailConfig?.from_email || connectedEmail).trim(),
+            smtp_host: "",
+            smtp_port: "465",
+            smtp_user: "",
+            smtp_pass: "",
+            google_refresh_token: refreshToken,
+            google_access_token: accessToken,
+            google_access_token_expires_at: expiresAt,
+            google_connected_email: connectedEmail,
+            oauth_connected_at: new Date().toISOString(),
+            validation: {
+              status: "connected",
+              last_validated_at: new Date().toISOString(),
+              message: `Cuenta de Gmail conectada: ${connectedEmail}`,
+            },
+          },
+        },
+      },
+      { accountId: account.id }
+    );
+
+    redirectUrl.searchParams.set("account_id", account.id);
+    redirectUrl.searchParams.set("email_oauth", "connected");
+    redirectUrl.searchParams.set("email_oauth_message", connectedEmail);
+    return res.redirect(302, redirectUrl.toString());
+  } catch (error) {
+    redirectUrl.searchParams.set("email_oauth", "error");
+    redirectUrl.searchParams.set("email_oauth_message", String(error?.message || "No se pudo conectar Gmail."));
+    if (callbackState?.accountId) {
+      redirectUrl.searchParams.set("account_id", callbackState.accountId);
+    }
+    return res.redirect(302, redirectUrl.toString());
   }
 });
 

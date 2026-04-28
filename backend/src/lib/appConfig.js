@@ -58,6 +58,13 @@ export const DEFAULT_APP_CONFIG = {
       smtp_secure: true,
       smtp_user: "",
       smtp_pass: "",
+      google_client_id: "",
+      google_client_secret: "",
+      google_refresh_token: "",
+      google_access_token: "",
+      google_access_token_expires_at: "",
+      google_connected_email: "",
+      oauth_connected_at: "",
       validation: {
         status: "pending",
         last_validated_at: "",
@@ -276,6 +283,13 @@ export const BLANK_APP_CONFIG = {
       smtp_secure: true,
       smtp_user: "",
       smtp_pass: "",
+      google_client_id: "",
+      google_client_secret: "",
+      google_refresh_token: "",
+      google_access_token: "",
+      google_access_token_expires_at: "",
+      google_connected_email: "",
+      oauth_connected_at: "",
       validation: {
         status: "pending",
         last_validated_at: "",
@@ -650,6 +664,27 @@ export function sanitizeAppConfig(input = {}) {
             : defaults.integrations.email.smtp_secure !== false,
         smtp_user: cleanString(input?.integrations?.email?.smtp_user),
         smtp_pass: cleanString(input?.integrations?.email?.smtp_pass),
+        google_client_id: cleanString(
+          input?.integrations?.email?.google_client_id
+        ),
+        google_client_secret: cleanString(
+          input?.integrations?.email?.google_client_secret
+        ),
+        google_refresh_token: cleanString(
+          input?.integrations?.email?.google_refresh_token
+        ),
+        google_access_token: cleanString(
+          input?.integrations?.email?.google_access_token
+        ),
+        google_access_token_expires_at: cleanString(
+          input?.integrations?.email?.google_access_token_expires_at
+        ),
+        google_connected_email: cleanString(
+          input?.integrations?.email?.google_connected_email
+        ),
+        oauth_connected_at: cleanString(
+          input?.integrations?.email?.oauth_connected_at
+        ),
         validation: sanitizeValidation(
           input?.integrations?.email?.validation,
           defaults.integrations.email.validation
