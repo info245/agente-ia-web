@@ -8,7 +8,7 @@
   const accountIdFromAttr = currentScript?.getAttribute("data-account-id");
   const accountSlugFromAttr = currentScript?.getAttribute("data-account-slug");
 
-    const CONFIG = {
+  const CONFIG = {
       backendBaseUrl: backendFromAttr || "https://tmedia-global-ai.onrender.com",
       channel: "web",
       brandName: brandFromAttr || "Agente IA",
@@ -23,6 +23,10 @@
     chatStartedStorageKey: "agente_ia_chat_started",
     requestTimeoutMs: 25000,
   };
+
+  CONFIG.supportEmail = "";
+  CONFIG.publicWhatsappNumber = "";
+  CONFIG.availableChannels = [];
 
   async function loadRemoteWidgetConfig() {
     try {
@@ -42,6 +46,13 @@
       CONFIG.logoUrl = remote?.brand?.logo_url || CONFIG.logoUrl;
       CONFIG.accountId = CONFIG.accountId || remote?.account?.id || "";
       CONFIG.accountSlug = CONFIG.accountSlug || remote?.account?.slug || "";
+      CONFIG.supportEmail = String(remote?.contact?.support_email || "").trim();
+      CONFIG.publicWhatsappNumber = String(
+        remote?.contact?.public_whatsapp_number || ""
+      ).trim();
+      CONFIG.availableChannels = Array.isArray(remote?.contact?.available_channels)
+        ? remote.contact.available_channels
+        : [];
     } catch (_error) {
       // fallback silencioso: el widget sigue funcionando con la config local
     }
@@ -81,6 +92,35 @@
   function setChatStarted(value) {
     if (value) localStorage.setItem(CONFIG.chatStartedStorageKey, "true");
     else localStorage.removeItem(CONFIG.chatStartedStorageKey);
+  }
+
+  function getAvailableChannels() {
+    if (Array.isArray(CONFIG.availableChannels) && CONFIG.availableChannels.length) {
+      return CONFIG.availableChannels;
+    }
+
+    const channels = [];
+    if (CONFIG.publicWhatsappNumber) channels.push("whatsapp");
+    if (CONFIG.supportEmail) channels.push("email");
+    return channels;
+  }
+
+  function getFooterMessage() {
+    const channels = getAvailableChannels();
+    if (channels.includes("whatsapp") && channels.includes("email")) {
+      return "Si hace falta, podemos continuar por WhatsApp o por email.";
+    }
+    if (channels.includes("whatsapp")) {
+      return "Si hace falta, podemos continuar por WhatsApp.";
+    }
+    if (channels.includes("email")) {
+      return "Si hace falta, podemos continuar por email.";
+    }
+    return "Estamos listos para ayudarte desde este chat.";
+  }
+
+  function getInitialGreeting() {
+    return "Hola. Estoy listo para ayudarte. Cuéntame qué te gustaría revisar y empezamos.";
   }
 
   function pushDataLayer(eventName, payload = {}) {
@@ -323,6 +363,7 @@
   const input = $("input");
   const status = $("status");
   const sendBtn = $("sendBtn");
+  const mini = shadow.querySelector(".mini");
 
   function setStatus(text) {
     status.textContent = text || "Listo";
@@ -377,7 +418,13 @@
   }
 
   async function ensureGreeting() {
-    if (hasChatStarted()) return;
+    if (mini) mini.textContent = getFooterMessage();
+    if (hasChatStarted()) {
+      if (messages.childElementCount === 0) {
+        appendMessage("assistant", getInitialGreeting());
+      }
+      return;
+    }
     setStatus("Iniciando...");
     sendBtn.disabled = true;
 
@@ -389,6 +436,7 @@
       });
 
       if (data?.conversation_id) setConversationId(data.conversation_id);
+      data.reply = data?.reply || getInitialGreeting();
       appendMessage("assistant", data?.reply || "¡Hola! ¿En qué te puedo ayudar?");
       setChatStarted(true);
       pushDataLayer("chat_started");
@@ -461,6 +509,7 @@
 
   openBtn.addEventListener("click", async () => {
     openPanel();
+    if (mini) mini.textContent = getFooterMessage();
     await ensureGreeting();
   });
   closeBtn.addEventListener("click", closePanel);

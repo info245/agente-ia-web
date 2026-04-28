@@ -545,6 +545,27 @@ function getConfiguredServiceNames(appConfig = null) {
     .filter(Boolean);
 }
 
+function hasConfiguredWhatsApp(appConfig = null) {
+  return Boolean(
+    String(appConfig?.contact?.public_whatsapp_number || "").replace(/\D/g, "")
+  );
+}
+
+function hasConfiguredEmail(appConfig = null) {
+  return Boolean(
+    String(appConfig?.contact?.support_email || "").trim() ||
+      String(appConfig?.integrations?.email?.from_email || "").trim() ||
+      String(appConfig?.integrations?.email?.google_connected_email || "").trim()
+  );
+}
+
+function getPreferredConfiguredChannels(appConfig = null) {
+  const channels = [];
+  if (hasConfiguredWhatsApp(appConfig)) channels.push("whatsapp");
+  if (hasConfiguredEmail(appConfig)) channels.push("email");
+  return channels;
+}
+
 function buildConfiguredServicesPrompt(appConfig = null, { fallback = "" } = {}) {
   const services = getConfiguredServiceNames(appConfig);
   if (!services.length) {
@@ -1134,8 +1155,10 @@ function shouldOfferWhatsAppTransition({
   snapshot,
   lead,
   text,
+  appConfig = null,
 }) {
   if (channel !== "web") return false;
+  if (!hasConfiguredWhatsApp(appConfig)) return false;
   if (!hasName(lead)) return false;
 
   const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
@@ -1585,6 +1608,7 @@ function buildStructuredCloseReply({
   handoff,
   analysisSnapshot,
   allowCloseAdvance = true,
+  appConfig = null,
 }) {
   if (channel !== "web") return null;
   if (isGreeting(text)) return null;
@@ -1593,6 +1617,7 @@ function buildStructuredCloseReply({
   const hasValueDelivered = hasAnalysisSnapshot(analysisSnapshot);
   const hasCommercialContext =
     hasService(lead) || hasMainGoal(lead) || hasBusinessActivity(lead);
+  const availableChannels = getPreferredConfiguredChannels(appConfig);
   const closeStep = getCommercialCloseStep({
     lead,
     text,
@@ -1619,9 +1644,24 @@ function buildStructuredCloseReply({
   }
 
   if (closeStep === "close_ask_channel") {
+    if (availableChannels.length >= 2) {
+      return safeName
+        ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
+        : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
+    }
+    if (availableChannels[0] === "email") {
+      return safeName
+        ? `Perfecto, ${safeName}. Compárteme tu email y te lo preparo por ahí.`
+        : "Perfecto. Compárteme tu email y te lo preparo por ahí.";
+    }
+    if (availableChannels[0] === "whatsapp") {
+      return safeName
+        ? `Perfecto, ${safeName}. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.`
+        : "Perfecto. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.";
+    }
     return safeName
-      ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
-      : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
+      ? `Perfecto, ${safeName}. Compárteme el mejor canal para seguir contigo y te preparo el siguiente paso.`
+      : "Perfecto. Compárteme el mejor canal para seguir contigo y te preparo el siguiente paso.";
   }
 
   if (closeStep === "close_ask_phone") {
@@ -1819,7 +1859,17 @@ function buildModeInstructions({ mode, phase, lead, analysisSnapshot, channel, t
     snapshot: analysisSnapshot,
     lead,
     text,
+    appConfig,
   });
+  const availableChannels = getPreferredConfiguredChannels(appConfig);
+  const preferredChannelQuestion =
+    availableChannels.length >= 2
+      ? "Pregunta si prefiere seguir por WhatsApp o por email."
+      : availableChannels[0] === "email"
+        ? "Si hace falta recoger contacto, pide email. No ofrezcas WhatsApp."
+        : availableChannels[0] === "whatsapp"
+          ? "Si hace falta recoger contacto, pide WhatsApp. No ofrezcas email."
+          : "Si hace falta recoger contacto, pide el canal que la cuenta tenga realmente configurado y no inventes opciones.";
 
   const modeGuidance = {
     diagnostic_web: `
@@ -1828,6 +1878,7 @@ MODO: diagnostic_web
 - Empieza ayudando, no interrogando.
 - ${servicePrompt}
 - Si hay URL o anÃ¡lisis, entrega un mini diagnÃ³stico Ãºtil y breve.
+- ${preferredChannelQuestion}
 - Si el servicio es Google Ads y todavÃ­a no has visto campaÃ±as ni datos reales, no hables de diagnosticar campaÃ±as como si ya las hubieras analizado.
 - En Google Ads, si aÃºn no hay contexto suficiente, pregunta si ya tienen campaÃ±as activas o si parten de cero.
 - Solo pide un dato de lead si el usuario ya recibiÃ³ valor o quiere seguir.
@@ -3504,6 +3555,7 @@ ${ragContext}
       handoff: handoffCandidate,
       analysisSnapshot,
       allowCloseAdvance: hadAnalysisSnapshotBeforeTurn,
+      appConfig,
     });
 
     if (structuredCloseReply) {
@@ -4176,6 +4228,14 @@ app.get("/api/widget/config", async (req, res) => {
     const account = await resolveRequestAccount(req);
     const config = await getAppConfig({ accountId: account.id });
     const baseUrl = `${req.protocol}://${req.get("host")}`;
+    const availableChannels = [];
+    if (hasConfiguredWhatsApp(config)) availableChannels.push("whatsapp");
+    if (hasConfiguredEmail(config)) availableChannels.push("email");
+    const defaultCtaLabel = hasConfiguredWhatsApp(config)
+      ? "Continuar en WhatsApp"
+      : hasConfiguredEmail(config)
+      ? "Continuar por email"
+      : "Continuar";
       const publicConfig = {
         account: {
           id: account.id,
@@ -4188,13 +4248,16 @@ app.get("/api/widget/config", async (req, res) => {
           primary_color: config?.brand?.primary_color || "#1f2937",
           accent_color: config?.brand?.accent_color || "#2563eb",
         },
-      contact: {
-        public_whatsapp_number: config?.contact?.public_whatsapp_number || "",
-      },
-      agent: {
-        final_cta_label: config?.agent?.final_cta_label || "Continuar en WhatsApp",
-      },
-    };
+        contact: {
+          public_whatsapp_number: config?.contact?.public_whatsapp_number || "",
+          support_email: config?.contact?.support_email || "",
+          available_channels: availableChannels,
+        },
+        agent: {
+          final_cta_label: config?.agent?.final_cta_label || defaultCtaLabel,
+          handoff_target_channel: config?.agent?.handoff_target_channel || "",
+        },
+      };
 
     res.json({ ok: true, config: publicConfig });
   } catch (error) {

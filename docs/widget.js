@@ -23,6 +23,10 @@
     requestTimeoutMs: 25000,
   };
 
+  CONFIG.supportEmail = "";
+  CONFIG.publicWhatsappNumber = "";
+  CONFIG.availableChannels = [];
+
   async function loadRemoteWidgetConfig() {
     try {
       const params = new URLSearchParams();
@@ -38,6 +42,13 @@
       CONFIG.primaryColor = colorFromAttr || remote?.brand?.primary_color || CONFIG.primaryColor;
       CONFIG.accountId = CONFIG.accountId || remote?.account?.id || "";
       CONFIG.accountSlug = CONFIG.accountSlug || remote?.account?.slug || "";
+      CONFIG.supportEmail = String(remote?.contact?.support_email || "").trim();
+      CONFIG.publicWhatsappNumber = String(
+        remote?.contact?.public_whatsapp_number || ""
+      ).trim();
+      CONFIG.availableChannels = Array.isArray(remote?.contact?.available_channels)
+        ? remote.contact.available_channels
+        : [];
     } catch (_error) {
       // fallback silencioso
     }
@@ -189,6 +200,10 @@
 
   function isChatCompleted(value) {
     return value === true || value === "true" || value === 1 || value === "1";
+  }
+
+  function getInitialGreeting() {
+    return "Hola. Estoy listo para ayudarte. Cuéntame qué te gustaría revisar y empezamos.";
   }
 
   // ====== FETCH ROBUSTO ======
@@ -467,6 +482,9 @@
     updateMini();
 
     if (el.messages.childElementCount === 0) {
+      append("assistant", getInitialGreeting());
+      setTimeout(() => el.input.focus(), 50);
+      return;
       append("assistant", "Hola, soy el asistente de TMedia Global. ¿Cómo te puedo ayudar?");
     }
 

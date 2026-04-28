@@ -243,7 +243,7 @@ export const BLANK_APP_CONFIG = {
   agent: {
     tone: "",
     final_cta_label: "",
-    handoff_target_channel: "whatsapp",
+    handoff_target_channel: "",
     prompt_additions: "",
   },
   widget: {
