@@ -3459,6 +3459,8 @@ async function processIncomingMessage({
     analysisSnapshot = relatedWebAnalysis.payload;
   }
 
+  const appConfig = await getAppConfig({ accountId: scopedAccountId }).catch(() => null);
+
   const flow = applyFlowPatch(leadAfter || {}, userText, {
     channel: channel || "web",
     analysisSnapshot,
@@ -3506,7 +3508,6 @@ async function processIncomingMessage({
   console.log("--------------------");
 
   let reply = null;
-  const appConfig = await getAppConfig({ accountId: scopedAccountId }).catch(() => null);
   const ambiguousProductPromotionReply = buildAmbiguousProductPromotionReply(
     userText,
     appConfig
