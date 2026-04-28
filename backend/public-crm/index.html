@@ -697,9 +697,9 @@
 
             <form id="configForm" class="config-form">
                 <div class="config-tabs">
-                  <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">General</button>
-                  <button id="configTabKnowledge" type="button" class="config-tab" data-config-tab="knowledge">Fuentes</button>
-                  <button id="configTabMessages" type="button" class="config-tab" data-config-tab="messages">Mensajes</button>
+                  <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">Configurar tono</button>
+                  <button id="configTabKnowledge" type="button" class="config-tab" data-config-tab="knowledge">Configurar conocimiento</button>
+                  <button id="configTabMessages" type="button" class="config-tab" data-config-tab="messages">Configurar respuestas</button>
                 <button id="configTabAutomations" type="button" class="config-tab" data-config-tab="automations">Automatizaciones</button>
                 <button id="configTabIntegrations" type="button" class="config-tab" data-config-tab="integrations">Integraciones</button>
                 <button id="configTabWebsite" type="button" class="config-tab" data-config-tab="website">Desde web</button>
@@ -816,10 +816,10 @@
                     <input id="configSupportEmail" type="email" />
                   </label>
 
-                  <label>
-                    Tono del agente
-                    <input id="configAgentTone" type="text" />
-                  </label>
+                    <label>
+                     <span class="config-label-with-help">Tono del agente <span class="config-info-tip" title="Define cómo debe sonar el chat: más cercano, más ejecutivo, más directo o más consultivo.">i</span></span>
+                      <input id="configAgentTone" type="text" />
+                    </label>
 
                   <label>
                     CTA final
@@ -844,10 +844,11 @@
                     <input id="configAccentColor" type="text" />
                   </label>
 
-                  <label class="quote-grid-full">
-                    Ajustes extra de prompt
-                    <textarea id="configPromptAdditions" rows="5"></textarea>
-                  </label>
+                    <label class="quote-grid-full">
+                     <span class="config-label-with-help">Ajustes extra de comportamiento <span class="config-info-tip" title="Instrucciones finas para el agente. Ejemplo: no inventes precios, no menciones servicios no configurados, sé más breve o prioriza email frente a teléfono.">i</span></span>
+                     <textarea id="configPromptAdditions" rows="5"></textarea>
+                     <small class="config-field-help">Úsalo para afinar cómo responde el agente cuando quieras añadir reglas o matices que no encajan en servicios, tono o mensajes.</small>
+                    </label>
 
                   <div class="quote-grid-full services-editor">
                     <div class="services-editor-head">
@@ -863,10 +864,10 @@
               </section>
 
               <section id="configPanelKnowledge" class="config-panel" data-config-panel="knowledge">
-                <div class="config-section-intro">
-                  <strong>Fuentes de conocimiento del agente</strong>
-                  <p>Combina una capa manual para asegurar control comercial y una capa avanzada para importar contexto desde tu web, Excel/CSV o notas internas. El agente siempre prioriza lo revisado manualmente.</p>
-                </div>
+                  <div class="config-section-intro">
+                   <strong>Configurar conocimiento <span class="config-info-tip" title="Aquí defines lo que el agente sabe del negocio: servicios, web, tarifas, notas internas y documentación útil.">i</span></strong>
+                    <p>Combina una capa manual para asegurar control comercial y una capa avanzada para importar contexto desde tu web, Excel/CSV o notas internas. El agente siempre prioriza lo revisado manualmente.</p>
+                  </div>
 
                 <div class="knowledge-intro-grid">
                   <article class="knowledge-mode-card">
@@ -1048,10 +1049,10 @@
               </section>
 
               <section id="configPanelMessages" class="config-panel" data-config-panel="messages">
-                <div class="config-section-intro">
-                  <strong>Plantillas por canal</strong>
-                  <p>Define el tono y el copy de emails y WhatsApp para cada momento comercial. Las variables se rellenan en envio: <code>{nombre}</code>, <code>{servicio}</code>, <code>{empresa}</code>, <code>{link_presupuesto}</code>, <code>{whatsapp_humano}</code>.</p>
-                </div>
+                  <div class="config-section-intro">
+                    <strong>Configurar respuestas <span class="config-info-tip" title="Aquí decides cómo redacta el sistema los mensajes comerciales y de seguimiento por cada canal.">i</span></strong>
+                   <p>Define el tono y el copy de emails y WhatsApp para cada momento comercial. Las variables se rellenan en envio: <code>{nombre}</code>, <code>{servicio}</code>, <code>{empresa}</code>, <code>{link_presupuesto}</code>, <code>{whatsapp_humano}</code>.</p>
+                  </div>
 
                 <div id="configMessageTemplatesList" class="message-template-grid"></div>
               </section>
