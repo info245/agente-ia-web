@@ -98,7 +98,6 @@ function resolveEmailRuntimeConfig(emailConfig = null) {
     process.env.GOOGLE_OAUTH_CLIENT_SECRET || emailConfig?.google_client_secret || ""
   ).trim();
   const googleRefreshToken = String(emailConfig?.google_refresh_token || "").trim();
-  const googleAccessToken = String(emailConfig?.google_access_token || "").trim();
   const googleConnectedEmail = String(
     emailConfig?.google_connected_email || emailConfig?.from_email || ""
   ).trim();
@@ -134,7 +133,6 @@ function resolveEmailRuntimeConfig(emailConfig = null) {
     googleClientId,
     googleClientSecret,
     googleRefreshToken,
-    googleAccessToken,
     googleConnectedEmail,
   };
 }
@@ -160,7 +158,6 @@ function createTransporter(runtime) {
         clientId: globalGoogleOauthClientId,
         clientSecret: globalGoogleOauthClientSecret,
         refreshToken: runtime.googleRefreshToken,
-        accessToken: runtime.googleAccessToken || undefined,
       },
     });
   }
