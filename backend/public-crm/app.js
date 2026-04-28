@@ -508,6 +508,17 @@ const el = {
   configInitialMessage: document.getElementById("configInitialMessage"),
   configFinalCtaLabel: document.getElementById("configFinalCtaLabel"),
   configHandoffTargetChannel: document.getElementById("configHandoffTargetChannel"),
+  configLeadCaptureName: document.getElementById("configLeadCaptureName"),
+  configLeadCaptureCompanyName: document.getElementById("configLeadCaptureCompanyName"),
+  configLeadCaptureBusinessType: document.getElementById("configLeadCaptureBusinessType"),
+  configLeadCaptureBusinessActivity: document.getElementById("configLeadCaptureBusinessActivity"),
+  configLeadCaptureService: document.getElementById("configLeadCaptureService"),
+  configLeadCaptureGoal: document.getElementById("configLeadCaptureGoal"),
+  configLeadCaptureBudget: document.getElementById("configLeadCaptureBudget"),
+  configLeadCaptureUrgency: document.getElementById("configLeadCaptureUrgency"),
+  configLeadCapturePreferredChannel: document.getElementById("configLeadCapturePreferredChannel"),
+  configLeadCaptureEmail: document.getElementById("configLeadCaptureEmail"),
+  configLeadCapturePhone: document.getElementById("configLeadCapturePhone"),
   configPrimaryColor: document.getElementById("configPrimaryColor"),
   configAccentColor: document.getElementById("configAccentColor"),
   configPromptAdditions: document.getElementById("configPromptAdditions"),
@@ -530,6 +541,9 @@ const el = {
   configEmailProvider: document.getElementById("configEmailProvider"),
   configEmailFromAddress: document.getElementById("configEmailFromAddress"),
   configEmailReplyTo: document.getElementById("configEmailReplyTo"),
+  configNotificationsEmailTo: document.getElementById("configNotificationsEmailTo"),
+  configNotifyNewLead: document.getElementById("configNotifyNewLead"),
+  configNotifyChatSummary: document.getElementById("configNotifyChatSummary"),
   configEmailGoogleConnectedMeta: document.getElementById("configEmailGoogleConnectedMeta"),
   configEmailGoogleOauthStatus: document.getElementById("configEmailGoogleOauthStatus"),
   configConnectGoogleEmailBtn: document.getElementById("configConnectGoogleEmailBtn"),
@@ -2818,6 +2832,26 @@ function buildConfigPayload() {
   const knowledge_sources = collectKnowledgeSources();
   const message_templates = collectMessageTemplates();
   const automation_flows = collectAutomationFlows();
+  const lead_capture = {
+    fields: {
+      name: Boolean(el.configLeadCaptureName?.checked),
+      company_name: Boolean(el.configLeadCaptureCompanyName?.checked),
+      business_type: Boolean(el.configLeadCaptureBusinessType?.checked),
+      business_activity: Boolean(el.configLeadCaptureBusinessActivity?.checked),
+      interest_service: Boolean(el.configLeadCaptureService?.checked),
+      main_goal: Boolean(el.configLeadCaptureGoal?.checked),
+      budget_range: Boolean(el.configLeadCaptureBudget?.checked),
+      urgency: Boolean(el.configLeadCaptureUrgency?.checked),
+      preferred_contact_channel: Boolean(el.configLeadCapturePreferredChannel?.checked),
+      email: Boolean(el.configLeadCaptureEmail?.checked),
+      phone: Boolean(el.configLeadCapturePhone?.checked),
+    },
+  };
+  const notifications = {
+    email_to: String(el.configNotificationsEmailTo?.value || "").trim(),
+    notify_new_lead: Boolean(el.configNotifyNewLead?.checked),
+    notify_chat_summary: Boolean(el.configNotifyChatSummary?.checked),
+  };
   const widgetAllowedDomains = String(el.configWidgetAllowedDomains?.value || "")
     .split(/\r?\n/)
     .map((item) => item.trim())
@@ -2850,6 +2884,8 @@ function buildConfigPayload() {
         install_mode: el.configWidgetEmbedMode?.value || "slug",
         allowed_domains: widgetAllowedDomains,
       },
+      lead_capture,
+      notifications,
       knowledge_sources,
       integrations: {
       whatsapp: {
@@ -3592,6 +3628,18 @@ function renderConfig() {
   el.configHandoffTargetChannel.value =
     config?.agent?.handoff_target_channel || "whatsapp";
   el.configPromptAdditions.value = config?.agent?.prompt_additions || "";
+  const leadCaptureFields = config?.lead_capture?.fields || {};
+  if (el.configLeadCaptureName) el.configLeadCaptureName.checked = leadCaptureFields.name !== false;
+  if (el.configLeadCaptureCompanyName) el.configLeadCaptureCompanyName.checked = Boolean(leadCaptureFields.company_name);
+  if (el.configLeadCaptureBusinessType) el.configLeadCaptureBusinessType.checked = Boolean(leadCaptureFields.business_type);
+  if (el.configLeadCaptureBusinessActivity) el.configLeadCaptureBusinessActivity.checked = Boolean(leadCaptureFields.business_activity);
+  if (el.configLeadCaptureService) el.configLeadCaptureService.checked = leadCaptureFields.interest_service !== false;
+  if (el.configLeadCaptureGoal) el.configLeadCaptureGoal.checked = leadCaptureFields.main_goal !== false;
+  if (el.configLeadCaptureBudget) el.configLeadCaptureBudget.checked = Boolean(leadCaptureFields.budget_range);
+  if (el.configLeadCaptureUrgency) el.configLeadCaptureUrgency.checked = Boolean(leadCaptureFields.urgency);
+  if (el.configLeadCapturePreferredChannel) el.configLeadCapturePreferredChannel.checked = leadCaptureFields.preferred_contact_channel !== false;
+  if (el.configLeadCaptureEmail) el.configLeadCaptureEmail.checked = leadCaptureFields.email !== false;
+  if (el.configLeadCapturePhone) el.configLeadCapturePhone.checked = Boolean(leadCaptureFields.phone);
   renderKnowledgeSources(config?.knowledge_sources || {});
   normalizeKnowledgeCopy();
   renderSectorPresets();
@@ -3641,6 +3689,15 @@ function renderConfig() {
     config?.integrations?.email?.from_email || "";
   el.configEmailReplyTo.value =
     config?.integrations?.email?.reply_to_email || "";
+  if (el.configNotificationsEmailTo) {
+    el.configNotificationsEmailTo.value = config?.notifications?.email_to || "";
+  }
+  if (el.configNotifyNewLead) {
+    el.configNotifyNewLead.checked = config?.notifications?.notify_new_lead !== false;
+  }
+  if (el.configNotifyChatSummary) {
+    el.configNotifyChatSummary.checked = config?.notifications?.notify_chat_summary !== false;
+  }
   if (el.configEmailSmtpHost) {
     el.configEmailSmtpHost.value = config?.integrations?.email?.smtp_host || "";
   }

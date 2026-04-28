@@ -23,6 +23,26 @@ export const DEFAULT_APP_CONFIG = {
     handoff_target_channel: "whatsapp",
     prompt_additions: "",
   },
+  lead_capture: {
+    fields: {
+      name: true,
+      company_name: true,
+      business_type: false,
+      business_activity: false,
+      interest_service: true,
+      main_goal: true,
+      budget_range: false,
+      urgency: false,
+      preferred_contact_channel: true,
+      email: true,
+      phone: true,
+    },
+  },
+  notifications: {
+    email_to: "",
+    notify_new_lead: true,
+    notify_chat_summary: true,
+  },
   widget: {
     install_mode: "slug",
     allowed_domains: [],
@@ -248,6 +268,26 @@ export const BLANK_APP_CONFIG = {
     final_cta_label: "",
     handoff_target_channel: "",
     prompt_additions: "",
+  },
+  lead_capture: {
+    fields: {
+      name: true,
+      company_name: true,
+      business_type: false,
+      business_activity: false,
+      interest_service: true,
+      main_goal: true,
+      budget_range: false,
+      urgency: false,
+      preferred_contact_channel: true,
+      email: true,
+      phone: true,
+    },
+  },
+  notifications: {
+    email_to: "",
+    notify_new_lead: true,
+    notify_chat_summary: true,
   },
   widget: {
     install_mode: "slug",
@@ -477,6 +517,35 @@ function sanitizeKnowledgeSources(value = {}) {
   };
 }
 
+function sanitizeLeadCaptureConfig(value = {}, defaults = {}) {
+  const fieldDefaults = defaults?.fields || {};
+  const incomingFields = value?.fields || {};
+  const fields = {};
+
+  for (const [key, defaultValue] of Object.entries(fieldDefaults)) {
+    fields[key] =
+      typeof incomingFields?.[key] === "boolean"
+        ? incomingFields[key]
+        : Boolean(defaultValue);
+  }
+
+  return { fields };
+}
+
+function sanitizeNotificationsConfig(value = {}, defaults = {}) {
+  return {
+    email_to: cleanString(value?.email_to),
+    notify_new_lead:
+      typeof value?.notify_new_lead === "boolean"
+        ? value.notify_new_lead
+        : Boolean(defaults?.notify_new_lead),
+    notify_chat_summary:
+      typeof value?.notify_chat_summary === "boolean"
+        ? value.notify_chat_summary
+        : Boolean(defaults?.notify_chat_summary),
+  };
+}
+
 function sanitizeWidgetConfig(value = {}) {
   const allowedDomains = Array.isArray(value?.allowed_domains)
     ? value.allowed_domains
@@ -577,9 +646,17 @@ export function sanitizeAppConfig(input = {}, options = {}) {
       ? "chat_only"
       : "full_crm";
   const defaults =
-    options?.useBlankDefaults || requestedMode === "chat_only"
-      ? getBlankAppConfig({ productMode: requestedMode })
-      : getDefaultAppConfig();
+      options?.useBlankDefaults || requestedMode === "chat_only"
+        ? getBlankAppConfig({ productMode: requestedMode })
+        : getDefaultAppConfig();
+  const lead_capture = sanitizeLeadCaptureConfig(
+    input?.lead_capture,
+    defaults?.lead_capture || {}
+  );
+  const notifications = sanitizeNotificationsConfig(
+    input?.notifications,
+    defaults?.notifications || {}
+  );
 
   return {
     product: {
@@ -616,6 +693,8 @@ export function sanitizeAppConfig(input = {}, options = {}) {
         ),
         prompt_additions: resolveString(input?.agent?.prompt_additions),
       },
+      lead_capture,
+      notifications,
       widget,
       integrations: {
       whatsapp: {

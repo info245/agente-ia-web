@@ -545,6 +545,38 @@ function getConfiguredServiceNames(appConfig = null) {
     .filter(Boolean);
 }
 
+const DEFAULT_CAPTURE_FIELDS = {
+  name: true,
+  company_name: true,
+  business_type: false,
+  business_activity: false,
+  interest_service: true,
+  main_goal: true,
+  budget_range: false,
+  urgency: false,
+  preferred_contact_channel: true,
+  email: true,
+  phone: true,
+};
+
+function getLeadCaptureFields(appConfig = null) {
+  return {
+    ...DEFAULT_CAPTURE_FIELDS,
+    ...(appConfig?.lead_capture?.fields || {}),
+  };
+}
+
+function isCaptureFieldEnabled(appConfig = null, field) {
+  return Boolean(getLeadCaptureFields(appConfig)?.[field]);
+}
+
+function getNotificationRecipients(appConfig = null) {
+  return String(appConfig?.notifications?.email_to || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function hasConfiguredWhatsApp(appConfig = null) {
   return Boolean(
     String(appConfig?.contact?.public_whatsapp_number || "").replace(/\D/g, "")
@@ -564,6 +596,11 @@ function getPreferredConfiguredChannels(appConfig = null) {
   if (hasConfiguredWhatsApp(appConfig)) channels.push("whatsapp");
   if (hasConfiguredEmail(appConfig)) channels.push("email");
   return channels;
+}
+
+function getSingleConfiguredChannel(appConfig = null) {
+  const channels = getPreferredConfiguredChannels(appConfig);
+  return channels.length === 1 ? channels[0] : "";
 }
 
 function buildConfiguredServicesPrompt(appConfig = null, { fallback = "" } = {}) {
@@ -911,34 +948,84 @@ function validateMetaSignature(req) {
     : { ok: false, reason: "signature-mismatch" };
 }
 
-function getCurrentStep(lead) {
-  if (!hasName(lead)) return "ask_name";
-  if (!hasBusinessType(lead)) return "ask_business_type";
-  if (!hasBusinessActivity(lead)) return "ask_business_activity";
-  if (!hasService(lead)) return "ask_service";
-  if (!hasMainGoal(lead)) return "ask_goal";
-  if (!hasBudget(lead)) return "ask_budget";
-  if (!hasUrgency(lead)) return "ask_urgency";
-  if (!hasContact(lead)) return "ask_contact";
+function getCurrentStep(lead, appConfig = null) {
+  if (isCaptureFieldEnabled(appConfig, "name") && !hasName(lead)) return "ask_name";
+  if (isCaptureFieldEnabled(appConfig, "company_name") && !norm(lead?.company_name)) {
+    return "ask_company_name";
+  }
+  if (isCaptureFieldEnabled(appConfig, "business_type") && !hasBusinessType(lead)) {
+    return "ask_business_type";
+  }
+  if (isCaptureFieldEnabled(appConfig, "business_activity") && !hasBusinessActivity(lead)) {
+    return "ask_business_activity";
+  }
+  if (isCaptureFieldEnabled(appConfig, "interest_service") && !hasService(lead)) return "ask_service";
+  if (isCaptureFieldEnabled(appConfig, "main_goal") && !hasMainGoal(lead)) return "ask_goal";
+  if (isCaptureFieldEnabled(appConfig, "budget_range") && !hasBudget(lead)) return "ask_budget";
+  if (isCaptureFieldEnabled(appConfig, "urgency") && !hasUrgency(lead)) return "ask_urgency";
+  if (
+    isCaptureFieldEnabled(appConfig, "preferred_contact_channel") &&
+    !getSingleConfiguredChannel(appConfig) &&
+    !normalizeText(lead?.preferred_contact_channel || "")
+  ) {
+    return "ask_preferred_channel";
+  }
+  if (isCaptureFieldEnabled(appConfig, "email") && !norm(lead?.email)) {
+    return "ask_email";
+  }
+  if (isCaptureFieldEnabled(appConfig, "phone") && !norm(lead?.phone)) {
+    return "ask_phone";
+  }
+  if (
+    !isCaptureFieldEnabled(appConfig, "preferred_contact_channel") &&
+    isCaptureFieldEnabled(appConfig, "email") &&
+    isCaptureFieldEnabled(appConfig, "phone") &&
+    !hasContact(lead)
+  ) {
+    return "ask_contact";
+  }
   return "ready_for_ai";
 }
 
-function getQuestionForStep(step, lead) {
+function getQuestionForStep(step, lead, appConfig = null) {
   const safeName = getSafeLeadName(lead);
+  const availableChannels = getPreferredConfiguredChannels(appConfig);
 
   switch (step) {
     case "ask_name":
       return "Antes de seguir, ¿cómo te llamas?";
+    case "ask_company_name":
+      return safeName
+        ? `Perfecto, ${safeName}. ¿Cómo se llama tu empresa o proyecto?`
+        : "Perfecto. ¿Cómo se llama tu empresa o proyecto?";
     case "close_ask_name":
       return "Antes de seguir, ¿cómo te llamas?";
+    case "ask_preferred_channel":
     case "close_ask_channel":
+      if (availableChannels[0] === "email" && availableChannels.length === 1) {
+        return safeName
+          ? `Perfecto, ${safeName}. ¿Prefieres que te lo enviemos por email?`
+          : "Perfecto. ¿Prefieres que te lo enviemos por email?";
+      }
+      if (availableChannels[0] === "whatsapp" && availableChannels.length === 1) {
+        return safeName
+          ? `Perfecto, ${safeName}. ¿Prefieres que sigamos por WhatsApp?`
+          : "Perfecto. ¿Prefieres que sigamos por WhatsApp?";
+      }
       return safeName
         ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
         : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
+    case "ask_phone":
     case "close_ask_phone":
+      if (availableChannels[0] === "email" && availableChannels.length === 1) {
+        return safeName
+          ? `Perfecto, ${safeName}. Compárteme tu teléfono y te dejo el siguiente paso preparado por ahí.`
+          : "Perfecto. Compárteme tu teléfono y te dejo el siguiente paso preparado por ahí.";
+      }
       return safeName
         ? `Perfecto, ${safeName}. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.`
         : "Perfecto. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.";
+    case "ask_email":
     case "close_ask_email":
       return safeName
         ? `Perfecto, ${safeName}. Compárteme tu email y te lo preparo por ahí.`
@@ -1764,79 +1851,116 @@ function getConversationPhase({ mode, lead, analysisSnapshot, text }) {
   return "discover";
 }
 
-function getMissingLeadQuestion(lead, { lateOnly = true } = {}) {
+function getMissingLeadQuestion(lead, { lateOnly = true, appConfig = null } = {}) {
   const closeStep = isCloseFlowStep(lead?.current_step)
     ? lead.current_step
     : null;
   if (closeStep && closeStep !== "close_ready") {
-    return getQuestionForStep(closeStep, lead);
+    return getQuestionForStep(closeStep, lead, appConfig);
   }
 
   const sequence = lateOnly
-    ? ["name", "preferred_channel", "email_or_phone"]
-    : ["name", "business_type", "business_activity", "interest_service", "main_goal", "budget_range", "urgency", "email_or_phone"];
+    ? ["name", "company_name", "preferred_channel", "email", "phone"]
+    : [
+        "name",
+        "company_name",
+        "business_type",
+        "business_activity",
+        "interest_service",
+        "main_goal",
+        "budget_range",
+        "urgency",
+        "preferred_channel",
+        "email",
+        "phone",
+      ];
 
   for (const item of sequence) {
+    if (
+      ![
+        "name",
+        "company_name",
+        "business_type",
+        "business_activity",
+        "interest_service",
+        "main_goal",
+        "budget_range",
+        "urgency",
+        "preferred_channel",
+        "email",
+        "phone",
+      ].includes(item)
+    ) {
+      continue;
+    }
+    if (
+      item !== "name" &&
+      item !== "preferred_channel" &&
+      !isCaptureFieldEnabled(appConfig, item === "email_or_phone" ? "email" : item)
+    ) {
+      continue;
+    }
     switch (item) {
       case "name":
-        if (!hasName(lead)) return "Si te encaja, ¿cómo te llamas?";
+        if (isCaptureFieldEnabled(appConfig, "name") && !hasName(lead)) {
+          return "Si te encaja, ¿cómo te llamas?";
+        }
+        break;
+      case "company_name":
+        if (isCaptureFieldEnabled(appConfig, "company_name") && !norm(lead?.company_name)) {
+          return hasName(lead)
+            ? `Perfecto, ${getSafeLeadName(lead) || ""}. ¿Cómo se llama tu empresa o proyecto?`
+            : "¿Cómo se llama tu empresa o proyecto?";
+        }
         break;
       case "business_type":
-        if (!hasBusinessType(lead)) {
+        if (isCaptureFieldEnabled(appConfig, "business_type") && !hasBusinessType(lead)) {
           return "¿Esto es para una empresa en marcha, un negocio local o un proyecto que estás arrancando?";
         }
         break;
       case "business_activity":
-        if (!hasBusinessActivity(lead)) {
+        if (isCaptureFieldEnabled(appConfig, "business_activity") && !hasBusinessActivity(lead)) {
           return "¿A qué os dedicáis exactamente?";
         }
         break;
       case "interest_service":
-        if (!hasService(lead)) {
+        if (isCaptureFieldEnabled(appConfig, "interest_service") && !hasService(lead)) {
           return "¿Qué quieres revisar primero de tu negocio, de tu web o del objetivo que quieres conseguir?";
         }
         break;
       case "preferred_channel":
-        if (hasName(lead) && !normalizeText(lead?.preferred_contact_channel || "")) {
-          return `Perfecto, ${getSafeLeadName(lead) || ""}. ¿Prefieres que sigamos por email o por WhatsApp?`;
+        if (
+          isCaptureFieldEnabled(appConfig, "preferred_contact_channel") &&
+          !getSingleConfiguredChannel(appConfig) &&
+          hasName(lead) &&
+          !normalizeText(lead?.preferred_contact_channel || "")
+        ) {
+          return getQuestionForStep("ask_preferred_channel", lead, appConfig);
         }
         break;
       case "main_goal":
-        if (!hasMainGoal(lead)) {
+        if (isCaptureFieldEnabled(appConfig, "main_goal") && !hasMainGoal(lead)) {
           return "¿Qué te preocupa más ahora mismo: captar más contactos, vender más o mejorar la conversión?";
         }
         break;
       case "budget_range":
-        if (!hasBudget(lead)) {
+        if (isCaptureFieldEnabled(appConfig, "budget_range") && !hasBudget(lead)) {
           return "Si quieres, te oriento mejor si me dices con qué presupuesto aproximado te gustaría moverte.";
         }
         break;
       case "urgency":
-        if (!hasUrgency(lead)) {
+        if (isCaptureFieldEnabled(appConfig, "urgency") && !hasUrgency(lead)) {
           return "¿Esto te corre ahora o es algo que quieres mover más adelante?";
         }
         break;
-      case "email_or_phone":
-        if (!hasContact(lead)) {
-          const preferredChannel = normalizeText(lead?.preferred_contact_channel || "");
-          if (!preferredChannel) {
-            return hasName(lead)
-              ? `Perfecto, ${getSafeLeadName(lead) || ""}. ¿Prefieres que sigamos por email o por WhatsApp?`
-              : "Antes de seguir por un canal externo, dime tu nombre y te guío con el siguiente paso.";
-          }
-          if (preferredChannel.includes("whatsapp")) {
-            return hasName(lead)
-              ? `Perfecto, ${getSafeLeadName(lead) || ""}. Compárteme tu número de WhatsApp y te dejo el paso preparado por ahí.`
-              : "Si prefieres WhatsApp, antes dime tu nombre y luego tu nÃºmero.";
-          }
-          if (preferredChannel.includes("email")) {
-            return hasName(lead)
-              ? `Perfecto, ${getSafeLeadName(lead) || ""}. Compárteme tu email y te lo preparo por ahí.`
-              : "Si prefieres email, antes dime tu nombre y seguimos.";
-          }
-          return hasName(lead)
-            ? `Perfecto, ${getSafeLeadName(lead) || ""}. Si quieres que te deje esto preparado o seguir por un canal más cómodo, compárteme email o WhatsApp y seguimos por ahí.`
-            : "Si quieres que te deje esto preparado o seguir por un canal mÃ¡s cÃ³modo, antes dime tu nombre y seguimos.";
+      case "email":
+        if (isCaptureFieldEnabled(appConfig, "email") && !norm(lead?.email)) {
+          return getQuestionForStep("ask_email", lead, appConfig);
+        }
+        break;
+      case "phone":
+        if (isCaptureFieldEnabled(appConfig, "phone") && !norm(lead?.phone)) {
+          return getQuestionForStep("ask_phone", lead, appConfig);
         }
         break;
     }
@@ -1849,7 +1973,7 @@ function buildModeInstructions({ mode, phase, lead, analysisSnapshot, channel, t
   const analysisBlock = summarizeAnalysisSnapshot(analysisSnapshot);
   const missingLeadQuestion =
     phase === "deepen" || phase === "close"
-      ? getMissingLeadQuestion(lead, { lateOnly: true })
+      ? getMissingLeadQuestion(lead, { lateOnly: true, appConfig })
       : null;
   const servicePrompt = buildConfiguredServicesPrompt(appConfig, {
     fallback: "Ofrece caminos claros: revisar la web, el negocio o el objetivo que quiere conseguir el usuario.",
@@ -2708,7 +2832,7 @@ function getWhatsAppTextFromMessage(message) {
 function applyFlowPatch(
   lead,
   text,
-  { channel = "web", analysisSnapshot = null } = {}
+  { channel = "web", analysisSnapshot = null, appConfig = null } = {}
 ) {
   const closeStep = getCommercialCloseStep({
     lead: lead || {},
@@ -2717,7 +2841,7 @@ function applyFlowPatch(
     analysisReady: hasAnalysisSnapshot(analysisSnapshot),
     isGreeting: isGreeting(text),
   });
-  const step = closeStep || lead?.current_step || getCurrentStep(lead || {});
+  const step = closeStep || lead?.current_step || getCurrentStep(lead || {}, appConfig);
   const patch = {};
 
   const detectedEmail = detectEmail(text);
@@ -2728,11 +2852,19 @@ function applyFlowPatch(
   const detectedBusinessActivity = detectBusinessActivity(text);
   const detectedGoal = detectMainGoal(text);
   const explicitPreferredChannel = getExplicitPreferredChannel(text);
+  const singleConfiguredChannel = getSingleConfiguredChannel(appConfig);
 
   if (detectedEmail && !lead?.email) patch.email = detectedEmail;
   if (detectedPhone && !lead?.phone) patch.phone = detectedPhone;
   if (detectedService && !lead?.interest_service) patch.interest_service = detectedService;
   if (explicitPreferredChannel) patch.preferred_contact_channel = explicitPreferredChannel;
+  if (
+    !explicitPreferredChannel &&
+    singleConfiguredChannel &&
+    !normalizeText(lead?.preferred_contact_channel || "")
+  ) {
+    patch.preferred_contact_channel = singleConfiguredChannel;
+  }
   if (detectedBusinessType && !lead?.business_type) patch.business_type = detectedBusinessType;
   if (detectedBusinessActivity && !lead?.business_activity) {
     patch.business_activity = detectedBusinessActivity;
@@ -2773,32 +2905,41 @@ function applyFlowPatch(
   }
 
   switch (step) {
-    case "ask_name":
-    case "close_ask_name":
-      if (isLikelyValidName(text)) {
-        patch.name = norm(text);
-      }
-      break;
+      case "ask_name":
+      case "close_ask_name":
+        if (isLikelyValidName(text)) {
+          patch.name = norm(text);
+        }
+        break;
 
-    case "close_ask_channel":
-      if (explicitPreferredChannel) {
-        patch.preferred_contact_channel = explicitPreferredChannel;
-      }
-      break;
+      case "ask_company_name":
+        if (norm(text) && !isUnknownResponse(text) && !isUserQuestion(text)) {
+          patch.company_name = String(text || "").trim();
+        }
+        break;
 
-    case "close_ask_phone":
-      if (detectedPhone) {
-        patch.phone = detectedPhone;
-        patch.preferred_contact_channel = "whatsapp";
-      } else if (explicitPreferredChannel === "email") {
+      case "ask_preferred_channel":
+      case "close_ask_channel":
+        if (explicitPreferredChannel) {
+          patch.preferred_contact_channel = explicitPreferredChannel;
+        }
+        break;
+
+      case "ask_phone":
+      case "close_ask_phone":
+        if (detectedPhone) {
+          patch.phone = detectedPhone;
+          patch.preferred_contact_channel = "whatsapp";
+        } else if (explicitPreferredChannel === "email") {
         patch.preferred_contact_channel = "email";
-      }
-      break;
+        }
+        break;
 
-    case "close_ask_email":
-      if (detectedEmail) {
-        patch.email = detectedEmail;
-        patch.preferred_contact_channel = "email";
+      case "ask_email":
+      case "close_ask_email":
+        if (detectedEmail) {
+          patch.email = detectedEmail;
+          patch.preferred_contact_channel = "email";
       } else if (explicitPreferredChannel === "whatsapp") {
         patch.preferred_contact_channel = "whatsapp";
       }
@@ -2887,13 +3028,13 @@ function applyFlowPatch(
 
   const merged = { ...(lead || {}), ...patch };
   const nextStep =
-    getCommercialCloseStep({
-      lead: merged,
-      text,
-      channel,
-      analysisReady: hasAnalysisSnapshot(analysisSnapshot),
-      isGreeting: isGreeting(text),
-    }) || getCurrentStep(merged);
+      getCommercialCloseStep({
+        lead: merged,
+        text,
+        channel,
+        analysisReady: hasAnalysisSnapshot(analysisSnapshot),
+        isGreeting: isGreeting(text),
+      }) || getCurrentStep(merged, appConfig);
 
   return {
     patch,
@@ -2901,9 +3042,9 @@ function applyFlowPatch(
     nextQuestion:
       nextStep === "ready_for_ai" || nextStep === "close_ready"
         ? null
-        : getQuestionForStep(nextStep, merged),
-  };
-}
+        : getQuestionForStep(nextStep, merged, appConfig),
+    };
+  }
 
 function renderWidgetPreviewHtml({ account, config, baseUrl }) {
   const accountSlug = String(account?.slug || "").trim();
@@ -3321,6 +3462,7 @@ async function processIncomingMessage({
   const flow = applyFlowPatch(leadAfter || {}, userText, {
     channel: channel || "web",
     analysisSnapshot,
+    appConfig,
   });
 
   if (Object.keys(flow.patch || {}).length > 0) {
@@ -3661,9 +3803,15 @@ ${ragContext}
     const latestLead = await loadLeadForConversation();
     const signature = buildLeadSignature(latestLead);
     const previousSignature = lastLeadEmailSent.get(currentConversationId);
+    const notificationRecipients = getNotificationRecipients(appConfig);
+    const isUpdateNotification = Boolean(previousSignature);
+    const notificationsEnabled = isUpdateNotification
+      ? appConfig?.notifications?.notify_chat_summary !== false
+      : appConfig?.notifications?.notify_new_lead !== false;
     const shouldNotify =
-      hasUsefulLeadDataForNotification(latestLead) ||
-      (chatCompleted && !previousSignature);
+      notificationsEnabled &&
+      (hasUsefulLeadDataForNotification(latestLead) ||
+        (chatCompleted && !previousSignature));
 
     if (shouldNotify && signature !== previousSignature) {
       await sendLeadEmail({
@@ -3672,6 +3820,7 @@ ${ragContext}
         type: previousSignature ? "update" : "new",
         changedFields: [],
         emailConfig: appConfig?.integrations?.email || null,
+        recipients: notificationRecipients,
       });
 
       lastLeadEmailSent.set(currentConversationId, signature);
@@ -5304,7 +5453,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       account_id: account.id,
     });
 
-    if (payload.notify_internal !== false) {
+    if (payload.notify_internal !== false && accountConfig?.notifications?.notify_new_lead !== false) {
       await sendLeadEmail({
         lead: {
           ...lead,
@@ -5313,6 +5462,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         conversation_id: conversation.id,
         type: "new",
         emailConfig: accountConfig?.integrations?.email || null,
+        recipients: getNotificationRecipients(accountConfig),
       }).catch((error) => {
         console.log("external lead internal email error", error.message);
       });

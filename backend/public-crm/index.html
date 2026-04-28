@@ -843,11 +843,13 @@
                   <label>
                     Color principal
                     <input id="configPrimaryColor" type="text" />
+                    <small class="config-field-help">Se usa como color sólido principal del chat, sin degradados automáticos.</small>
                   </label>
 
                   <label>
                     Color acento
                     <input id="configAccentColor" type="text" />
+                    <small class="config-field-help">Se usa en focos, detalles y botones secundarios.</small>
                   </label>
 
                     <label class="quote-grid-full">
@@ -856,9 +858,32 @@
                      <small class="config-field-help">Úsalo para afinar cómo responde el agente cuando quieras añadir reglas o matices que no encajan en servicios, tono o mensajes.</small>
                     </label>
 
-                  <div class="quote-grid-full services-editor">
-                    <div class="services-editor-head">
-                      <div>
+                    <section class="quote-grid-full config-capture-card">
+                      <div class="config-capture-head">
+                        <div>
+                          <strong>Datos a recoger del lead <span class="config-info-tip" title="Activa qué datos quieres que el chat intente recoger en la conversación. Solo se preguntarán los campos que estén marcados aquí.">i</span></strong>
+                          <p>Elige qué datos quieres capturar en el chat de esta cuenta. Esto define qué preguntas hace el agente al cerrar o cualificar una conversación.</p>
+                          <small class="config-field-help">Estos son los campos estructurados soportados hoy por el CRM. Si luego quieres añadir más campos como edad o localidad, habría que incorporarlos también al modelo de lead.</small>
+                        </div>
+                      </div>
+                      <div class="config-capture-grid">
+                        <label class="config-check-card"><input id="configLeadCaptureName" type="checkbox" /> <span>Nombre</span></label>
+                        <label class="config-check-card"><input id="configLeadCaptureCompanyName" type="checkbox" /> <span>Empresa</span></label>
+                        <label class="config-check-card"><input id="configLeadCaptureBusinessType" type="checkbox" /> <span>Tipo de negocio</span></label>
+                        <label class="config-check-card"><input id="configLeadCaptureBusinessActivity" type="checkbox" /> <span>Actividad</span></label>
+                        <label class="config-check-card"><input id="configLeadCaptureService" type="checkbox" /> <span>Servicio de interés</span></label>
+                        <label class="config-check-card"><input id="configLeadCaptureGoal" type="checkbox" /> <span>Objetivo principal</span></label>
+                        <label class="config-check-card"><input id="configLeadCaptureBudget" type="checkbox" /> <span>Presupuesto</span></label>
+                        <label class="config-check-card"><input id="configLeadCaptureUrgency" type="checkbox" /> <span>Urgencia</span></label>
+                        <label class="config-check-card"><input id="configLeadCapturePreferredChannel" type="checkbox" /> <span>Canal preferido</span></label>
+                        <label class="config-check-card"><input id="configLeadCaptureEmail" type="checkbox" /> <span>Email</span></label>
+                        <label class="config-check-card"><input id="configLeadCapturePhone" type="checkbox" /> <span>Teléfono / WhatsApp</span></label>
+                      </div>
+                    </section>
+
+                    <div class="quote-grid-full services-editor">
+                      <div class="services-editor-head">
+                        <div>
                         <strong>Servicios</strong>
                         <p>Define lo que vende el agente, tarifas orientativas y URLs de apoyo.</p>
                       </div>
@@ -1211,13 +1236,30 @@
                         <input id="configEmailFromAddress" type="email" placeholder="comercial@tuempresa.com" />
                       </label>
 
-                      <label class="quote-grid-full">
-                        Reply-to
-                        <input id="configEmailReplyTo" type="email" placeholder="soporte@tuempresa.com" />
-                      </label>
+                        <label class="quote-grid-full">
+                          Reply-to
+                         <input id="configEmailReplyTo" type="email" placeholder="soporte@tuempresa.com" />
+                        </label>
 
-                      <div class="config-oauth-card quote-grid-full">
-                        <div>
+                        <section class="quote-grid-full config-capture-card">
+                          <div class="config-capture-head">
+                            <div>
+                              <strong>Notificaciones del chat y los leads <span class="config-info-tip" title="Define a qué correo deben llegar los avisos internos cuando entre un lead o se cierre una conversación con resumen final.">i</span></strong>
+                              <p>Usa este correo para recibir avisos internos del CRM. Si lo dejas vacío, el sistema seguirá usando el destino global configurado por TMedia.</p>
+                            </div>
+                          </div>
+                          <div class="quote-grid">
+                            <label class="quote-grid-full">
+                              Email de notificaciones
+                              <input id="configNotificationsEmailTo" type="email" placeholder="ventas@tuempresa.com" />
+                            </label>
+                            <label class="config-check-card"><input id="configNotifyNewLead" type="checkbox" /> <span>Avisar cuando entra un nuevo lead</span></label>
+                            <label class="config-check-card"><input id="configNotifyChatSummary" type="checkbox" /> <span>Avisar cuando se genera resumen final del chat</span></label>
+                          </div>
+                        </section>
+
+                        <div class="config-oauth-card quote-grid-full">
+                          <div>
                           <strong>Conectar Gmail</strong>
                           <p>Autoriza la cuenta de Google Workspace o Gmail que enviara los correos de esta cuenta cuando uses Google conectado (OAuth). El envio real saldra desde la cuenta conectada; Reply-to se usara para las respuestas si lo defines distinto.</p>
                           <small id="configEmailGoogleConnectedMeta">Sin cuenta conectada todavia.</small>

@@ -296,14 +296,14 @@
       color:#111827;
     }
     .panel.open{display:flex;flex-direction:column;}
-    .header{padding:12px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:10px;}
+    .header{padding:12px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:10px;background:${CONFIG.primaryColor};color:#fff;}
     .title{display:flex;flex-direction:column;gap:2px;}
     .title strong{font-size:14px;}
-    .title span{font-size:12px;color:#6b7280;}
+    .title span{font-size:12px;color:rgba(255,255,255,.78);}
     .header-actions{display:flex;gap:8px;}
-    .icon-btn{border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;}
-    .icon-btn:hover{background:#f9fafb;}
-    .messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(to bottom, rgba(255,255,255,.9), rgba(255,255,255,.9));}
+    .icon-btn{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:8px 10px;cursor:pointer;font:inherit;}
+    .icon-btn:hover{background:rgba(255,255,255,.2);}
+    .messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;background:#fff;}
     .row{display:flex;width:100%;}
     .row.user{justify-content:flex-end;}
     .row.assistant{justify-content:flex-start;}

@@ -1087,6 +1087,50 @@ textarea {
   font-size: 0.84rem;
 }
 
+.config-capture-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255,255,255,0.82);
+  border: 1px solid rgba(191, 208, 234, 0.78);
+  box-shadow:
+    0 10px 24px rgba(83, 110, 160, 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.82);
+}
+
+.config-capture-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.config-capture-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.config-check-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(191, 208, 234, 0.8);
+  background: linear-gradient(180deg, rgba(252,254,255,0.98), rgba(245,249,255,0.96));
+  color: var(--text);
+  font-weight: 600;
+}
+
+.config-check-card input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-dark);
+  margin: 0;
+}
+
 .crm-config-card .quote-grid label input,
 .crm-config-card .quote-grid label select,
 .crm-config-card .quote-grid label textarea {

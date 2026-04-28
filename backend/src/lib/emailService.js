@@ -264,9 +264,11 @@ export async function sendLeadEmail({
   type = "new",
   changedFields = [],
   emailConfig = null,
+  recipients = null,
 }) {
   if (!internalEnabled) return { skipped: true, reason: "internal-disabled" };
-  if (!internalTo.length) throw new Error("LEADS_EMAIL_TO esta vacio");
+  const targetRecipients = Array.isArray(recipients) && recipients.length ? recipients : internalTo;
+  if (!targetRecipients.length) throw new Error("LEADS_EMAIL_TO esta vacio");
 
   const runtime = resolveEmailRuntimeConfig(emailConfig);
   if (!runtime.fromAddress) throw new Error("Falta el email de salida.");
@@ -319,7 +321,7 @@ export async function sendLeadEmail({
   const t = getTransporter(emailConfig);
   const info = await t.sendMail({
     from: runtime.fromAddress,
-    to: internalTo,
+    to: targetRecipients,
     subject,
     text,
     html,
