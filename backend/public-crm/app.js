@@ -4293,22 +4293,29 @@ async function connectGoogleEmail() {
   setStatus(el.configSaveStatus, "Preparando conexion con Google...");
 
   try {
-    const data = await fetchJson(`${API_BASE}/integrations/email/google/connect-url`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        google_client_id: clientId,
-        google_client_secret: clientSecret,
-        from_email: el.configEmailFromAddress?.value || "",
-        reply_to_email: el.configEmailReplyTo?.value || "",
-      }),
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = withAccountScope("/crm/email/google/connect");
+    form.style.display = "none";
+
+    const fields = {
+      account_id: state.activeAccountId || "",
+      google_client_id: clientId,
+      google_client_secret: clientSecret,
+      from_email: el.configEmailFromAddress?.value || "",
+      reply_to_email: el.configEmailReplyTo?.value || "",
+    };
+
+    Object.entries(fields).forEach(([name, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = String(value || "");
+      form.appendChild(input);
     });
 
-    if (!data?.auth_url) {
-      throw new Error("Google no devolvio una URL de autorizacion valida.");
-    }
-
-    window.location.assign(data.auth_url);
+    document.body.appendChild(form);
+    form.submit();
   } catch (error) {
     setStatus(el.configSaveStatus, `No se pudo iniciar Google: ${error.message}`, "error");
     el.configConnectGoogleEmailBtn.disabled = false;

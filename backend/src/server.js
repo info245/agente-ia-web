@@ -105,6 +105,7 @@ app.use(
     },
   })
 );
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(attachCrmUser);
 app.use("/crm", express.static(crmPublicDir));
 app.get("/widget.js", (_req, res) => {
@@ -227,6 +228,25 @@ function consumeGoogleEmailOauthState(token) {
 
 function buildGoogleEmailRedirectUri(req) {
   return `${buildPublicBaseUrl(req)}/oauth/google/email/callback`;
+}
+
+function buildGoogleEmailAuthUrl({
+  clientId,
+  redirectUri,
+  stateToken,
+}) {
+  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  authUrl.searchParams.set("client_id", clientId);
+  authUrl.searchParams.set("redirect_uri", redirectUri);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set(
+    "scope",
+    "https://mail.google.com/ https://www.googleapis.com/auth/userinfo.email"
+  );
+  authUrl.searchParams.set("access_type", "offline");
+  authUrl.searchParams.set("prompt", "consent");
+  authUrl.searchParams.set("state", stateToken);
+  return authUrl.toString();
 }
 
 async function exchangeGoogleEmailCode({
@@ -3971,6 +3991,56 @@ app.get("/api/crm/config", async (_req, res) => {
   }
 });
 
+app.post("/crm/email/google/connect", requireCrmAuth(), async (req, res) => {
+  const baseUrl = buildPublicBaseUrl(req);
+  const redirectUrl = new URL(`${baseUrl}/crm`);
+
+  try {
+    const account = await resolveRequestAccount(req);
+    const config = await getAppConfig({ accountId: account.id });
+    const currentEmailConfig = config?.integrations?.email || {};
+    const pendingEmailConfig = {
+      provider: "google_oauth",
+      from_email: String(req.body?.from_email || currentEmailConfig?.from_email || "").trim(),
+      reply_to_email: String(
+        req.body?.reply_to_email || currentEmailConfig?.reply_to_email || ""
+      ).trim(),
+      google_client_id: String(
+        req.body?.google_client_id || currentEmailConfig?.google_client_id || ""
+      ).trim(),
+      google_client_secret: String(
+        req.body?.google_client_secret || currentEmailConfig?.google_client_secret || ""
+      ).trim(),
+    };
+
+    if (!pendingEmailConfig.google_client_id || !pendingEmailConfig.google_client_secret) {
+      throw new Error("Completa Google Client ID y Google Client Secret antes de conectar Gmail.");
+    }
+
+    const stateToken = createGoogleEmailOauthState({
+      accountId: account.id,
+      userId: req.crmUser?.id || "",
+      pendingEmailConfig,
+    });
+    const redirectUri = buildGoogleEmailRedirectUri(req);
+    const authUrl = buildGoogleEmailAuthUrl({
+      clientId: pendingEmailConfig.google_client_id,
+      redirectUri,
+      stateToken,
+    });
+
+    return res.redirect(302, authUrl);
+  } catch (error) {
+    redirectUrl.searchParams.set("account_id", String(req.body?.account_id || req.query?.account_id || "").trim());
+    redirectUrl.searchParams.set("email_oauth", "error");
+    redirectUrl.searchParams.set(
+      "email_oauth_message",
+      String(error?.message || "No se pudo iniciar Google.")
+    );
+    return res.redirect(302, redirectUrl.toString());
+  }
+});
+
 app.post("/api/crm/integrations/email/google/connect-url", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
@@ -4005,18 +4075,15 @@ app.post("/api/crm/integrations/email/google/connect-url", async (req, res) => {
       pendingEmailConfig,
     });
     const redirectUri = buildGoogleEmailRedirectUri(req);
-    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    authUrl.searchParams.set("client_id", clientId);
-    authUrl.searchParams.set("redirect_uri", redirectUri);
-    authUrl.searchParams.set("response_type", "code");
-    authUrl.searchParams.set("scope", "https://mail.google.com/ https://www.googleapis.com/auth/userinfo.email");
-    authUrl.searchParams.set("access_type", "offline");
-    authUrl.searchParams.set("prompt", "consent");
-    authUrl.searchParams.set("state", stateToken);
+    const authUrl = buildGoogleEmailAuthUrl({
+      clientId,
+      redirectUri,
+      stateToken,
+    });
 
     return res.json({
       ok: true,
-      auth_url: authUrl.toString(),
+      auth_url: authUrl,
       redirect_uri: redirectUri,
     });
   } catch (error) {
