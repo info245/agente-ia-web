@@ -1190,6 +1190,24 @@ textarea {
   color: var(--muted);
 }
 
+.config-inline-status {
+  display: block;
+  margin-top: 8px;
+  font-weight: 700;
+}
+
+.config-inline-status[data-tone="ok"] {
+  color: var(--success);
+}
+
+.config-inline-status[data-tone="error"] {
+  color: #b2473c;
+}
+
+.config-inline-status[data-tone="warning"] {
+  color: #8a5a10;
+}
+
 .config-integration-head em[data-tone="ok"] {
   background: rgba(31, 143, 95, 0.12);
   color: var(--success);

@@ -532,6 +532,7 @@ const el = {
   configEmailGoogleClientId: document.getElementById("configEmailGoogleClientId"),
   configEmailGoogleClientSecret: document.getElementById("configEmailGoogleClientSecret"),
   configEmailGoogleConnectedMeta: document.getElementById("configEmailGoogleConnectedMeta"),
+  configEmailGoogleOauthStatus: document.getElementById("configEmailGoogleOauthStatus"),
   configConnectGoogleEmailBtn: document.getElementById("configConnectGoogleEmailBtn"),
   configEmailSmtpHost: document.getElementById("configEmailSmtpHost"),
   configEmailSmtpPort: document.getElementById("configEmailSmtpPort"),
@@ -1474,6 +1475,12 @@ function consumeEmailOauthRedirectStatus() {
   if (!status) return;
 
   if (status === "connected") {
+    setEmailOauthStatus(
+      message
+        ? `Cuenta de Google conectada: ${message}.`
+        : "Cuenta de Google conectada correctamente.",
+      "ok"
+    );
     setStatus(
       el.configSaveStatus,
       message
@@ -1482,6 +1489,7 @@ function consumeEmailOauthRedirectStatus() {
       "ok"
     );
   } else {
+    setEmailOauthStatus(message || "No se pudo completar la conexion con Google.", "error");
     setStatus(
       el.configSaveStatus,
       message || "No se pudo completar la conexion con Google.",
@@ -2146,6 +2154,16 @@ function syncEmailOauthMeta(config = state.appConfig) {
       : `Cuenta conectada: ${connectedEmail}`;
   } else {
     el.configEmailGoogleConnectedMeta.textContent = "Sin cuenta conectada todavia.";
+  }
+}
+
+function setEmailOauthStatus(message = "", kind = "") {
+  if (!el.configEmailGoogleOauthStatus) return;
+  el.configEmailGoogleOauthStatus.textContent = String(message || "");
+  if (kind) {
+    el.configEmailGoogleOauthStatus.dataset.tone = kind;
+  } else {
+    delete el.configEmailGoogleOauthStatus.dataset.tone;
   }
 }
 
@@ -3584,6 +3602,9 @@ function renderConfig() {
   }
   syncEmailProviderDefaults();
   syncEmailOauthMeta(config);
+  if (!new URL(window.location.href).searchParams.get("email_oauth")) {
+    setEmailOauthStatus("");
+  }
   el.configAutomationPlatform.value =
     config?.integrations?.automations?.platform || "n8n";
   el.configAutomationWorkspaceUrl.value =
@@ -4277,9 +4298,22 @@ async function validateIntegration(type, button) {
 
 async function connectGoogleEmail() {
   if (!el.configConnectGoogleEmailBtn) return;
-  const clientId = String(el.configEmailGoogleClientId?.value || "").trim();
-  const clientSecret = String(el.configEmailGoogleClientSecret?.value || "").trim();
+  const clientId = String(
+    document.getElementById("configEmailGoogleClientId")?.value ||
+      el.configEmailGoogleClientId?.value ||
+      ""
+  ).trim();
+  const clientSecret = String(
+    document.getElementById("configEmailGoogleClientSecret")?.value ||
+      el.configEmailGoogleClientSecret?.value ||
+      ""
+  ).trim();
+  setEmailOauthStatus("");
   if (!clientId || !clientSecret) {
+    setEmailOauthStatus(
+      "Completa Google Client ID y Google Client Secret antes de conectar Gmail.",
+      "error"
+    );
     setStatus(
       el.configSaveStatus,
       "Completa Google Client ID y Google Client Secret antes de conectar Gmail.",
@@ -4290,6 +4324,7 @@ async function connectGoogleEmail() {
 
   el.configConnectGoogleEmailBtn.disabled = true;
   el.configConnectGoogleEmailBtn.classList.add("is-busy");
+  setEmailOauthStatus("Preparando conexion con Google...", "warning");
   setStatus(el.configSaveStatus, "Preparando conexion con Google...");
 
   try {
@@ -4317,6 +4352,7 @@ async function connectGoogleEmail() {
     document.body.appendChild(form);
     form.submit();
   } catch (error) {
+    setEmailOauthStatus(`No se pudo iniciar Google: ${error.message}`, "error");
     setStatus(el.configSaveStatus, `No se pudo iniciar Google: ${error.message}`, "error");
     el.configConnectGoogleEmailBtn.disabled = false;
     el.configConnectGoogleEmailBtn.classList.remove("is-busy");
