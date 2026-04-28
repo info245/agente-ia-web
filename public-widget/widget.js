@@ -419,33 +419,14 @@
 
   async function ensureGreeting() {
     if (mini) mini.textContent = getFooterMessage();
-    if (hasChatStarted()) {
-      if (messages.childElementCount === 0) {
-        appendMessage("assistant", getInitialGreeting());
-      }
-      return;
-    }
-    setStatus("Iniciando...");
-    sendBtn.disabled = true;
-
-    try {
-      const data = await postMessage({
-        text: "__start__",
-        conversationId: getConversationId(),
-        externalUserId: getOrCreateExternalUserId(),
-      });
-
-      if (data?.conversation_id) setConversationId(data.conversation_id);
-      data.reply = data?.reply || getInitialGreeting();
-      appendMessage("assistant", data?.reply || "¡Hola! ¿En qué te puedo ayudar?");
+    if (!hasChatStarted() || messages.childElementCount === 0) {
+      messages.innerHTML = "";
+      appendMessage("assistant", getInitialGreeting());
       setChatStarted(true);
       pushDataLayer("chat_started");
-    } catch (error) {
-      appendMessage("system", error.message || "No se pudo iniciar el chat.");
-    } finally {
-      setStatus("Listo");
-      sendBtn.disabled = false;
     }
+    setStatus("Listo");
+    sendBtn.disabled = false;
   }
 
   async function handleSend() {
