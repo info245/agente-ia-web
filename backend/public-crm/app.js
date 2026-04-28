@@ -1483,7 +1483,7 @@ function consumeEmailOauthRedirectStatus() {
   if (status === "connected") {
     setEmailOauthStatus(
       message
-        ? `Cuenta de Google conectada: ${message}.`
+        ? `Cuenta de Google conectada: ${message}. Ya puedes usarla como envio principal.`
         : "Cuenta de Google conectada correctamente.",
       "ok"
     );
@@ -2147,6 +2147,47 @@ function syncEmailProviderDefaults({ force = false } = {}) {
   if (el.configEmailSmtpSecure && (force || !String(el.configEmailSmtpSecure.value || "").trim())) {
     el.configEmailSmtpSecure.value = defaults.secure;
   }
+  updateEmailProviderUi();
+}
+
+function getEmailProviderValue() {
+  return String(el.configEmailProvider?.value || state.appConfig?.integrations?.email?.provider || "smtp")
+    .trim()
+    .toLowerCase();
+}
+
+function buildGoogleOauthReadyMessage(config = state.appConfig) {
+  const emailConfig = config?.integrations?.email || {};
+  const connectedEmail = String(emailConfig?.google_connected_email || "").trim();
+  if (!connectedEmail) return "";
+  const replyTo = String(emailConfig?.reply_to_email || el.configEmailReplyTo?.value || "").trim();
+  const replyHint =
+    replyTo && replyTo.toLowerCase() !== connectedEmail.toLowerCase()
+      ? ` Respuestas en ${replyTo}.`
+      : "";
+  return `Google conectado. Los correos saldran desde ${connectedEmail}.${replyHint}`;
+}
+
+function updateEmailProviderUi() {
+  const isGoogleOauth = getEmailProviderValue() === "google_oauth";
+  const smtpFields = [
+    el.configEmailSmtpHost,
+    el.configEmailSmtpPort,
+    el.configEmailSmtpUser,
+    el.configEmailSmtpPass,
+    el.configEmailSmtpSecure,
+  ].filter(Boolean);
+
+  smtpFields.forEach((field) => {
+    field.disabled = isGoogleOauth;
+  });
+
+  if (el.configConnectGoogleEmailBtn) {
+    el.configConnectGoogleEmailBtn.classList.toggle("is-muted", !isGoogleOauth);
+    el.configConnectGoogleEmailBtn.title = isGoogleOauth
+      ? "Conectar la cuenta de Google que enviara los correos"
+      : "Activa Google conectado (OAuth) para usar este boton";
+  }
 }
 
 function syncEmailOauthMeta(config = state.appConfig) {
@@ -2185,7 +2226,7 @@ function getEffectiveEmailValidation(config = state.appConfig || {}) {
     return {
       status: "connected",
       last_validated_at: emailConfig?.oauth_connected_at || validation?.last_validated_at || "",
-      message: `Cuenta de Gmail conectada: ${connectedEmail}`,
+      message: buildGoogleOauthReadyMessage(config) || `Cuenta de Gmail conectada: ${connectedEmail}`,
     };
   }
   return validation;
@@ -3651,7 +3692,7 @@ function renderConfig() {
   const connectedEmail = String(config?.integrations?.email?.google_connected_email || "").trim();
   const emailProvider = String(config?.integrations?.email?.provider || "").trim().toLowerCase();
   if (emailProvider === "google_oauth" && connectedEmail && !el.configEmailGoogleOauthStatus?.textContent) {
-    setEmailOauthStatus(`Cuenta conectada: ${connectedEmail}`, "ok");
+    setEmailOauthStatus(buildGoogleOauthReadyMessage(config) || `Cuenta conectada: ${connectedEmail}`, "ok");
   }
   renderMessageTemplates(config?.message_templates || {});
   renderAutomationFlows(config?.automation_flows || {});
@@ -4335,6 +4376,19 @@ async function validateIntegration(type, button) {
 async function connectGoogleEmail() {
   if (!el.configConnectGoogleEmailBtn) return;
   setEmailOauthStatus("");
+
+  if (getEmailProviderValue() !== "google_oauth") {
+    setEmailOauthStatus(
+      "Activa primero el proveedor 'Google conectado (OAuth)' para usar esta conexion.",
+      "warning"
+    );
+    setStatus(
+      el.configSaveStatus,
+      "Cambia el proveedor de email a Google conectado (OAuth) antes de conectar Gmail.",
+      "warning"
+    );
+    return;
+  }
 
   el.configConnectGoogleEmailBtn.disabled = true;
   el.configConnectGoogleEmailBtn.classList.add("is-busy");

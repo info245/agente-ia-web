@@ -2537,11 +2537,26 @@ async function validateIntegrationConfig(type, config = {}) {
           checkedAt
         );
       }
-      return buildValidationResult(
-        "connected",
-        `Cuenta de Gmail conectada: ${item.google_connected_email}. Lista para envios por OAuth.`,
-        checkedAt
-      );
+      try {
+        const result = await verifyEmailTransport(item);
+        const senderEmail = result?.connectedEmail || item.google_connected_email;
+        const replyTo = String(item.reply_to_email || "").trim();
+        const replyHint =
+          replyTo && replyTo.toLowerCase() !== String(senderEmail || "").trim().toLowerCase()
+            ? ` Las respuestas llegaran a ${replyTo}.`
+            : "";
+        return buildValidationResult(
+          "connected",
+          `Cuenta de Gmail conectada y validada: ${senderEmail}. Los correos se enviaran desde esa cuenta.${replyHint}`,
+          checkedAt
+        );
+      } catch (error) {
+        return buildValidationResult(
+          "warning",
+          error?.message || "No se pudo validar la cuenta de Google conectada.",
+          checkedAt
+        );
+      }
     }
     try {
       await verifyEmailTransport(item);
@@ -4221,19 +4236,19 @@ app.get("/oauth/google/email/callback", async (req, res) => {
             smtp_port: "465",
             smtp_user: "",
             smtp_pass: "",
-            google_refresh_token: refreshToken,
-            google_access_token: accessToken,
-            google_access_token_expires_at: expiresAt,
-            google_connected_email: connectedEmail,
-            oauth_connected_at: new Date().toISOString(),
-            validation: {
-              status: "connected",
-              last_validated_at: new Date().toISOString(),
-              message: `Cuenta de Gmail conectada: ${connectedEmail}`,
+              google_refresh_token: refreshToken,
+              google_access_token: accessToken,
+              google_access_token_expires_at: expiresAt,
+              google_connected_email: connectedEmail,
+              oauth_connected_at: new Date().toISOString(),
+              validation: {
+                status: "connected",
+                last_validated_at: new Date().toISOString(),
+                message: `Cuenta de Gmail conectada y lista para enviar desde ${connectedEmail}.`,
+              },
             },
           },
         },
-      },
       { accountId: account.id }
     );
 

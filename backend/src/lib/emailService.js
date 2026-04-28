@@ -17,6 +17,54 @@ const whatsappPublicNumber = String(process.env.WHATSAPP_PUBLIC_NUMBER || "").re
 const globalGoogleOauthClientId = String(process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim();
 const globalGoogleOauthClientSecret = String(process.env.GOOGLE_OAUTH_CLIENT_SECRET || "").trim();
 
+async function refreshGoogleOauthAccessToken(runtime) {
+  if (!globalGoogleOauthClientId || !globalGoogleOauthClientSecret) {
+    throw new Error("Faltan Google Client ID y Google Client Secret globales.");
+  }
+  if (!runtime?.googleRefreshToken) {
+    throw new Error("Falta el refresh token de Google. Vuelve a conectar la cuenta.");
+  }
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      client_id: globalGoogleOauthClientId,
+      client_secret: globalGoogleOauthClientSecret,
+      refresh_token: runtime.googleRefreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.access_token) {
+    const detail =
+      payload?.error_description || payload?.error || "No se pudo renovar el acceso con Google.";
+    throw new Error(detail);
+  }
+
+  return payload;
+}
+
+async function fetchGoogleOauthProfile(accessToken) {
+  const response = await fetch("https://www.googleapis.com/oauth2/v2/userinfo?alt=json", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.email) {
+    const detail =
+      payload?.error?.message || "No se pudo recuperar el email conectado desde Google.";
+    throw new Error(detail);
+  }
+
+  return payload;
+}
+
 function escapeHtml(str = "") {
   return String(str)
     .replaceAll("&", "&amp;")
@@ -101,12 +149,14 @@ function resolveEmailRuntimeConfig(emailConfig = null) {
   const googleConnectedEmail = String(
     emailConfig?.google_connected_email || emailConfig?.from_email || ""
   ).trim();
+  const oauthSenderAddress =
+    provider === "google_oauth" ? googleConnectedEmail || String(emailConfig?.from_email || "").trim() : "";
   const fromAddress = String(
-    emailConfig?.from_email || googleConnectedEmail || fallbackFrom || user || ""
+    oauthSenderAddress || emailConfig?.from_email || fallbackFrom || user || ""
   ).trim();
   const clientFromAddress = String(
-    emailConfig?.from_email ||
-      googleConnectedEmail ||
+    oauthSenderAddress ||
+      emailConfig?.from_email ||
       process.env.LEADS_CLIENT_EMAIL_FROM ||
       fallbackClientFrom ||
       user ||
@@ -185,6 +235,24 @@ function getTransporter(emailConfig = null) {
 }
 
 export async function verifyEmailTransport(emailConfig = null) {
+  const runtime = resolveEmailRuntimeConfig(emailConfig);
+  if (runtime.provider === "google_oauth") {
+    const tokenPayload = await refreshGoogleOauthAccessToken(runtime);
+    const profile = await fetchGoogleOauthProfile(String(tokenPayload.access_token || "").trim());
+    const connectedEmail = String(runtime.googleConnectedEmail || "").trim().toLowerCase();
+    const profileEmail = String(profile?.email || "").trim().toLowerCase();
+    if (connectedEmail && profileEmail && connectedEmail !== profileEmail) {
+      throw new Error(
+        `La cuenta conectada en Google es ${profile.email}, pero la configuracion guardada apunta a ${runtime.googleConnectedEmail}.`
+      );
+    }
+    return {
+      ok: true,
+      provider: "google_oauth",
+      connectedEmail: profile.email,
+    };
+  }
+
   const t = getTransporter(emailConfig);
   await t.verify();
   return { ok: true };
