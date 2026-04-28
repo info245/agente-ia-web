@@ -17,6 +17,8 @@ export const DEFAULT_APP_CONFIG = {
   agent: {
     tone:
       "profesional, cercano y orientado a diagnosticar antes de vender",
+    initial_message:
+      "Hola. Estoy listo para ayudarte. Cuéntame qué te gustaría revisar y empezamos.",
     final_cta_label: "Continuar en WhatsApp",
     handoff_target_channel: "whatsapp",
     prompt_additions: "",
@@ -242,6 +244,7 @@ export const BLANK_APP_CONFIG = {
   },
   agent: {
     tone: "",
+    initial_message: "",
     final_cta_label: "",
     handoff_target_channel: "",
     prompt_additions: "",
@@ -599,6 +602,10 @@ export function sanitizeAppConfig(input = {}, options = {}) {
     },
       agent: {
         tone: resolveString(input?.agent?.tone, defaults.agent.tone),
+        initial_message: resolveString(
+          input?.agent?.initial_message,
+          defaults.agent.initial_message
+        ),
         final_cta_label: resolveString(
           input?.agent?.final_cta_label,
           defaults.agent.final_cta_label

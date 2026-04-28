@@ -4254,6 +4254,7 @@ app.get("/api/widget/config", async (req, res) => {
           available_channels: availableChannels,
         },
         agent: {
+          initial_message: config?.agent?.initial_message || "",
           final_cta_label: config?.agent?.final_cta_label || defaultCtaLabel,
           handoff_target_channel: config?.agent?.handoff_target_channel || "",
         },

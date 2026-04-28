@@ -505,6 +505,7 @@ const el = {
   configHumanWhatsappNumber: document.getElementById("configHumanWhatsappNumber"),
   configSupportEmail: document.getElementById("configSupportEmail"),
   configAgentTone: document.getElementById("configAgentTone"),
+  configInitialMessage: document.getElementById("configInitialMessage"),
   configFinalCtaLabel: document.getElementById("configFinalCtaLabel"),
   configHandoffTargetChannel: document.getElementById("configHandoffTargetChannel"),
   configPrimaryColor: document.getElementById("configPrimaryColor"),
@@ -2838,11 +2839,12 @@ function buildConfigPayload() {
       human_agent_whatsapp_number: el.configHumanWhatsappNumber.value,
       support_email: el.configSupportEmail.value,
     },
-      agent: {
-        tone: el.configAgentTone.value,
-        final_cta_label: el.configFinalCtaLabel.value,
-        handoff_target_channel: el.configHandoffTargetChannel.value,
-        prompt_additions: el.configPromptAdditions.value,
+        agent: {
+          tone: el.configAgentTone.value,
+          initial_message: el.configInitialMessage.value,
+          final_cta_label: el.configFinalCtaLabel.value,
+          handoff_target_channel: el.configHandoffTargetChannel.value,
+          prompt_additions: el.configPromptAdditions.value,
       },
       widget: {
         install_mode: el.configWidgetEmbedMode?.value || "slug",
@@ -3585,6 +3587,7 @@ function renderConfig() {
     config?.contact?.human_agent_whatsapp_number || "";
   el.configSupportEmail.value = config?.contact?.support_email || "";
   el.configAgentTone.value = config?.agent?.tone || "";
+  el.configInitialMessage.value = config?.agent?.initial_message || "";
   el.configFinalCtaLabel.value = config?.agent?.final_cta_label || "";
   el.configHandoffTargetChannel.value =
     config?.agent?.handoff_target_channel || "whatsapp";

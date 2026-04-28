@@ -26,6 +26,7 @@
   CONFIG.supportEmail = "";
   CONFIG.publicWhatsappNumber = "";
   CONFIG.availableChannels = [];
+  CONFIG.initialMessage = "";
 
   async function loadRemoteWidgetConfig() {
     try {
@@ -49,6 +50,7 @@
       CONFIG.availableChannels = Array.isArray(remote?.contact?.available_channels)
         ? remote.contact.available_channels
         : [];
+      CONFIG.initialMessage = String(remote?.agent?.initial_message || "").trim();
     } catch (_error) {
       // fallback silencioso
     }
@@ -203,7 +205,10 @@
   }
 
   function getInitialGreeting() {
-    return "Hola. Estoy listo para ayudarte. Cuéntame qué te gustaría revisar y empezamos.";
+    return (
+      CONFIG.initialMessage ||
+      "Hola. Estoy listo para ayudarte. Cuéntame qué te gustaría revisar y empezamos."
+    );
   }
 
   // ====== FETCH ROBUSTO ======
