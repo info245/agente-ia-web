@@ -2537,6 +2537,11 @@ async function validateIntegrationConfig(type, config = {}) {
           checkedAt
         );
       }
+      return buildValidationResult(
+        "connected",
+        `Cuenta de Gmail conectada: ${item.google_connected_email}. Lista para envios por OAuth.`,
+        checkedAt
+      );
     }
     try {
       await verifyEmailTransport(item);
