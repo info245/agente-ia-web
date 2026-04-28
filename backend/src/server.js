@@ -125,6 +125,11 @@ const CRM_AUTH_SECRET =
   process.env.INTEGRATIONS_SECRET ||
   "tmedia-dev-auth-secret";
 const CRM_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
+const CRM_PUBLIC_BASE_URL = String(
+  process.env.CRM_PUBLIC_BASE_URL || process.env.PUBLIC_APP_URL || "https://t-mediaglobal.com"
+).replace(/\/$/, "");
+const GOOGLE_OAUTH_CLIENT_ID = String(process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim();
+const GOOGLE_OAUTH_CLIENT_SECRET = String(process.env.GOOGLE_OAUTH_CLIENT_SECRET || "").trim();
 
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
@@ -189,7 +194,7 @@ function norm(v) {
 }
 
 function buildPublicBaseUrl(req) {
-  return `${req.protocol}://${req.get("host")}`;
+  return CRM_PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
 }
 
 function cleanupGoogleEmailOauthStates() {
@@ -228,6 +233,13 @@ function consumeGoogleEmailOauthState(token) {
 
 function buildGoogleEmailRedirectUri(req) {
   return `${buildPublicBaseUrl(req)}/oauth/google/email/callback`;
+}
+
+function getGlobalGoogleOauthCredentials() {
+  return {
+    clientId: GOOGLE_OAUTH_CLIENT_ID,
+    clientSecret: GOOGLE_OAUTH_CLIENT_SECRET,
+  };
 }
 
 function buildGoogleEmailAuthUrl({
@@ -2487,10 +2499,11 @@ async function validateIntegrationConfig(type, config = {}) {
       return buildValidationResult("pending", "Falta el email de salida.", checkedAt);
     }
     if (String(item.provider || "").trim().toLowerCase() === "google_oauth") {
-      if (!item.google_client_id || !item.google_client_secret) {
+      const { clientId, clientSecret } = getGlobalGoogleOauthCredentials();
+      if (!clientId || !clientSecret) {
         return buildValidationResult(
           "pending",
-          "Faltan Google Client ID y Client Secret para conectar Gmail.",
+          "Google OAuth no esta configurado todavia en TMedia. Falta Client ID o Client Secret global.",
           checkedAt
         );
       }
@@ -3999,22 +4012,17 @@ app.post("/crm/email/google/connect", requireCrmAuth(), async (req, res) => {
     const account = await resolveRequestAccount(req);
     const config = await getAppConfig({ accountId: account.id });
     const currentEmailConfig = config?.integrations?.email || {};
+    const { clientId, clientSecret } = getGlobalGoogleOauthCredentials();
     const pendingEmailConfig = {
       provider: "google_oauth",
       from_email: String(req.body?.from_email || currentEmailConfig?.from_email || "").trim(),
       reply_to_email: String(
         req.body?.reply_to_email || currentEmailConfig?.reply_to_email || ""
       ).trim(),
-      google_client_id: String(
-        req.body?.google_client_id || currentEmailConfig?.google_client_id || ""
-      ).trim(),
-      google_client_secret: String(
-        req.body?.google_client_secret || currentEmailConfig?.google_client_secret || ""
-      ).trim(),
     };
 
-    if (!pendingEmailConfig.google_client_id || !pendingEmailConfig.google_client_secret) {
-      throw new Error("Completa Google Client ID y Google Client Secret antes de conectar Gmail.");
+    if (!clientId || !clientSecret) {
+      throw new Error("Google OAuth no esta configurado en TMedia todavia.");
     }
 
     const stateToken = createGoogleEmailOauthState({
@@ -4024,7 +4032,7 @@ app.post("/crm/email/google/connect", requireCrmAuth(), async (req, res) => {
     });
     const redirectUri = buildGoogleEmailRedirectUri(req);
     const authUrl = buildGoogleEmailAuthUrl({
-      clientId: pendingEmailConfig.google_client_id,
+      clientId,
       redirectUri,
       stateToken,
     });
@@ -4046,26 +4054,19 @@ app.post("/api/crm/integrations/email/google/connect-url", async (req, res) => {
     const account = await resolveRequestAccount(req);
     const config = await getAppConfig({ accountId: account.id });
     const currentEmailConfig = config?.integrations?.email || {};
+    const { clientId, clientSecret } = getGlobalGoogleOauthCredentials();
     const pendingEmailConfig = {
       provider: "google_oauth",
       from_email: String(req.body?.from_email || currentEmailConfig?.from_email || "").trim(),
       reply_to_email: String(
         req.body?.reply_to_email || currentEmailConfig?.reply_to_email || ""
       ).trim(),
-      google_client_id: String(
-        req.body?.google_client_id || currentEmailConfig?.google_client_id || ""
-      ).trim(),
-      google_client_secret: String(
-        req.body?.google_client_secret || currentEmailConfig?.google_client_secret || ""
-      ).trim(),
     };
-    const clientId = pendingEmailConfig.google_client_id;
-    const clientSecret = pendingEmailConfig.google_client_secret;
 
     if (!clientId || !clientSecret) {
       return res.status(400).json({
         ok: false,
-        error: "Completa Google Client ID y Google Client Secret antes de conectar Gmail.",
+        error: "Google OAuth no esta configurado todavia en TMedia.",
       });
     }
 
@@ -4138,15 +4139,10 @@ app.get("/oauth/google/email/callback", async (req, res) => {
     const currentConfig = await getAppConfig({ accountId: account.id });
     const emailConfig = currentConfig?.integrations?.email || {};
     const pendingEmailConfig = callbackState?.pendingEmailConfig || {};
-    const clientId = String(
-      pendingEmailConfig?.google_client_id || emailConfig?.google_client_id || ""
-    ).trim();
-    const clientSecret = String(
-      pendingEmailConfig?.google_client_secret || emailConfig?.google_client_secret || ""
-    ).trim();
+    const { clientId, clientSecret } = getGlobalGoogleOauthCredentials();
 
     if (!clientId || !clientSecret) {
-      throw new Error("Faltan Google Client ID y Google Client Secret en la cuenta.");
+      throw new Error("Faltan Google Client ID y Google Client Secret globales en TMedia.");
     }
 
     const redirectUri = buildGoogleEmailRedirectUri(req);

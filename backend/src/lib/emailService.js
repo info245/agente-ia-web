@@ -14,6 +14,8 @@ const internalTo = (process.env.LEADS_EMAIL_TO || "")
 const fallbackFrom = process.env.LEADS_EMAIL_FROM || process.env.SMTP_USER || "";
 const fallbackClientFrom = process.env.LEADS_CLIENT_EMAIL_FROM || fallbackFrom;
 const whatsappPublicNumber = String(process.env.WHATSAPP_PUBLIC_NUMBER || "").replace(/\D/g, "");
+const globalGoogleOauthClientId = String(process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim();
+const globalGoogleOauthClientSecret = String(process.env.GOOGLE_OAUTH_CLIENT_SECRET || "").trim();
 
 function escapeHtml(str = "") {
   return String(str)
@@ -89,8 +91,12 @@ function resolveEmailRuntimeConfig(emailConfig = null) {
         : String(process.env.SMTP_SECURE || "true").toLowerCase() === "true";
   const user = String(emailConfig?.smtp_user || process.env.SMTP_USER || "").trim();
   const pass = String(emailConfig?.smtp_pass || process.env.SMTP_PASS || "").trim();
-  const googleClientId = String(emailConfig?.google_client_id || "").trim();
-  const googleClientSecret = String(emailConfig?.google_client_secret || "").trim();
+  const googleClientId = String(
+    process.env.GOOGLE_OAUTH_CLIENT_ID || emailConfig?.google_client_id || ""
+  ).trim();
+  const googleClientSecret = String(
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET || emailConfig?.google_client_secret || ""
+  ).trim();
   const googleRefreshToken = String(emailConfig?.google_refresh_token || "").trim();
   const googleAccessToken = String(emailConfig?.google_access_token || "").trim();
   const googleConnectedEmail = String(
@@ -136,13 +142,13 @@ function resolveEmailRuntimeConfig(emailConfig = null) {
 function createTransporter(runtime) {
   if (runtime.provider === "google_oauth") {
     if (
-      !runtime.googleClientId ||
-      !runtime.googleClientSecret ||
+      !globalGoogleOauthClientId ||
+      !globalGoogleOauthClientSecret ||
       !runtime.googleRefreshToken ||
       !runtime.googleConnectedEmail
     ) {
       throw new Error(
-        "Falta conectar Google. Completa Client ID, Client Secret y autoriza la cuenta de Gmail."
+        "Falta configurar Google OAuth global o conectar la cuenta de Gmail."
       );
     }
 
@@ -151,8 +157,8 @@ function createTransporter(runtime) {
       auth: {
         type: "OAuth2",
         user: runtime.googleConnectedEmail,
-        clientId: runtime.googleClientId,
-        clientSecret: runtime.googleClientSecret,
+        clientId: globalGoogleOauthClientId,
+        clientSecret: globalGoogleOauthClientSecret,
         refreshToken: runtime.googleRefreshToken,
         accessToken: runtime.googleAccessToken || undefined,
       },

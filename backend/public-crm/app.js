@@ -529,8 +529,6 @@ const el = {
   configEmailProvider: document.getElementById("configEmailProvider"),
   configEmailFromAddress: document.getElementById("configEmailFromAddress"),
   configEmailReplyTo: document.getElementById("configEmailReplyTo"),
-  configEmailGoogleClientId: document.getElementById("configEmailGoogleClientId"),
-  configEmailGoogleClientSecret: document.getElementById("configEmailGoogleClientSecret"),
   configEmailGoogleConnectedMeta: document.getElementById("configEmailGoogleConnectedMeta"),
   configEmailGoogleOauthStatus: document.getElementById("configEmailGoogleOauthStatus"),
   configConnectGoogleEmailBtn: document.getElementById("configConnectGoogleEmailBtn"),
@@ -2804,8 +2802,6 @@ function buildConfigPayload() {
         provider: el.configEmailProvider.value,
         from_email: el.configEmailFromAddress.value,
         reply_to_email: el.configEmailReplyTo.value,
-        google_client_id: el.configEmailGoogleClientId?.value || "",
-        google_client_secret: el.configEmailGoogleClientSecret?.value || "",
         smtp_host: el.configEmailSmtpHost?.value || "",
         smtp_port: el.configEmailSmtpPort?.value || "",
         smtp_user: el.configEmailSmtpUser?.value || "",
@@ -3575,14 +3571,6 @@ function renderConfig() {
     config?.integrations?.email?.from_email || "";
   el.configEmailReplyTo.value =
     config?.integrations?.email?.reply_to_email || "";
-  if (el.configEmailGoogleClientId) {
-    el.configEmailGoogleClientId.value =
-      config?.integrations?.email?.google_client_id || "";
-  }
-  if (el.configEmailGoogleClientSecret) {
-    el.configEmailGoogleClientSecret.value =
-      config?.integrations?.email?.google_client_secret || "";
-  }
   if (el.configEmailSmtpHost) {
     el.configEmailSmtpHost.value = config?.integrations?.email?.smtp_host || "";
   }
@@ -4298,29 +4286,7 @@ async function validateIntegration(type, button) {
 
 async function connectGoogleEmail() {
   if (!el.configConnectGoogleEmailBtn) return;
-  const clientId = String(
-    document.getElementById("configEmailGoogleClientId")?.value ||
-      el.configEmailGoogleClientId?.value ||
-      ""
-  ).trim();
-  const clientSecret = String(
-    document.getElementById("configEmailGoogleClientSecret")?.value ||
-      el.configEmailGoogleClientSecret?.value ||
-      ""
-  ).trim();
   setEmailOauthStatus("");
-  if (!clientId || !clientSecret) {
-    setEmailOauthStatus(
-      "Completa Google Client ID y Google Client Secret antes de conectar Gmail.",
-      "error"
-    );
-    setStatus(
-      el.configSaveStatus,
-      "Completa Google Client ID y Google Client Secret antes de conectar Gmail.",
-      "error"
-    );
-    return;
-  }
 
   el.configConnectGoogleEmailBtn.disabled = true;
   el.configConnectGoogleEmailBtn.classList.add("is-busy");
@@ -4335,8 +4301,6 @@ async function connectGoogleEmail() {
 
     const fields = {
       account_id: state.activeAccountId || "",
-      google_client_id: clientId,
-      google_client_secret: clientSecret,
       from_email: el.configEmailFromAddress?.value || "",
       reply_to_email: el.configEmailReplyTo?.value || "",
     };
