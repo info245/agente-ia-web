@@ -2518,7 +2518,7 @@ async function validateIntegrationConfig(type, config = {}) {
 
   if (type === "email") {
     const item = integrations.email || {};
-    if (!item.from_email) {
+    if (!item.from_email && !item.google_connected_email) {
       return buildValidationResult("pending", "Falta el email de salida.", checkedAt);
     }
     if (String(item.provider || "").trim().toLowerCase() === "google_oauth") {

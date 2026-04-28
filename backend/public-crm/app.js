@@ -2165,6 +2165,24 @@ function setEmailOauthStatus(message = "", kind = "") {
   }
 }
 
+function getEffectiveEmailValidation(config = state.appConfig || {}) {
+  const emailConfig = config?.integrations?.email || {};
+  const validation = emailConfig?.validation || {};
+  const connectedEmail = String(emailConfig?.google_connected_email || "").trim();
+  if (
+    String(emailConfig?.provider || "").trim().toLowerCase() === "google_oauth" &&
+    connectedEmail &&
+    String(validation?.status || "").toLowerCase() !== "connected"
+  ) {
+    return {
+      status: "connected",
+      last_validated_at: emailConfig?.oauth_connected_at || validation?.last_validated_at || "",
+      message: `Cuenta de Gmail conectada: ${connectedEmail}`,
+    };
+  }
+  return validation;
+}
+
 function splitSpreadsheetLine(raw = "") {
   const text = String(raw || "");
   const delimiter = text.includes("\t")
@@ -3612,14 +3630,21 @@ function renderConfig() {
     "lead_forms",
     config?.integrations?.lead_forms?.validation || {}
   );
+  const effectiveEmailValidation = getEffectiveEmailValidation(config);
   renderIntegrationValidation(
     "email",
-    config?.integrations?.email?.validation || {}
+    effectiveEmailValidation
   );
   renderIntegrationValidation(
     "automations",
     config?.integrations?.automations?.validation || {}
   );
+
+  const connectedEmail = String(config?.integrations?.email?.google_connected_email || "").trim();
+  const emailProvider = String(config?.integrations?.email?.provider || "").trim().toLowerCase();
+  if (emailProvider === "google_oauth" && connectedEmail && !el.configEmailGoogleOauthStatus?.textContent) {
+    setEmailOauthStatus(`Cuenta conectada: ${connectedEmail}`, "ok");
+  }
   renderMessageTemplates(config?.message_templates || {});
   renderAutomationFlows(config?.automation_flows || {});
   renderServiceEditor(config?.services || {});
@@ -4275,8 +4300,23 @@ async function validateIntegration(type, button) {
 
     state.appConfig = data.config || state.appConfig;
     renderConfig();
+    if (type === "email") {
+      const tone =
+        String(data?.validation?.status || "").toLowerCase() === "connected"
+          ? "ok"
+          : String(data?.validation?.status || "").toLowerCase() === "warning"
+            ? "warning"
+            : "error";
+      setEmailOauthStatus(
+        data?.validation?.message || "Validacion de email actualizada.",
+        tone
+      );
+    }
     setStatus(el.configSaveStatus, `Integracion ${type} validada.`, "ok");
   } catch (error) {
+    if (type === "email") {
+      setEmailOauthStatus(`No se pudo validar: ${error.message}`, "error");
+    }
     setStatus(el.configSaveStatus, `No se pudo validar ${type}: ${error.message}`, "error");
   } finally {
     button.disabled = false;
