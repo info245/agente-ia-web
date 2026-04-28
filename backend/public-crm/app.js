@@ -4277,25 +4277,38 @@ async function validateIntegration(type, button) {
 
 async function connectGoogleEmail() {
   if (!el.configConnectGoogleEmailBtn) return;
+  const clientId = String(el.configEmailGoogleClientId?.value || "").trim();
+  const clientSecret = String(el.configEmailGoogleClientSecret?.value || "").trim();
+  if (!clientId || !clientSecret) {
+    setStatus(
+      el.configSaveStatus,
+      "Completa Google Client ID y Google Client Secret antes de conectar Gmail.",
+      "error"
+    );
+    return;
+  }
+
   el.configConnectGoogleEmailBtn.disabled = true;
   el.configConnectGoogleEmailBtn.classList.add("is-busy");
   setStatus(el.configSaveStatus, "Preparando conexion con Google...");
 
   try {
-    const payload = buildConfigPayload();
-    await fetchJson(`${API_BASE}/config`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
     const data = await fetchJson(`${API_BASE}/integrations/email/google/connect-url`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({
+        google_client_id: clientId,
+        google_client_secret: clientSecret,
+        from_email: el.configEmailFromAddress?.value || "",
+        reply_to_email: el.configEmailReplyTo?.value || "",
+      }),
     });
 
-    window.location.href = data.auth_url;
+    if (!data?.auth_url) {
+      throw new Error("Google no devolvio una URL de autorizacion valida.");
+    }
+
+    window.location.assign(data.auth_url);
   } catch (error) {
     setStatus(el.configSaveStatus, `No se pudo iniciar Google: ${error.message}`, "error");
     el.configConnectGoogleEmailBtn.disabled = false;

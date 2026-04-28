@@ -200,12 +200,17 @@ function cleanupGoogleEmailOauthStates() {
   }
 }
 
-function createGoogleEmailOauthState({ accountId = "", userId = "" } = {}) {
+function createGoogleEmailOauthState({
+  accountId = "",
+  userId = "",
+  pendingEmailConfig = null,
+} = {}) {
   cleanupGoogleEmailOauthStates();
   const token = crypto.randomBytes(24).toString("hex");
   googleEmailOauthStates.set(token, {
     accountId,
     userId,
+    pendingEmailConfig,
     expiresAt: Date.now() + GOOGLE_EMAIL_OAUTH_TTL_MS,
   });
   return token;
@@ -3970,9 +3975,22 @@ app.post("/api/crm/integrations/email/google/connect-url", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
     const config = await getAppConfig({ accountId: account.id });
-    const emailConfig = config?.integrations?.email || {};
-    const clientId = String(emailConfig?.google_client_id || "").trim();
-    const clientSecret = String(emailConfig?.google_client_secret || "").trim();
+    const currentEmailConfig = config?.integrations?.email || {};
+    const pendingEmailConfig = {
+      provider: "google_oauth",
+      from_email: String(req.body?.from_email || currentEmailConfig?.from_email || "").trim(),
+      reply_to_email: String(
+        req.body?.reply_to_email || currentEmailConfig?.reply_to_email || ""
+      ).trim(),
+      google_client_id: String(
+        req.body?.google_client_id || currentEmailConfig?.google_client_id || ""
+      ).trim(),
+      google_client_secret: String(
+        req.body?.google_client_secret || currentEmailConfig?.google_client_secret || ""
+      ).trim(),
+    };
+    const clientId = pendingEmailConfig.google_client_id;
+    const clientSecret = pendingEmailConfig.google_client_secret;
 
     if (!clientId || !clientSecret) {
       return res.status(400).json({
@@ -3984,6 +4002,7 @@ app.post("/api/crm/integrations/email/google/connect-url", async (req, res) => {
     const stateToken = createGoogleEmailOauthState({
       accountId: account.id,
       userId: req.crmUser?.id || "",
+      pendingEmailConfig,
     });
     const redirectUri = buildGoogleEmailRedirectUri(req);
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -4051,8 +4070,13 @@ app.get("/oauth/google/email/callback", async (req, res) => {
     const account = await resolveAccount(callbackState.accountId);
     const currentConfig = await getAppConfig({ accountId: account.id });
     const emailConfig = currentConfig?.integrations?.email || {};
-    const clientId = String(emailConfig?.google_client_id || "").trim();
-    const clientSecret = String(emailConfig?.google_client_secret || "").trim();
+    const pendingEmailConfig = callbackState?.pendingEmailConfig || {};
+    const clientId = String(
+      pendingEmailConfig?.google_client_id || emailConfig?.google_client_id || ""
+    ).trim();
+    const clientSecret = String(
+      pendingEmailConfig?.google_client_secret || emailConfig?.google_client_secret || ""
+    ).trim();
 
     if (!clientId || !clientSecret) {
       throw new Error("Faltan Google Client ID y Google Client Secret en la cuenta.");
@@ -4086,8 +4110,14 @@ app.get("/oauth/google/email/callback", async (req, res) => {
         integrations: {
           email: {
             ...emailConfig,
+            ...pendingEmailConfig,
             provider: "google_oauth",
-            from_email: String(emailConfig?.from_email || connectedEmail).trim(),
+            from_email: String(
+              pendingEmailConfig?.from_email || emailConfig?.from_email || connectedEmail
+            ).trim(),
+            reply_to_email: String(
+              pendingEmailConfig?.reply_to_email || emailConfig?.reply_to_email || connectedEmail
+            ).trim(),
             smtp_host: "",
             smtp_port: "465",
             smtp_user: "",
