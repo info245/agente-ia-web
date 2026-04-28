@@ -529,6 +529,11 @@ const el = {
   configEmailProvider: document.getElementById("configEmailProvider"),
   configEmailFromAddress: document.getElementById("configEmailFromAddress"),
   configEmailReplyTo: document.getElementById("configEmailReplyTo"),
+  configEmailSmtpHost: document.getElementById("configEmailSmtpHost"),
+  configEmailSmtpPort: document.getElementById("configEmailSmtpPort"),
+  configEmailSmtpUser: document.getElementById("configEmailSmtpUser"),
+  configEmailSmtpPass: document.getElementById("configEmailSmtpPass"),
+  configEmailSmtpSecure: document.getElementById("configEmailSmtpSecure"),
   configValidateEmailBtn: document.getElementById("configValidateEmailBtn"),
   configEmailValidationMessage: document.getElementById("configEmailValidationMessage"),
   configEmailLastValidated: document.getElementById("configEmailLastValidated"),
@@ -2068,6 +2073,34 @@ function parseMultilineUrls(value = "") {
     .filter(Boolean);
 }
 
+function getEmailProviderDefaults(provider = "smtp") {
+  const normalized = String(provider || "").trim().toLowerCase();
+  if (normalized === "gmail") {
+    return { host: "smtp.gmail.com", port: "465", secure: "true" };
+  }
+  if (normalized === "resend") {
+    return { host: "smtp.resend.com", port: "465", secure: "true" };
+  }
+  if (normalized === "sendgrid") {
+    return { host: "smtp.sendgrid.net", port: "587", secure: "false" };
+  }
+  return { host: "", port: "465", secure: "true" };
+}
+
+function syncEmailProviderDefaults({ force = false } = {}) {
+  if (!el.configEmailProvider) return;
+  const defaults = getEmailProviderDefaults(el.configEmailProvider.value);
+  if (el.configEmailSmtpHost && (force || !String(el.configEmailSmtpHost.value || "").trim())) {
+    el.configEmailSmtpHost.value = defaults.host;
+  }
+  if (el.configEmailSmtpPort && (force || !String(el.configEmailSmtpPort.value || "").trim())) {
+    el.configEmailSmtpPort.value = defaults.port;
+  }
+  if (el.configEmailSmtpSecure && (force || !String(el.configEmailSmtpSecure.value || "").trim())) {
+    el.configEmailSmtpSecure.value = defaults.secure;
+  }
+}
+
 function splitSpreadsheetLine(raw = "") {
   const text = String(raw || "");
   const delimiter = text.includes("\t")
@@ -2705,6 +2738,11 @@ function buildConfigPayload() {
         provider: el.configEmailProvider.value,
         from_email: el.configEmailFromAddress.value,
         reply_to_email: el.configEmailReplyTo.value,
+        smtp_host: el.configEmailSmtpHost?.value || "",
+        smtp_port: el.configEmailSmtpPort?.value || "",
+        smtp_user: el.configEmailSmtpUser?.value || "",
+        smtp_pass: el.configEmailSmtpPass?.value || "",
+        smtp_secure: String(el.configEmailSmtpSecure?.value || "true") !== "false",
         validation: state.appConfig?.integrations?.email?.validation || {},
       },
       automations: {
@@ -3469,6 +3507,24 @@ function renderConfig() {
     config?.integrations?.email?.from_email || "";
   el.configEmailReplyTo.value =
     config?.integrations?.email?.reply_to_email || "";
+  if (el.configEmailSmtpHost) {
+    el.configEmailSmtpHost.value = config?.integrations?.email?.smtp_host || "";
+  }
+  if (el.configEmailSmtpPort) {
+    el.configEmailSmtpPort.value =
+      String(config?.integrations?.email?.smtp_port || "") || "";
+  }
+  if (el.configEmailSmtpUser) {
+    el.configEmailSmtpUser.value = config?.integrations?.email?.smtp_user || "";
+  }
+  if (el.configEmailSmtpPass) {
+    el.configEmailSmtpPass.value = config?.integrations?.email?.smtp_pass || "";
+  }
+  if (el.configEmailSmtpSecure) {
+    el.configEmailSmtpSecure.value =
+      config?.integrations?.email?.smtp_secure === false ? "false" : "true";
+  }
+  syncEmailProviderDefaults();
   el.configAutomationPlatform.value =
     config?.integrations?.automations?.platform || "n8n";
   el.configAutomationWorkspaceUrl.value =
@@ -4745,6 +4801,7 @@ el.configValidateLeadFormsBtn?.addEventListener("click", () =>
 el.configValidateEmailBtn?.addEventListener("click", () =>
   validateIntegration("email", el.configValidateEmailBtn)
 );
+el.configEmailProvider?.addEventListener("change", () => syncEmailProviderDefaults({ force: true }));
 el.configValidateAutomationsBtn?.addEventListener("click", () =>
   validateIntegration("automations", el.configValidateAutomationsBtn)
 );

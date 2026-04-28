@@ -1938,6 +1938,7 @@ async function sendAutomationStep({
   step,
   template,
   vars,
+  emailConfig = null,
   accountId,
   conversationId,
 }) {
@@ -1987,6 +1988,7 @@ async function sendAutomationStep({
         subject: subject || "Seguimos en contacto",
         body,
       }),
+      emailConfig,
     });
 
     await saveMessage({
@@ -2375,7 +2377,7 @@ async function validateIntegrationConfig(type, config = {}) {
       return buildValidationResult("pending", "Falta el email de salida.", checkedAt);
     }
     try {
-      await verifyEmailTransport();
+      await verifyEmailTransport(item);
       return buildValidationResult(
         "connected",
         `Email validado con proveedor ${item.provider || "smtp"}.`,
@@ -3399,6 +3401,7 @@ ${ragContext}
         conversation_id: currentConversationId,
         type: previousSignature ? "update" : "new",
         changedFields: [],
+        emailConfig: appConfig?.integrations?.email || null,
       });
 
       lastLeadEmailSent.set(currentConversationId, signature);
@@ -3418,6 +3421,7 @@ ${ragContext}
       await sendClientConfirmationEmail({
         lead: latestLead,
         conversation_id: currentConversationId,
+        emailConfig: appConfig?.integrations?.email || null,
       });
 
       clientConfirmationSent.set(currentConversationId, true);
@@ -4539,6 +4543,7 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
         lead,
         quote,
         previewUrl,
+        emailConfig: appConfig?.integrations?.email || null,
       });
     }
 
@@ -4655,6 +4660,7 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
       subject,
       text,
       html,
+      emailConfig: appConfig?.integrations?.email || null,
     });
 
     const updated = await markLatestAnalysisAsSent(lead.id, "email");
@@ -4710,6 +4716,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
     }
 
     const account = await resolveRequestAccount(req);
+    const accountConfig = await getAppConfig({ accountId: account.id }).catch(() => null);
     const payload = req.body || {};
     const sourcePlatform = norm(payload.source_platform || payload.platform || "external_form");
     const sourceCampaign = norm(payload.source_campaign || payload.campaign || "");
@@ -4843,6 +4850,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         },
         conversation_id: conversation.id,
         type: "new",
+        emailConfig: accountConfig?.integrations?.email || null,
       }).catch((error) => {
         console.log("external lead internal email error", error.message);
       });
@@ -4896,6 +4904,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
           ...leadPayload,
         },
         conversation_id: conversation.id,
+        emailConfig: accountConfig?.integrations?.email || null,
       }).catch((error) => {
         console.log("external lead client email error", error.message);
       });
@@ -4988,6 +4997,7 @@ async function runAutomationFlowsForAccount({
           step,
           template,
           vars,
+          emailConfig: appConfig?.integrations?.email || null,
           accountId: account.id,
           conversationId,
         });

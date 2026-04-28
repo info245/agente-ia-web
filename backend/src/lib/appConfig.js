@@ -53,6 +53,11 @@ export const DEFAULT_APP_CONFIG = {
       provider: "smtp",
       from_email: "",
       reply_to_email: "",
+      smtp_host: "",
+      smtp_port: "465",
+      smtp_secure: true,
+      smtp_user: "",
+      smtp_pass: "",
       validation: {
         status: "pending",
         last_validated_at: "",
@@ -266,6 +271,11 @@ export const BLANK_APP_CONFIG = {
       provider: "smtp",
       from_email: "",
       reply_to_email: "",
+      smtp_host: "",
+      smtp_port: "465",
+      smtp_secure: true,
+      smtp_user: "",
+      smtp_pass: "",
       validation: {
         status: "pending",
         last_validated_at: "",
@@ -629,6 +639,17 @@ export function sanitizeAppConfig(input = {}) {
         reply_to_email: cleanString(
           input?.integrations?.email?.reply_to_email
         ),
+        smtp_host: cleanString(input?.integrations?.email?.smtp_host),
+        smtp_port:
+          cleanString(input?.integrations?.email?.smtp_port) ||
+          cleanString(defaults.integrations.email.smtp_port) ||
+          "465",
+        smtp_secure:
+          typeof input?.integrations?.email?.smtp_secure === "boolean"
+            ? input.integrations.email.smtp_secure
+            : defaults.integrations.email.smtp_secure !== false,
+        smtp_user: cleanString(input?.integrations?.email?.smtp_user),
+        smtp_pass: cleanString(input?.integrations?.email?.smtp_pass),
         validation: sanitizeValidation(
           input?.integrations?.email?.validation,
           defaults.integrations.email.validation
