@@ -1239,6 +1239,33 @@ textarea {
   gap: 10px;
 }
 
+.config-inline-note {
+  margin-top: -6px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.config-external-guide {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.config-external-guide-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(191, 208, 234, 0.78);
+  background: rgba(248, 250, 255, 0.9);
+}
+
+.config-external-guide-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .config-integration-card {
   display: grid;
   gap: 18px;
@@ -3900,6 +3927,7 @@ textarea {
   }
 
   .config-helper-stack,
+  .config-external-guide,
   .config-integrations-overview-grid {
     grid-template-columns: 1fr;
   }

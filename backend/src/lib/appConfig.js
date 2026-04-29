@@ -59,12 +59,13 @@ export const DEFAULT_APP_CONFIG = {
         message: "Sin validar todavia",
       },
     },
-    lead_forms: {
-      meta_source: "google_sheets",
-      google_source: "webhook_n8n",
-      sheet_document: "",
-      sheet_tabs: "",
-      webhook_url: "",
+      lead_forms: {
+        website_stack: "custom_code",
+        meta_source: "google_sheets",
+        google_source: "webhook_n8n",
+        sheet_document: "",
+        sheet_tabs: "",
+        webhook_url: "",
       validation: {
         status: "pending",
         last_validated_at: "",
@@ -305,12 +306,13 @@ export const BLANK_APP_CONFIG = {
         message: "Sin validar todavia",
       },
     },
-    lead_forms: {
-      meta_source: "google_sheets",
-      google_source: "webhook_n8n",
-      sheet_document: "",
-      sheet_tabs: "",
-      webhook_url: "",
+      lead_forms: {
+        website_stack: "custom_code",
+        meta_source: "google_sheets",
+        google_source: "webhook_n8n",
+        sheet_document: "",
+        sheet_tabs: "",
+        webhook_url: "",
       validation: {
         status: "pending",
         last_validated_at: "",
@@ -715,10 +717,13 @@ export function sanitizeAppConfig(input = {}, options = {}) {
           defaults.integrations.whatsapp.validation
         ),
       },
-      lead_forms: {
-        meta_source:
-          cleanString(input?.integrations?.lead_forms?.meta_source) ||
-          defaults.integrations.lead_forms.meta_source,
+        lead_forms: {
+          website_stack:
+            cleanString(input?.integrations?.lead_forms?.website_stack) ||
+            defaults.integrations.lead_forms.website_stack,
+          meta_source:
+            cleanString(input?.integrations?.lead_forms?.meta_source) ||
+            defaults.integrations.lead_forms.meta_source,
         google_source:
           cleanString(input?.integrations?.lead_forms?.google_source) ||
           defaults.integrations.lead_forms.google_source,

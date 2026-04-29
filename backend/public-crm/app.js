@@ -565,13 +565,19 @@ const el = {
   configAutomationsLastValidated: document.getElementById("configAutomationsLastValidated"),
   configExternalLeadStatusBadge: document.getElementById("configExternalLeadStatusBadge"),
   configExternalLeadStatusMessage: document.getElementById("configExternalLeadStatusMessage"),
+  configExternalLeadType: document.getElementById("configExternalLeadType"),
+  configExternalLeadTypeHint: document.getElementById("configExternalLeadTypeHint"),
+  configExternalLeadGuide: document.getElementById("configExternalLeadGuide"),
   configExternalLeadEndpoint: document.getElementById("configExternalLeadEndpoint"),
   configExternalLeadAuthHeader: document.getElementById("configExternalLeadAuthHeader"),
   configExternalLeadAccountSlug: document.getElementById("configExternalLeadAccountSlug"),
   configExternalLeadSourcePlatform: document.getElementById("configExternalLeadSourcePlatform"),
   configExternalLeadFormName: document.getElementById("configExternalLeadFormName"),
+  configExternalLeadMapping: document.getElementById("configExternalLeadMapping"),
+  configExternalLeadSnippet: document.getElementById("configExternalLeadSnippet"),
   configExternalLeadPayload: document.getElementById("configExternalLeadPayload"),
   configCopyExternalEndpointBtn: document.getElementById("configCopyExternalEndpointBtn"),
+  configCopyExternalSnippetBtn: document.getElementById("configCopyExternalSnippetBtn"),
   configCopyExternalPayloadBtn: document.getElementById("configCopyExternalPayloadBtn"),
   configExternalLeadCopyStatus: document.getElementById("configExternalLeadCopyStatus"),
   configMessageTemplatesList: document.getElementById("configMessageTemplatesList"),
@@ -1424,6 +1430,11 @@ function renderIntegrationsOverview(config = state.appConfig || {}) {
 }
 
 function buildExternalLeadPayloadPreview(config = state.appConfig || {}) {
+  const mode = String(
+    config?.integrations?.lead_forms?.website_stack ||
+      el.configExternalLeadType?.value ||
+      "custom_code"
+  ).trim() || "custom_code";
   const account = getActiveAccount();
   const accountSlug = String(account?.slug || "").trim() || "cliente-demo";
   const supportEmail = String(
@@ -1434,15 +1445,15 @@ function buildExternalLeadPayloadPreview(config = state.appConfig || {}) {
   ).trim();
 
   return JSON.stringify(
-    {
-      account_slug: accountSlug,
-      source_platform: "website_form",
-      source_form_name: "footer_contact_form",
-      external_user_id: "webform:nombre@empresa.com:TIMESTAMP",
-      name: "Nombre Apellido",
-      email: supportEmail || "nombre@empresa.com",
-      phone: "",
-      company_name: "Empresa SL",
+      {
+        account_slug: accountSlug,
+        source_platform: getExternalLeadModeDetails(mode).sourcePlatform,
+        source_form_name: getExternalLeadModeDetails(mode).formName,
+        external_user_id: "webform:nombre@empresa.com:TIMESTAMP",
+        name: "Nombre Apellido",
+        email: supportEmail || "nombre@empresa.com",
+        phone: "",
+        company_name: "Empresa SL",
       interest_service: "Contacto web",
       summary: "Texto del mensaje",
       current_situation: "Texto del mensaje",
@@ -1457,10 +1468,181 @@ function buildExternalLeadPayloadPreview(config = state.appConfig || {}) {
   );
 }
 
+function getExternalLeadModeDetails(type = "custom_code") {
+  const details = {
+    custom_code: {
+      sourcePlatform: "website_form",
+      formName: "footer_contact_form",
+      badge: "Listo para desarrollo",
+      tone: "ok",
+      hint:
+        "Ideal si la web ya tiene backend propio. Solo hay que hacer un POST al CRM justo después de validar el formulario.",
+      next: "Pasa endpoint, secreto y ejemplo al desarrollador de la web.",
+      cards: [
+        {
+          title: "Qué hay que tocar",
+          copy:
+            "El endpoint que hoy procesa el formulario debe llamar al CRM como destino principal y dejar el email solo como aviso secundario.",
+        },
+        {
+          title: "Qué nos tendrán que pasar",
+          copy:
+            "El archivo o ruta donde hoy se procesa el formulario para mapear nombre, email, empresa, mensaje y consentimientos.",
+        },
+      ],
+      mapping: [
+        "name -> name",
+        "email -> email",
+        "phone -> phone (si existe)",
+        "company -> company_name",
+        "message -> summary y current_situation",
+        "acceptedLegal -> consent",
+        "acceptedLegal ? new Date().toISOString() -> consent_at",
+      ],
+      snippetLabel: "Ejemplo fetch para backend propio",
+    },
+    wordpress: {
+      sourcePlatform: "wordpress_form",
+      formName: "wpforms_main_contact",
+      badge: "Listo para webhook",
+      tone: "ok",
+      hint:
+        "Pensado para WPForms, Contact Form 7 o Elementor Forms. Lo normal es disparar un webhook al CRM o pasar por n8n/Make si el plugin no deja mapear fino.",
+      next: "Identifica el plugin de formularios y activa webhook directo o vía n8n/Make.",
+      cards: [
+        {
+          title: "Ruta recomendada",
+          copy:
+            "Si el plugin soporta webhook, manda el lead directo al CRM. Si no, usa Make o n8n como capa intermedia para transformar el payload.",
+        },
+        {
+          title: "Qué nos tendrán que pasar",
+          copy:
+            "Nombre del plugin y captura de campos del formulario para ajustar el mapeo sin tocar el CRM.",
+        },
+      ],
+      mapping: [
+        "Full Name / Nombre -> name",
+        "Email -> email",
+        "Phone / Telefono -> phone",
+        "Company / Empresa -> company_name",
+        "Message / Mensaje -> summary y current_situation",
+        "Privacy / Legal -> consent",
+      ],
+      snippetLabel: "Payload de webhook para plugin WordPress",
+    },
+    website_builder: {
+      sourcePlatform: "website_builder_form",
+      formName: "builder_contact_form",
+      badge: "Requiere webhook o automatización",
+      tone: "warning",
+      hint:
+        "Para Webflow, Wix o constructores visuales, la vía más limpia suele ser webhook nativo. Si no existe, mejor usar Make/Zapier/n8n que depender solo del email.",
+      next: "Comprobar si el constructor admite webhook; si no, conectar Make o Zapier.",
+      cards: [
+        {
+          title: "Ruta recomendada",
+          copy:
+            "Usa webhook nativo si la plataforma lo soporta. Si no, conecta el formulario a Make/Zapier/n8n y desde ahí envía el lead al CRM.",
+        },
+        {
+          title: "Qué nos tendrán que pasar",
+          copy:
+            "Nombre exacto de la plataforma y la lista de campos para decirles si vamos directos por webhook o por automatización.",
+        },
+      ],
+      mapping: [
+        "Name -> name",
+        "Email -> email",
+        "Phone -> phone",
+        "Company -> company_name",
+        "Message -> summary y current_situation",
+        "Consent checkbox -> consent",
+      ],
+      snippetLabel: "Payload base para Make/Zapier desde constructor visual",
+    },
+    automation: {
+      sourcePlatform: "automation_webhook",
+      formName: "external_crm_sync",
+      badge: "Listo para automatización",
+      tone: "ok",
+      hint:
+        "Perfecto para n8n, Make, Zapier o sincronizaciones desde otro CRM. Aquí el CRM solo necesita un payload limpio y un secreto compartido.",
+      next: "Crear el nodo webhook o HTTP request y mapear los campos del origen al payload del CRM.",
+      cards: [
+        {
+          title: "Ruta recomendada",
+          copy:
+            "Haz que la automatización reciba el lead original, lo normalice y luego haga un POST al endpoint del CRM con el secreto.",
+        },
+        {
+          title: "Qué nos tendrán que pasar",
+          copy:
+            "Captura del escenario o del nodo que ya recibe los datos para revisar el mapeo final si hace falta.",
+        },
+      ],
+      mapping: [
+        "origin.full_name -> name",
+        "origin.email -> email",
+        "origin.phone -> phone",
+        "origin.company -> company_name",
+        "origin.message -> summary y current_situation",
+        "origin.legal_accepted -> consent",
+      ],
+      snippetLabel: "Ejemplo HTTP request para Make / n8n / Zapier",
+    },
+  };
+
+  return details[type] || details.custom_code;
+}
+
+function buildExternalLeadMappingGuide(type = "custom_code") {
+  return getExternalLeadModeDetails(type).mapping.join("\n");
+}
+
+function buildExternalLeadSnippet(config = state.appConfig || {}, type = "custom_code") {
+  const account = getActiveAccount();
+  const accountSlug = String(account?.slug || "").trim() || "cliente-demo";
+  const endpoint = `${getBaseOrigin()}/api/integrations/external-lead`;
+  const details = getExternalLeadModeDetails(type);
+  const payload = JSON.parse(buildExternalLeadPayloadPreview(config));
+  payload.account_slug = accountSlug;
+  payload.source_platform = details.sourcePlatform;
+  payload.source_form_name = details.formName;
+
+  if (type === "automation") {
+    return [
+      "POST " + endpoint,
+      'Headers:',
+      '  Content-Type: application/json',
+      '  x-integrations-secret: TU_INTEGRATIONS_SECRET',
+      "",
+      JSON.stringify(payload, null, 2),
+    ].join("\n");
+  }
+
+  return [
+    `await fetch("${endpoint}", {`,
+    '  method: "POST",',
+    "  headers: {",
+    '    "Content-Type": "application/json",',
+    '    "x-integrations-secret": process.env.CRM_INTEGRATIONS_SECRET ?? ""',
+    "  },",
+    `  body: JSON.stringify(${JSON.stringify(payload, null, 2)})`,
+    "});",
+  ].join("\n");
+}
+
 function renderExternalLeadIntegration(config = state.appConfig || {}) {
   const account = getActiveAccount();
   const accountSlug = String(account?.slug || "").trim();
   const endpoint = `${getBaseOrigin()}/api/integrations/external-lead`;
+  const type = String(
+    config?.integrations?.lead_forms?.website_stack ||
+      el.configExternalLeadType?.value ||
+      "custom_code"
+  ).trim() || "custom_code";
+  const details = getExternalLeadModeDetails(type);
 
   if (el.configExternalLeadEndpoint) el.configExternalLeadEndpoint.value = endpoint;
   if (el.configExternalLeadAuthHeader) {
@@ -1469,24 +1651,48 @@ function renderExternalLeadIntegration(config = state.appConfig || {}) {
   if (el.configExternalLeadAccountSlug) {
     el.configExternalLeadAccountSlug.value = accountSlug || "";
   }
+  if (el.configExternalLeadType) {
+    el.configExternalLeadType.value = type;
+  }
   if (el.configExternalLeadSourcePlatform) {
-    el.configExternalLeadSourcePlatform.value = "website_form";
+    el.configExternalLeadSourcePlatform.value = details.sourcePlatform;
   }
   if (el.configExternalLeadFormName) {
-    el.configExternalLeadFormName.value = "footer_contact_form";
+    el.configExternalLeadFormName.value = details.formName;
+  }
+  if (el.configExternalLeadMapping) {
+    el.configExternalLeadMapping.value = buildExternalLeadMappingGuide(type);
+  }
+  if (el.configExternalLeadSnippet) {
+    el.configExternalLeadSnippet.value = buildExternalLeadSnippet(config, type);
   }
   if (el.configExternalLeadPayload) {
     el.configExternalLeadPayload.value = buildExternalLeadPayloadPreview(config);
   }
+  if (el.configExternalLeadTypeHint) {
+    el.configExternalLeadTypeHint.textContent = details.hint;
+  }
+  if (el.configExternalLeadGuide) {
+    el.configExternalLeadGuide.innerHTML = details.cards
+      .map(
+        (card) => `
+          <article class="config-external-guide-card">
+            <strong>${escapeHtml(card.title)}</strong>
+            <p>${escapeHtml(card.copy)}</p>
+          </article>
+        `
+      )
+      .join("");
+  }
   if (el.configExternalLeadStatusBadge) {
-    el.configExternalLeadStatusBadge.textContent = accountSlug ? "Listo para copiar" : "Falta slug";
-    el.configExternalLeadStatusBadge.dataset.tone = accountSlug ? "ok" : "pending";
+    el.configExternalLeadStatusBadge.textContent = accountSlug ? details.badge : "Falta slug";
+    el.configExternalLeadStatusBadge.dataset.tone = accountSlug ? details.tone : "pending";
   }
   if (el.configExternalLeadStatusMessage) {
     el.configExternalLeadStatusMessage.textContent = accountSlug
-      ? "Ya puedes pasar este bloque a cualquier desarrollador o herramienta externa."
+      ? details.next
       : "Guarda y recarga la cuenta si todavía no ves el slug correcto.";
-    el.configExternalLeadStatusMessage.dataset.tone = accountSlug ? "ok" : "pending";
+    el.configExternalLeadStatusMessage.dataset.tone = accountSlug ? details.tone : "pending";
   }
 }
 
@@ -3077,6 +3283,7 @@ function buildConfigPayload() {
         validation: state.appConfig?.integrations?.whatsapp?.validation || {},
       },
       lead_forms: {
+        website_stack: el.configExternalLeadType?.value || "custom_code",
         meta_source: el.configMetaLeadSource.value,
         google_source: el.configGoogleLeadSource.value,
         sheet_document: el.configLeadSheetDocument.value,
@@ -3873,12 +4080,16 @@ function renderConfig() {
     config?.integrations?.whatsapp?.provider || "meta_cloud";
   el.configWhatsappStatusLabel.value =
     config?.integrations?.whatsapp?.status_label || "";
-  el.configWhatsappPhoneNumberId.value =
-    config?.integrations?.whatsapp?.phone_number_id || "";
-  el.configWhatsappBusinessAccountId.value =
-    config?.integrations?.whatsapp?.business_account_id || "";
-  el.configMetaLeadSource.value =
-    config?.integrations?.lead_forms?.meta_source || "google_sheets";
+    el.configWhatsappPhoneNumberId.value =
+      config?.integrations?.whatsapp?.phone_number_id || "";
+    el.configWhatsappBusinessAccountId.value =
+      config?.integrations?.whatsapp?.business_account_id || "";
+    if (el.configExternalLeadType) {
+      el.configExternalLeadType.value =
+        config?.integrations?.lead_forms?.website_stack || "custom_code";
+    }
+    el.configMetaLeadSource.value =
+      config?.integrations?.lead_forms?.meta_source || "google_sheets";
   el.configGoogleLeadSource.value =
     config?.integrations?.lead_forms?.google_source || "webhook_n8n";
   el.configLeadSheetDocument.value =
@@ -5524,12 +5735,22 @@ el.configCopyExternalEndpointBtn?.addEventListener("click", () => {
     el.configExternalLeadCopyStatus
   );
 });
+el.configCopyExternalSnippetBtn?.addEventListener("click", () => {
+  copyToClipboard(
+    el.configExternalLeadSnippet?.value || "",
+    "Ejemplo de integración copiado.",
+    el.configExternalLeadCopyStatus
+  );
+});
 el.configCopyExternalPayloadBtn?.addEventListener("click", () => {
   copyToClipboard(
     el.configExternalLeadPayload?.value || "",
     "Payload base copiado.",
     el.configExternalLeadCopyStatus
   );
+});
+el.configExternalLeadType?.addEventListener("change", () => {
+  renderExternalLeadIntegration(buildConfigPayload());
 });
 el.configWidgetPreviewBtn?.addEventListener("click", () => {
   const account = getActiveAccount();
