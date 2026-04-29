@@ -1678,6 +1678,21 @@ function buildExternalLeadOwnerHint(owner = "developer") {
   return "Esto está pensado para que puedas copiarlo y pasárselo tal cual a tu desarrollador.";
 }
 
+function getExternalLeadTypeLabel(type = "unknown") {
+  if (type === "custom_code") return "Código propio o backend a medida";
+  if (type === "wordpress") return "WordPress con plugin de formularios";
+  if (type === "website_builder") return "Webflow, Wix o constructor visual";
+  if (type === "automation") return "Make, n8n, Zapier u otro CRM";
+  return "Todavía no identificado";
+}
+
+function getExternalLeadOwnerLabel(owner = "developer") {
+  if (owner === "tmedia") return "TMedia";
+  if (owner === "automation") return "Con automatización";
+  if (owner === "unknown") return "Aún sin responsable claro";
+  return "Mi desarrollador";
+}
+
 function buildExternalLeadHumanSummary(config = state.appConfig || {}, type = "custom_code") {
   const owner = String(
     config?.integrations?.lead_forms?.setup_owner ||
@@ -1778,20 +1793,25 @@ function buildExternalLeadInstructions(config = state.appConfig || {}, type = "c
   const endpoint = `${getBaseOrigin()}/api/integrations/external-lead`;
   const account = getActiveAccount();
   const slug = String(account?.slug || "").trim() || "cliente-demo";
+  const goalText = goal || "nombre, email, mensaje y cualquier dato útil adicional";
+  const notesText = notes || "Si el formulario tiene campos especiales, se pueden enviar como custom_fields.";
 
   const lines = [
-    `Tipo de origen: ${details.formName} (${details.sourcePlatform})`,
-    `Quién lo conecta: ${owner}`,
-    `Endpoint del CRM: ${endpoint}`,
-    `Header: x-integrations-secret`,
-    `Account slug: ${slug}`,
-    goal ? `Qué queremos capturar: ${goal}` : "Qué queremos capturar: nombre, email, mensaje y lo que exista en el formulario.",
-    notes ? `Observaciones: ${notes}` : "Observaciones: si hay campos extra o raros, pueden enviarse dentro de custom_fields.",
+    `Tipo de web o integración: ${getExternalLeadTypeLabel(type)}.`,
+    `Responsable de la conexión: ${getExternalLeadOwnerLabel(owner)}.`,
+    `La web debe enviar los leads a este endpoint del CRM: ${endpoint}.`,
+    `Header obligatorio: x-integrations-secret.`,
+    `Slug de la cuenta: ${slug}.`,
+    `Queremos recoger al menos esto: ${goalText}.`,
+    `Observaciones: ${notesText}`,
     "",
-    "Notas importantes:",
-    "- El CRM no exige que todos los formularios tengan los mismos campos.",
-    "- Envía primero lo que exista y deja los campos extra en custom_fields.",
-    "- Usa el CRM como destino principal y el email solo como notificación secundaria.",
+    "Importante:",
+    "- El CRM no exige que todos los formularios tengan exactamente los mismos campos.",
+    "- Se pueden mandar solo los campos que existan en ese formulario.",
+    "- Si hay campos especiales, se pueden incluir dentro de custom_fields.",
+    "- Recomendamos usar el CRM como destino principal y el email solo como aviso secundario.",
+    "",
+    `Referencia técnica sugerida: ${details.formName} / ${details.sourcePlatform}.`,
   ];
 
   return lines.join("\n");
