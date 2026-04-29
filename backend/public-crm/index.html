@@ -1115,6 +1115,16 @@
                   <p>Define como se conectan WhatsApp, formularios, email y automatizaciones. La idea es que esta capa sea la puerta clara para integrar herramientas sin invadir el CRM comercial.</p>
                 </div>
 
+                <section class="config-integrations-overview">
+                  <div class="config-integrations-overview-head">
+                    <div>
+                      <strong>Estado general de integraciones</strong>
+                      <p>Consulta qué está listo, qué está en progreso y cuál es el siguiente paso práctico en cada conector.</p>
+                    </div>
+                  </div>
+                  <div id="configIntegrationsOverviewGrid" class="config-integrations-overview-grid"></div>
+                </section>
+
                 <div class="config-integrations-grid">
                   <article class="config-integration-card">
                     <div class="config-integration-head">
@@ -1347,6 +1357,71 @@
                         <textarea id="configAutomationNotes" rows="5" placeholder="Aqui puedes documentar que flujos estan activos, donde se conectan los formularios o cualquier nota de implementacion."></textarea>
                       </label>
                     </div>
+                  </article>
+
+                  <article class="config-integration-card">
+                    <div class="config-integration-head">
+                      <div>
+                        <span>Formularios web y otros CRM</span>
+                        <strong>Webhook de entrada</strong>
+                      </div>
+                      <em id="configExternalLeadStatusBadge">Listo para copiar</em>
+                    </div>
+                    <div class="config-integration-tools">
+                      <div class="config-integration-meta">
+                        <span id="configExternalLeadStatusMessage">Usa estos datos para conectar formularios externos, automatizaciones o CRMs de terceros.</span>
+                        <small>Este endpoint crea leads dentro de la cuenta activa.</small>
+                      </div>
+                    </div>
+
+                    <div class="config-helper-stack">
+                      <article class="config-helper-card">
+                        <strong>1. Qué necesita el desarrollador</strong>
+                        <p>Endpoint, cabecera de autenticación, slug de cuenta y un payload base con el mapeo correcto.</p>
+                      </article>
+                      <article class="config-helper-card">
+                        <strong>2. Cómo recomendamos integrarlo</strong>
+                        <p>Usa el CRM como destino principal y deja email o automatizaciones como aviso secundario, no como fuente única del lead.</p>
+                      </article>
+                    </div>
+
+                    <div class="quote-grid">
+                      <label class="quote-grid-full">
+                        Endpoint de entrada
+                        <input id="configExternalLeadEndpoint" type="text" readonly />
+                      </label>
+
+                      <label>
+                        Header de autenticación
+                        <input id="configExternalLeadAuthHeader" type="text" readonly />
+                      </label>
+
+                      <label>
+                        Account slug
+                        <input id="configExternalLeadAccountSlug" type="text" readonly />
+                      </label>
+
+                      <label>
+                        Source platform
+                        <input id="configExternalLeadSourcePlatform" type="text" readonly />
+                      </label>
+
+                      <label>
+                        Form name sugerido
+                        <input id="configExternalLeadFormName" type="text" readonly />
+                      </label>
+
+                      <label class="quote-grid-full">
+                        Payload base
+                        <textarea id="configExternalLeadPayload" rows="10" readonly></textarea>
+                      </label>
+                    </div>
+
+                    <div class="config-inline-actions">
+                      <button id="configCopyExternalEndpointBtn" type="button" class="crm-secondary-btn">Copiar endpoint</button>
+                      <button id="configCopyExternalPayloadBtn" type="button" class="crm-secondary-btn">Copiar payload</button>
+                    </div>
+                    <div id="configExternalLeadCopyStatus" class="save-status" aria-live="polite"></div>
                   </article>
                 </div>
               </section>

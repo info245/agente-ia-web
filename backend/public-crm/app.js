@@ -531,6 +531,7 @@ const el = {
   configValidateWhatsappBtn: document.getElementById("configValidateWhatsappBtn"),
   configWhatsappValidationMessage: document.getElementById("configWhatsappValidationMessage"),
   configWhatsappLastValidated: document.getElementById("configWhatsappLastValidated"),
+  configIntegrationsOverviewGrid: document.getElementById("configIntegrationsOverviewGrid"),
   configMetaLeadSource: document.getElementById("configMetaLeadSource"),
   configGoogleLeadSource: document.getElementById("configGoogleLeadSource"),
   configLeadSheetDocument: document.getElementById("configLeadSheetDocument"),
@@ -562,6 +563,17 @@ const el = {
   configValidateAutomationsBtn: document.getElementById("configValidateAutomationsBtn"),
   configAutomationsValidationMessage: document.getElementById("configAutomationsValidationMessage"),
   configAutomationsLastValidated: document.getElementById("configAutomationsLastValidated"),
+  configExternalLeadStatusBadge: document.getElementById("configExternalLeadStatusBadge"),
+  configExternalLeadStatusMessage: document.getElementById("configExternalLeadStatusMessage"),
+  configExternalLeadEndpoint: document.getElementById("configExternalLeadEndpoint"),
+  configExternalLeadAuthHeader: document.getElementById("configExternalLeadAuthHeader"),
+  configExternalLeadAccountSlug: document.getElementById("configExternalLeadAccountSlug"),
+  configExternalLeadSourcePlatform: document.getElementById("configExternalLeadSourcePlatform"),
+  configExternalLeadFormName: document.getElementById("configExternalLeadFormName"),
+  configExternalLeadPayload: document.getElementById("configExternalLeadPayload"),
+  configCopyExternalEndpointBtn: document.getElementById("configCopyExternalEndpointBtn"),
+  configCopyExternalPayloadBtn: document.getElementById("configCopyExternalPayloadBtn"),
+  configExternalLeadCopyStatus: document.getElementById("configExternalLeadCopyStatus"),
   configMessageTemplatesList: document.getElementById("configMessageTemplatesList"),
   configAutomationFlowsList: document.getElementById("configAutomationFlowsList"),
   configServicesList: document.getElementById("configServicesListKnowledge"),
@@ -1310,6 +1322,171 @@ function renderIntegrationValidation(type, validation = {}, badgeText = "") {
   }
   if (target.timestamp) {
     target.timestamp.textContent = lastValidated;
+  }
+}
+
+function getIntegrationSummaryCards(config = state.appConfig || {}) {
+  const whatsappValidation = config?.integrations?.whatsapp?.validation || {};
+  const leadFormsValidation = config?.integrations?.lead_forms?.validation || {};
+  const emailValidation = getEffectiveEmailValidation(config);
+  const automationsValidation = config?.integrations?.automations?.validation || {};
+  const activeAccount = getActiveAccount();
+  const accountSlug = String(activeAccount?.slug || "").trim();
+  const externalReady = Boolean(accountSlug);
+
+  return [
+    {
+      key: "whatsapp",
+      label: "WhatsApp",
+      status: String(whatsappValidation?.status || "pending"),
+      hint:
+        hasConfiguredWhatsApp(config)
+          ? "Canal detectado. Valida el provider y la cuenta de negocio."
+          : "Añade el número público y el provider antes de probar la conexión.",
+      next:
+        hasConfiguredWhatsApp(config)
+          ? "Pulsa Comprobar conexión para validar el canal."
+          : "Completa el setup básico de WhatsApp.",
+    },
+    {
+      key: "lead_forms",
+      label: "Lead forms",
+      status: String(leadFormsValidation?.status || "pending"),
+      hint:
+        config?.integrations?.lead_forms?.webhook_url || config?.integrations?.lead_forms?.sheet_document
+          ? "Ya hay un punto de entrada definido para Meta o Google."
+          : "Define si entra por webhook o por Google Sheets.",
+      next:
+        config?.integrations?.lead_forms?.webhook_url || config?.integrations?.lead_forms?.sheet_document
+          ? "Valida el webhook o documenta las hojas conectadas."
+          : "Elige la fuente de entrada y completa el webhook principal.",
+    },
+    {
+      key: "email",
+      label: "Email",
+      status: String(emailValidation?.status || "pending"),
+      hint:
+        String(config?.integrations?.email?.provider || "").trim().toLowerCase() === "google_oauth"
+          ? "Email conectado con Google o pendiente de autorización."
+          : "Puedes usar SMTP o Google conectado para salidas y avisos.",
+      next:
+        String(config?.integrations?.email?.provider || "").trim().toLowerCase() === "google_oauth"
+          ? "Conecta Gmail y valida el envío comercial."
+          : "Completa el proveedor y prueba la salida.",
+    },
+    {
+      key: "automations",
+      label: "Automatizaciones",
+      status: String(automationsValidation?.status || "pending"),
+      hint:
+        String(config?.integrations?.automations?.workspace_url || "").trim()
+          ? "Ya hay un workspace o panel técnico definido."
+          : "Deja aquí la herramienta donde vive la orquestación técnica.",
+      next:
+        String(config?.integrations?.automations?.workspace_url || "").trim()
+          ? "Valida la URL del workspace y documenta los flujos activos."
+          : "Configura la plataforma y pega la URL del workspace.",
+    },
+    {
+      key: "external",
+      label: "Formularios / otros CRM",
+      status: externalReady ? "connected" : "pending",
+      hint: externalReady
+        ? "Ya puedes copiar endpoint, slug y payload base para cualquier integración externa."
+        : "Necesitamos un slug de cuenta válido para generar el payload.",
+      next: externalReady
+        ? "Pasa el bloque de integración al desarrollador o a tu automatización."
+        : "Guarda la cuenta correctamente para generar el slug de conexión.",
+    },
+  ];
+}
+
+function renderIntegrationsOverview(config = state.appConfig || {}) {
+  if (!el.configIntegrationsOverviewGrid) return;
+  const cards = getIntegrationSummaryCards(config);
+  el.configIntegrationsOverviewGrid.innerHTML = cards
+    .map((card) => {
+      const tone = getValidationTone(card.status);
+      const badge =
+        tone === "ok" ? "Conectado" : tone === "warning" ? "En revisión" : "Pendiente";
+      return `
+        <article class="config-integration-overview-card" data-tone="${escapeHtml(tone)}">
+          <div class="config-integration-overview-top">
+            <strong>${escapeHtml(card.label)}</strong>
+            <span>${escapeHtml(badge)}</span>
+          </div>
+          <p>${escapeHtml(card.hint)}</p>
+          <small><strong>Siguiente paso:</strong> ${escapeHtml(card.next)}</small>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function buildExternalLeadPayloadPreview(config = state.appConfig || {}) {
+  const account = getActiveAccount();
+  const accountSlug = String(account?.slug || "").trim() || "cliente-demo";
+  const supportEmail = String(
+    config?.contact?.support_email ||
+      config?.integrations?.email?.from_email ||
+      config?.integrations?.email?.google_connected_email ||
+      ""
+  ).trim();
+
+  return JSON.stringify(
+    {
+      account_slug: accountSlug,
+      source_platform: "website_form",
+      source_form_name: "footer_contact_form",
+      external_user_id: "webform:nombre@empresa.com:TIMESTAMP",
+      name: "Nombre Apellido",
+      email: supportEmail || "nombre@empresa.com",
+      phone: "",
+      company_name: "Empresa SL",
+      interest_service: "Contacto web",
+      summary: "Texto del mensaje",
+      current_situation: "Texto del mensaje",
+      preferred_contact_channel: "email",
+      consent: true,
+      consent_at: new Date().toISOString(),
+      source_campaign: "website",
+      auto_start: false,
+    },
+    null,
+    2
+  );
+}
+
+function renderExternalLeadIntegration(config = state.appConfig || {}) {
+  const account = getActiveAccount();
+  const accountSlug = String(account?.slug || "").trim();
+  const endpoint = `${getBaseOrigin()}/api/integrations/external-lead`;
+
+  if (el.configExternalLeadEndpoint) el.configExternalLeadEndpoint.value = endpoint;
+  if (el.configExternalLeadAuthHeader) {
+    el.configExternalLeadAuthHeader.value = "x-integrations-secret";
+  }
+  if (el.configExternalLeadAccountSlug) {
+    el.configExternalLeadAccountSlug.value = accountSlug || "";
+  }
+  if (el.configExternalLeadSourcePlatform) {
+    el.configExternalLeadSourcePlatform.value = "website_form";
+  }
+  if (el.configExternalLeadFormName) {
+    el.configExternalLeadFormName.value = "footer_contact_form";
+  }
+  if (el.configExternalLeadPayload) {
+    el.configExternalLeadPayload.value = buildExternalLeadPayloadPreview(config);
+  }
+  if (el.configExternalLeadStatusBadge) {
+    el.configExternalLeadStatusBadge.textContent = accountSlug ? "Listo para copiar" : "Falta slug";
+    el.configExternalLeadStatusBadge.dataset.tone = accountSlug ? "ok" : "pending";
+  }
+  if (el.configExternalLeadStatusMessage) {
+    el.configExternalLeadStatusMessage.textContent = accountSlug
+      ? "Ya puedes pasar este bloque a cualquier desarrollador o herramienta externa."
+      : "Guarda y recarga la cuenta si todavía no ves el slug correcto.";
+    el.configExternalLeadStatusMessage.dataset.tone = accountSlug ? "ok" : "pending";
   }
 }
 
@@ -3775,6 +3952,8 @@ function renderConfig() {
     "automations",
     config?.integrations?.automations?.validation || {}
   );
+  renderIntegrationsOverview(config);
+  renderExternalLeadIntegration(config);
 
   const connectedEmail = String(config?.integrations?.email?.google_connected_email || "").trim();
   const emailProvider = String(config?.integrations?.email?.provider || "").trim().toLowerCase();
@@ -5337,6 +5516,20 @@ el.configCopyWidgetUrlBtn?.addEventListener("click", () => {
 });
 el.configCopyWidgetSnippetBtn?.addEventListener("click", () => {
   copyToClipboard(el.configWidgetSnippet?.value || "", "Script del widget copiado.");
+});
+el.configCopyExternalEndpointBtn?.addEventListener("click", () => {
+  copyToClipboard(
+    el.configExternalLeadEndpoint?.value || "",
+    "Endpoint de entrada copiado.",
+    el.configExternalLeadCopyStatus
+  );
+});
+el.configCopyExternalPayloadBtn?.addEventListener("click", () => {
+  copyToClipboard(
+    el.configExternalLeadPayload?.value || "",
+    "Payload base copiado.",
+    el.configExternalLeadCopyStatus
+  );
 });
 el.configWidgetPreviewBtn?.addEventListener("click", () => {
   const account = getActiveAccount();

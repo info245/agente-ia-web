@@ -1151,6 +1151,94 @@ textarea {
   gap: 18px;
 }
 
+.config-integrations-overview {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.config-integrations-overview-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.config-integrations-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.config-integration-overview-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(191, 208, 234, 0.82);
+  background: rgba(255,255,255,0.92);
+}
+
+.config-integration-overview-card[data-tone="ok"] {
+  border-color: rgba(111, 207, 151, 0.9);
+  background: rgba(240, 255, 246, 0.95);
+}
+
+.config-integration-overview-card[data-tone="warning"] {
+  border-color: rgba(255, 190, 92, 0.9);
+  background: rgba(255, 250, 240, 0.96);
+}
+
+.config-integration-overview-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-integration-overview-top span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  background: rgba(109, 65, 243, 0.08);
+  color: var(--accent-dark);
+}
+
+.config-integration-overview-card p,
+.config-integration-overview-card small {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.config-helper-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.config-helper-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(191, 208, 234, 0.78);
+  background: rgba(248, 250, 255, 0.85);
+}
+
+.config-helper-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.config-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .config-integration-card {
   display: grid;
   gap: 18px;
@@ -3809,6 +3897,11 @@ textarea {
   .crm-card {
     padding: 14px;
     border-radius: 20px;
+  }
+
+  .config-helper-stack,
+  .config-integrations-overview-grid {
+    grid-template-columns: 1fr;
   }
 
   .config-tabs {
