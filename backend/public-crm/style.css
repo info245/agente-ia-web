@@ -1266,6 +1266,25 @@ textarea {
   line-height: 1.55;
 }
 
+.config-external-technical {
+  display: grid;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(191, 208, 234, 0.78);
+  background: rgba(248, 250, 255, 0.82);
+}
+
+.config-external-technical summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.config-external-technical[open] summary {
+  margin-bottom: 8px;
+}
+
 .config-integration-card {
   display: grid;
   gap: 18px;

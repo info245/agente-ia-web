@@ -37,6 +37,7 @@ export const DEFAULT_APP_CONFIG = {
       email: true,
       phone: true,
     },
+    custom_fields: [],
   },
   notifications: {
     email_to: "",
@@ -61,6 +62,9 @@ export const DEFAULT_APP_CONFIG = {
     },
       lead_forms: {
         website_stack: "custom_code",
+        setup_owner: "developer",
+        capture_goal: "",
+        custom_capture_notes: "",
         meta_source: "google_sheets",
         google_source: "webhook_n8n",
         sheet_document: "",
@@ -284,6 +288,7 @@ export const BLANK_APP_CONFIG = {
       email: true,
       phone: true,
     },
+    custom_fields: [],
   },
   notifications: {
     email_to: "",
@@ -308,6 +313,9 @@ export const BLANK_APP_CONFIG = {
     },
       lead_forms: {
         website_stack: "custom_code",
+        setup_owner: "developer",
+        capture_goal: "",
+        custom_capture_notes: "",
         meta_source: "google_sheets",
         google_source: "webhook_n8n",
         sheet_document: "",
@@ -531,7 +539,50 @@ function sanitizeLeadCaptureConfig(value = {}, defaults = {}) {
         : Boolean(defaultValue);
   }
 
-  return { fields };
+  const rawCustomFields = Array.isArray(value?.custom_fields)
+    ? value.custom_fields
+    : Array.isArray(defaults?.custom_fields)
+    ? defaults.custom_fields
+    : [];
+  const seenKeys = new Set();
+  const custom_fields = rawCustomFields
+    .map((field) => {
+      const key = cleanString(field?.key)
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 60);
+      const label = cleanString(field?.label).slice(0, 80);
+      if (!key || !label || seenKeys.has(key)) return null;
+      seenKeys.add(key);
+
+      const type = ["text", "number", "date", "time", "datetime", "select", "boolean"].includes(
+        cleanString(field?.type)
+      )
+        ? cleanString(field?.type)
+        : "text";
+      const options = Array.isArray(field?.options)
+        ? field.options
+        : String(field?.options || "")
+            .split(/\r?\n|,/)
+            .map((item) => item.trim())
+            .filter(Boolean);
+
+      return {
+        key,
+        label,
+        type,
+        required: field?.required === true,
+        options: options.map(cleanString).filter(Boolean).slice(0, 40),
+        prompt:
+          cleanString(field?.prompt).slice(0, 180) ||
+          `¿Cuál es tu ${label.toLocaleLowerCase("es-ES")}?`,
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 30);
+
+  return { fields, custom_fields };
 }
 
 function sanitizeNotificationsConfig(value = {}, defaults = {}) {
@@ -721,6 +772,15 @@ export function sanitizeAppConfig(input = {}, options = {}) {
           website_stack:
             cleanString(input?.integrations?.lead_forms?.website_stack) ||
             defaults.integrations.lead_forms.website_stack,
+          setup_owner:
+            cleanString(input?.integrations?.lead_forms?.setup_owner) ||
+            defaults.integrations.lead_forms.setup_owner,
+          capture_goal: cleanString(
+            input?.integrations?.lead_forms?.capture_goal
+          ),
+          custom_capture_notes: cleanString(
+            input?.integrations?.lead_forms?.custom_capture_notes
+          ),
           meta_source:
             cleanString(input?.integrations?.lead_forms?.meta_source) ||
             defaults.integrations.lead_forms.meta_source,

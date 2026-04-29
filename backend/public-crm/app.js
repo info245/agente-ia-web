@@ -427,6 +427,11 @@ const el = {
   crmLoginEmail: document.getElementById("crmLoginEmail"),
   crmLoginPassword: document.getElementById("crmLoginPassword"),
   crmLoginBtn: document.getElementById("crmLoginBtn"),
+  crmPasswordSetupForm: document.getElementById("crmPasswordSetupForm"),
+  crmPasswordSetupEmail: document.getElementById("crmPasswordSetupEmail"),
+  crmPasswordSetupPassword: document.getElementById("crmPasswordSetupPassword"),
+  crmPasswordSetupPasswordConfirm: document.getElementById("crmPasswordSetupPasswordConfirm"),
+  crmPasswordSetupBtn: document.getElementById("crmPasswordSetupBtn"),
   crmBootstrapForm: document.getElementById("crmBootstrapForm"),
   crmBootstrapName: document.getElementById("crmBootstrapName"),
   crmBootstrapEmail: document.getElementById("crmBootstrapEmail"),
@@ -520,6 +525,7 @@ const el = {
   configLeadCapturePreferredChannel: document.getElementById("configLeadCapturePreferredChannel"),
   configLeadCaptureEmail: document.getElementById("configLeadCaptureEmail"),
   configLeadCapturePhone: document.getElementById("configLeadCapturePhone"),
+  configLeadCustomFields: document.getElementById("configLeadCustomFields"),
   configPrimaryColor: document.getElementById("configPrimaryColor"),
   configAccentColor: document.getElementById("configAccentColor"),
   configPromptAdditions: document.getElementById("configPromptAdditions"),
@@ -566,6 +572,9 @@ const el = {
   configExternalLeadStatusBadge: document.getElementById("configExternalLeadStatusBadge"),
   configExternalLeadStatusMessage: document.getElementById("configExternalLeadStatusMessage"),
   configExternalLeadType: document.getElementById("configExternalLeadType"),
+  configExternalLeadOwner: document.getElementById("configExternalLeadOwner"),
+  configExternalLeadGoal: document.getElementById("configExternalLeadGoal"),
+  configExternalLeadNotes: document.getElementById("configExternalLeadNotes"),
   configExternalLeadTypeHint: document.getElementById("configExternalLeadTypeHint"),
   configExternalLeadGuide: document.getElementById("configExternalLeadGuide"),
   configExternalLeadEndpoint: document.getElementById("configExternalLeadEndpoint"),
@@ -628,6 +637,7 @@ const el = {
   leadTitle: document.getElementById("leadTitle"),
   leadChannel: document.getElementById("leadChannel"),
   leadMeta: document.getElementById("leadMeta"),
+  leadCustomFields: document.getElementById("leadCustomFields"),
   analyticsRangeLabel: document.getElementById("analyticsRangeLabel"),
   analyticsLeadsGenerated: document.getElementById("analyticsLeadsGenerated"),
   analyticsPassedWhatsapp: document.getElementById("analyticsPassedWhatsapp"),
@@ -731,17 +741,25 @@ function fmtMoney(value, currency = "EUR") {
 
 function setAuthMode(mode = "login") {
   const isBootstrap = mode === "bootstrap";
+  const isPasswordSetup = mode === "password_setup";
   state.needsBootstrap = isBootstrap;
-  el.crmLoginForm?.classList.toggle("is-hidden", isBootstrap);
+  el.crmLoginForm?.classList.toggle("is-hidden", isBootstrap || isPasswordSetup);
+  el.crmPasswordSetupForm?.classList.toggle("is-hidden", !isPasswordSetup);
   el.crmBootstrapForm?.classList.toggle("is-hidden", !isBootstrap);
-  el.crmAuthSwitchBtn?.classList.toggle("is-hidden", !isBootstrap);
+  el.crmAuthSwitchBtn?.classList.toggle("is-hidden", !isBootstrap && !isPasswordSetup);
   if (el.crmAuthTitle) {
-    el.crmAuthTitle.textContent = isBootstrap ? "Crear super admin" : "Acceso CRM";
+    el.crmAuthTitle.textContent = isPasswordSetup
+      ? "Establecer contraseÃ±a"
+      : isBootstrap
+        ? "Crear super admin"
+        : "Acceso CRM";
   }
   if (el.crmAuthCopy) {
-    el.crmAuthCopy.textContent = isBootstrap
-      ? "Este es el primer acceso. Crea la cuenta administradora principal del sistema."
-      : "Entra como super admin o como administrador de una cuenta cliente.";
+    el.crmAuthCopy.textContent = isPasswordSetup
+      ? "Crea tu contraseÃ±a para activar el acceso a tu cuenta."
+      : isBootstrap
+        ? "Este es el primer acceso. Crea la cuenta administradora principal del sistema."
+        : "Entra como super admin o como administrador de una cuenta cliente.";
   }
 }
 
@@ -1123,6 +1141,37 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function parseJsonField(value, fallback) {
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+function stringifyJsonField(value, emptyValue = "") {
+  if (!value || (typeof value === "object" && !Object.keys(value).length)) {
+    return emptyValue;
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+function formatCustomFields(customFields = {}, configuredFields = []) {
+  if (!customFields || typeof customFields !== "object" || Array.isArray(customFields)) return [];
+  const labels = new Map(
+    (configuredFields || []).map((field) => [field.key, field.label || field.key])
+  );
+  return Object.entries(customFields)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([key, value]) => ({
+      key,
+      label: labels.get(key) || key.replace(/_/g, " "),
+      value: Array.isArray(value) ? value.join(", ") : String(value),
+    }));
+}
+
 function normalizeKnowledgeCopyRuntimeOld() {
   const setText = (selector, text) => {
     if (!text) return;
@@ -1445,15 +1494,15 @@ function buildExternalLeadPayloadPreview(config = state.appConfig || {}) {
   ).trim();
 
   return JSON.stringify(
-      {
-        account_slug: accountSlug,
-        source_platform: getExternalLeadModeDetails(mode).sourcePlatform,
-        source_form_name: getExternalLeadModeDetails(mode).formName,
-        external_user_id: "webform:nombre@empresa.com:TIMESTAMP",
-        name: "Nombre Apellido",
-        email: supportEmail || "nombre@empresa.com",
-        phone: "",
-        company_name: "Empresa SL",
+    {
+      account_slug: accountSlug,
+      source_platform: getExternalLeadModeDetails(mode).sourcePlatform,
+      source_form_name: getExternalLeadModeDetails(mode).formName,
+      external_user_id: "webform:nombre@empresa.com:TIMESTAMP",
+      name: "Nombre Apellido",
+      email: supportEmail || "nombre@empresa.com",
+      phone: "",
+      company_name: "Empresa SL",
       interest_service: "Contacto web",
       summary: "Texto del mensaje",
       current_situation: "Texto del mensaje",
@@ -1461,6 +1510,10 @@ function buildExternalLeadPayloadPreview(config = state.appConfig || {}) {
       consent: true,
       consent_at: new Date().toISOString(),
       source_campaign: "website",
+      custom_fields: {
+        campo_personalizado_1: "valor opcional",
+        observaciones_formulario: "Solo si este cliente necesita campos extra",
+      },
       auto_start: false,
     },
     null,
@@ -1470,6 +1523,32 @@ function buildExternalLeadPayloadPreview(config = state.appConfig || {}) {
 
 function getExternalLeadModeDetails(type = "custom_code") {
   const details = {
+    unknown: {
+      sourcePlatform: "website_form",
+      formName: "main_contact_form",
+      badge: "Primero hay que identificar el origen",
+      tone: "warning",
+      hint:
+        "Si todavía no sabes cómo está hecha la web, no pasa nada. Primero necesitamos identificar si es WordPress, código propio o constructor visual.",
+      next: "Pide acceso, repo o una captura del sistema del formulario antes de tocar nada.",
+      cards: [
+        {
+          title: "Qué tienes que hacer tú",
+          copy:
+            "Pásanos el acceso, el repo o una captura donde se vea si la web usa WordPress, código propio, Webflow, Wix o una automatización.",
+        },
+        {
+          title: "Qué haremos después",
+          copy:
+            "Con eso te diremos el camino más corto para conectar el formulario al CRM sin pedirte detalles técnicos raros.",
+        },
+      ],
+      mapping: [
+        "No hace falta fijar un mapeo todavía.",
+        "Cuando sepamos el sistema, ajustaremos solo los campos que ese formulario tenga.",
+        "El CRM admite nombre, email, teléfono, empresa, mensaje y también campos extra dentro de custom_fields.",
+      ],
+    },
     custom_code: {
       sourcePlatform: "website_form",
       formName: "footer_contact_form",
@@ -1477,29 +1556,24 @@ function getExternalLeadModeDetails(type = "custom_code") {
       tone: "ok",
       hint:
         "Ideal si la web ya tiene backend propio. Solo hay que hacer un POST al CRM justo después de validar el formulario.",
-      next: "Pasa endpoint, secreto y ejemplo al desarrollador de la web.",
+      next: "Pasa este bloque al desarrollador y dile que mantenga el email solo como aviso secundario.",
       cards: [
         {
-          title: "Qué hay que tocar",
+          title: "Qué tienes que hacer tú",
           copy:
-            "El endpoint que hoy procesa el formulario debe llamar al CRM como destino principal y dejar el email solo como aviso secundario.",
+            "Enviar el endpoint, el secreto y el ejemplo al desarrollador que lleva la web. Con eso normalmente basta para que lo conecte.",
         },
         {
-          title: "Qué nos tendrán que pasar",
+          title: "Qué necesitamos si algo no cuadra",
           copy:
-            "El archivo o ruta donde hoy se procesa el formulario para mapear nombre, email, empresa, mensaje y consentimientos.",
+            "La ruta donde hoy se procesa el formulario y una muestra del payload actual para mapear solo los campos que realmente usa ese cliente.",
         },
       ],
       mapping: [
-        "name -> name",
-        "email -> email",
-        "phone -> phone (si existe)",
-        "company -> company_name",
-        "message -> summary y current_situation",
-        "acceptedLegal -> consent",
-        "acceptedLegal ? new Date().toISOString() -> consent_at",
+        "Puedes enviar solo los campos que tengas.",
+        "Los más habituales son: name, email, phone, company_name, summary y consent.",
+        "Si el formulario tiene campos especiales, mételos en custom_fields y el CRM no se rompe.",
       ],
-      snippetLabel: "Ejemplo fetch para backend propio",
     },
     wordpress: {
       sourcePlatform: "wordpress_form",
@@ -1508,28 +1582,24 @@ function getExternalLeadModeDetails(type = "custom_code") {
       tone: "ok",
       hint:
         "Pensado para WPForms, Contact Form 7 o Elementor Forms. Lo normal es disparar un webhook al CRM o pasar por n8n/Make si el plugin no deja mapear fino.",
-      next: "Identifica el plugin de formularios y activa webhook directo o vía n8n/Make.",
+      next: "Identifica el plugin y decide si va directo por webhook o mediante Make o n8n.",
       cards: [
         {
-          title: "Ruta recomendada",
+          title: "Qué tienes que hacer tú",
           copy:
-            "Si el plugin soporta webhook, manda el lead directo al CRM. Si no, usa Make o n8n como capa intermedia para transformar el payload.",
+            "Decirnos qué plugin usa el formulario. Con eso sabremos si lo conectamos por webhook directo o si conviene pasar por Make o n8n.",
         },
         {
-          title: "Qué nos tendrán que pasar",
+          title: "Qué necesitamos si algo no cuadra",
           copy:
-            "Nombre del plugin y captura de campos del formulario para ajustar el mapeo sin tocar el CRM.",
+            "Una captura de los campos del formulario o del panel del plugin para adaptar el mapeo real del cliente.",
         },
       ],
       mapping: [
-        "Full Name / Nombre -> name",
-        "Email -> email",
-        "Phone / Telefono -> phone",
-        "Company / Empresa -> company_name",
-        "Message / Mensaje -> summary y current_situation",
-        "Privacy / Legal -> consent",
+        "No hace falta que todos los formularios tengan los mismos campos.",
+        "Si el plugin da Nombre, Email y Mensaje, eso ya nos sirve.",
+        "Si además tiene Teléfono, Empresa o Presupuesto, se pueden mandar como campos extra o mapearlos de forma explícita.",
       ],
-      snippetLabel: "Payload de webhook para plugin WordPress",
     },
     website_builder: {
       sourcePlatform: "website_builder_form",
@@ -1541,25 +1611,21 @@ function getExternalLeadModeDetails(type = "custom_code") {
       next: "Comprobar si el constructor admite webhook; si no, conectar Make o Zapier.",
       cards: [
         {
-          title: "Ruta recomendada",
+          title: "Qué tienes que hacer tú",
           copy:
-            "Usa webhook nativo si la plataforma lo soporta. Si no, conecta el formulario a Make/Zapier/n8n y desde ahí envía el lead al CRM.",
+            "Confirmar si la plataforma tiene webhook nativo. Si no, la salida buena suele ser Make, Zapier o n8n.",
         },
         {
-          title: "Qué nos tendrán que pasar",
+          title: "Qué necesitamos si algo no cuadra",
           copy:
-            "Nombre exacto de la plataforma y la lista de campos para decirles si vamos directos por webhook o por automatización.",
+            "El nombre exacto del constructor y una lista simple de campos. No hace falta que siga un formato rígido.",
         },
       ],
       mapping: [
-        "Name -> name",
-        "Email -> email",
-        "Phone -> phone",
-        "Company -> company_name",
-        "Message -> summary y current_situation",
-        "Consent checkbox -> consent",
+        "Los campos típicos son name, email y message.",
+        "Si hay phone, company o cualquier otro dato, se puede enviar también.",
+        "Si algo no encaja en los campos base, se manda dentro de custom_fields.",
       ],
-      snippetLabel: "Payload base para Make/Zapier desde constructor visual",
     },
     automation: {
       sourcePlatform: "automation_webhook",
@@ -1571,33 +1637,75 @@ function getExternalLeadModeDetails(type = "custom_code") {
       next: "Crear el nodo webhook o HTTP request y mapear los campos del origen al payload del CRM.",
       cards: [
         {
-          title: "Ruta recomendada",
+          title: "Qué tienes que hacer tú",
           copy:
-            "Haz que la automatización reciba el lead original, lo normalice y luego haga un POST al endpoint del CRM con el secreto.",
+            "Decidir si lo conectamos por n8n, Make o Zapier, y desde ahí transformar el lead antes de enviarlo al CRM.",
         },
         {
-          title: "Qué nos tendrán que pasar",
+          title: "Qué necesitamos si algo no cuadra",
           copy:
-            "Captura del escenario o del nodo que ya recibe los datos para revisar el mapeo final si hace falta.",
+            "Una captura del escenario o del nodo que ya recibe los datos. Con eso vemos el mapeo real sin exigir una estructura fija.",
         },
       ],
       mapping: [
-        "origin.full_name -> name",
-        "origin.email -> email",
-        "origin.phone -> phone",
-        "origin.company -> company_name",
-        "origin.message -> summary y current_situation",
-        "origin.legal_accepted -> consent",
+        "Normaliza solo los campos que realmente existan en el origen.",
+        "Los básicos son name, email, phone, company_name, summary y consent.",
+        "Si el CRM externo manda más cosas, mételas en custom_fields.",
       ],
-      snippetLabel: "Ejemplo HTTP request para Make / n8n / Zapier",
     },
   };
 
-  return details[type] || details.custom_code;
+  return details[type] || details.unknown;
 }
 
 function buildExternalLeadMappingGuide(type = "custom_code") {
   return getExternalLeadModeDetails(type).mapping.join("\n");
+}
+
+function buildExternalLeadOwnerHint(owner = "developer") {
+  if (owner === "tmedia") {
+    return "Deja aquí lo que tiene tu formulario y nosotros te diremos exactamente qué acceso o captura necesitamos.";
+  }
+  if (owner === "automation") {
+    return "Te enseñaremos el payload y el endpoint pensando en Make, n8n o Zapier, sin asumir que los campos sean siempre los mismos.";
+  }
+  if (owner === "unknown") {
+    return "Si aún no sabes quién lo conectará, deja preparado este bloque y cuando lo definamos ya tendremos el contexto guardado.";
+  }
+  return "Esto está pensado para que puedas copiarlo y pasárselo tal cual a tu desarrollador.";
+}
+
+function buildExternalLeadHumanSummary(config = state.appConfig || {}, type = "custom_code") {
+  const owner = String(
+    config?.integrations?.lead_forms?.setup_owner ||
+      el.configExternalLeadOwner?.value ||
+      "developer"
+  ).trim() || "developer";
+  const goal = String(
+    config?.integrations?.lead_forms?.capture_goal ||
+      el.configExternalLeadGoal?.value ||
+      ""
+  ).trim();
+  const notes = String(
+    config?.integrations?.lead_forms?.custom_capture_notes ||
+      el.configExternalLeadNotes?.value ||
+      ""
+  ).trim();
+  const details = getExternalLeadModeDetails(type);
+  const summary = [];
+
+  summary.push(buildExternalLeadOwnerHint(owner));
+  summary.push(details.hint);
+  if (goal) {
+    summary.push(`Queréis capturar: ${goal}.`);
+  } else {
+    summary.push("No hace falta definir ahora todos los campos exactos; con nombre, email y mensaje ya podemos empezar y luego ampliar.");
+  }
+  if (notes) {
+    summary.push(`Observaciones guardadas: ${notes}`);
+  }
+
+  return summary.join(" ");
 }
 
 function buildExternalLeadSnippet(config = state.appConfig || {}, type = "custom_code") {
@@ -1643,6 +1751,11 @@ function renderExternalLeadIntegration(config = state.appConfig || {}) {
       "custom_code"
   ).trim() || "custom_code";
   const details = getExternalLeadModeDetails(type);
+  const owner = String(
+    config?.integrations?.lead_forms?.setup_owner ||
+      el.configExternalLeadOwner?.value ||
+      "developer"
+  ).trim() || "developer";
 
   if (el.configExternalLeadEndpoint) el.configExternalLeadEndpoint.value = endpoint;
   if (el.configExternalLeadAuthHeader) {
@@ -1653,6 +1766,17 @@ function renderExternalLeadIntegration(config = state.appConfig || {}) {
   }
   if (el.configExternalLeadType) {
     el.configExternalLeadType.value = type;
+  }
+  if (el.configExternalLeadOwner) {
+    el.configExternalLeadOwner.value = owner;
+  }
+  if (el.configExternalLeadGoal) {
+    el.configExternalLeadGoal.value =
+      config?.integrations?.lead_forms?.capture_goal || "";
+  }
+  if (el.configExternalLeadNotes) {
+    el.configExternalLeadNotes.value =
+      config?.integrations?.lead_forms?.custom_capture_notes || "";
   }
   if (el.configExternalLeadSourcePlatform) {
     el.configExternalLeadSourcePlatform.value = details.sourcePlatform;
@@ -1670,7 +1794,7 @@ function renderExternalLeadIntegration(config = state.appConfig || {}) {
     el.configExternalLeadPayload.value = buildExternalLeadPayloadPreview(config);
   }
   if (el.configExternalLeadTypeHint) {
-    el.configExternalLeadTypeHint.textContent = details.hint;
+    el.configExternalLeadTypeHint.textContent = buildExternalLeadHumanSummary(config, type);
   }
   if (el.configExternalLeadGuide) {
     el.configExternalLeadGuide.innerHTML = details.cards
@@ -2273,6 +2397,49 @@ async function loginCrm(event) {
   }
 }
 
+async function setupCrmPassword(event) {
+  event.preventDefault();
+
+  const params = new URLSearchParams(window.location.search);
+  const setupToken = params.get("setup_token") || "";
+  const password = el.crmPasswordSetupPassword.value;
+  const confirmPassword = el.crmPasswordSetupPasswordConfirm.value;
+
+  if (!setupToken) {
+    setStatus(el.crmAuthStatus, "El enlace no incluye token de activacion.", "error");
+    return;
+  }
+  if (password !== confirmPassword) {
+    setStatus(el.crmAuthStatus, "Las contraseÃ±as no coinciden.", "error");
+    return;
+  }
+
+  el.crmPasswordSetupBtn.disabled = true;
+  setStatus(el.crmAuthStatus, "Activando acceso...");
+
+  try {
+    const result = await fetchJson(`${window.location.origin}/api/auth/setup-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: setupToken,
+        password,
+      }),
+    });
+
+    state.currentUser = result.user || null;
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setAuthenticatedUi(true);
+    await bootstrapCrm();
+    setMainView(getDefaultViewForRole());
+    setStatus(el.crmAuthStatus, "");
+  } catch (error) {
+    setStatus(el.crmAuthStatus, `No se pudo activar: ${error.message}`, "error");
+  } finally {
+    el.crmPasswordSetupBtn.disabled = false;
+  }
+}
+
 async function bootstrapAdmin(event) {
   event.preventDefault();
   el.crmBootstrapBtn.disabled = true;
@@ -2321,6 +2488,7 @@ async function createAdminAccount() {
     is_default: el.adminCreateDefault.checked,
     admin_email: el.adminCreateAdminEmail.value,
     admin_password: el.adminCreateAdminPassword.value,
+    admin_send_invite: !String(el.adminCreateAdminPassword.value || "").trim(),
     admin_display_name: el.adminCreateAdminDisplayName.value,
   };
 
@@ -2350,11 +2518,13 @@ async function createAdminAccount() {
       await handleAccountChange(data.account.id);
       setMainView("config");
     }
-    setStatus(
-      el.adminAccountStatus,
-      "Cuenta creada correctamente.",
-      "ok"
-    );
+    const invite = data?.client_admin_invite || null;
+    const inviteMessage = invite?.email?.ok
+      ? "Cuenta creada correctamente. Invitacion enviada al admin cliente."
+      : invite?.setup_url
+        ? `Cuenta creada correctamente. Email no enviado; enlace de activacion: ${invite.setup_url}`
+        : "Cuenta creada correctamente.";
+    setStatus(el.adminAccountStatus, inviteMessage, "ok");
   } catch (error) {
     setStatus(el.adminAccountStatus, `No se pudo crear: ${error.message}`, "error");
   } finally {
@@ -2632,6 +2802,12 @@ function getEffectiveEmailValidation(config = state.appConfig || {}) {
     };
   }
   return validation;
+}
+
+function hasConfiguredWhatsApp(config = state.appConfig || {}) {
+  return Boolean(
+    String(config?.contact?.public_whatsapp_number || "").replace(/\D/g, "")
+  );
 }
 
 function splitSpreadsheetLine(raw = "") {
@@ -3219,8 +3395,8 @@ function buildConfigPayload() {
   const knowledge_sources = collectKnowledgeSources();
   const message_templates = collectMessageTemplates();
   const automation_flows = collectAutomationFlows();
-  const lead_capture = {
-    fields: {
+    const lead_capture = {
+      fields: {
       name: Boolean(el.configLeadCaptureName?.checked),
       company_name: Boolean(el.configLeadCaptureCompanyName?.checked),
       business_type: Boolean(el.configLeadCaptureBusinessType?.checked),
@@ -3231,9 +3407,12 @@ function buildConfigPayload() {
       urgency: Boolean(el.configLeadCaptureUrgency?.checked),
       preferred_contact_channel: Boolean(el.configLeadCapturePreferredChannel?.checked),
       email: Boolean(el.configLeadCaptureEmail?.checked),
-      phone: Boolean(el.configLeadCapturePhone?.checked),
-    },
-  };
+        phone: Boolean(el.configLeadCapturePhone?.checked),
+      },
+      custom_fields: Array.isArray(parseJsonField(el.configLeadCustomFields?.value, []))
+        ? parseJsonField(el.configLeadCustomFields?.value, [])
+        : [],
+    };
   const notifications = {
     email_to: String(el.configNotificationsEmailTo?.value || "").trim(),
     notify_new_lead: Boolean(el.configNotifyNewLead?.checked),
@@ -3284,6 +3463,9 @@ function buildConfigPayload() {
       },
       lead_forms: {
         website_stack: el.configExternalLeadType?.value || "custom_code",
+        setup_owner: el.configExternalLeadOwner?.value || "developer",
+        capture_goal: el.configExternalLeadGoal?.value || "",
+        custom_capture_notes: el.configExternalLeadNotes?.value || "",
         meta_source: el.configMetaLeadSource.value,
         google_source: el.configGoogleLeadSource.value,
         sheet_document: el.configLeadSheetDocument.value,
@@ -3795,6 +3977,16 @@ function renderLeadDetail() {
 
   el.leadTitle.textContent = getLeadDisplayName(lead);
   el.leadChannel.textContent = lead.channel || "web";
+  const customMeta = formatCustomFields(
+    lead.custom_fields || {},
+    state.appConfig?.lead_capture?.custom_fields || []
+  );
+  const customMetaHtml = customMeta
+    .map(
+      (item) =>
+        `<div class="meta-box"><strong>${escapeHtml(item.label)}</strong>${escapeHtml(item.value)}</div>`
+    )
+    .join("");
   el.leadMeta.innerHTML = `
     <div class="meta-box"><strong>Servicio</strong>${lead.interest_service || "-"}</div>
     <div class="meta-box"><strong>Presupuesto</strong>${lead.budget_range || "-"}</div>
@@ -3804,6 +3996,7 @@ function renderLeadDetail() {
     <div class="meta-box"><strong>Actividad</strong>${lead.business_activity || "-"}</div>
     <div class="meta-box"><strong>Origen</strong>${lead.source_platform || "-"}</div>
     <div class="meta-box"><strong>Campaña</strong>${lead.source_campaign || "-"}</div>
+    ${customMetaHtml}
   `;
 
   el.crmStatus.value = lead.crm_status || "nuevo";
@@ -3822,6 +4015,9 @@ function renderLeadDetail() {
   el.nextAction.value = lead.next_action || "";
   el.followUpAt.value = toDatetimeLocal(lead.follow_up_at);
   el.internalNotes.value = lead.internal_notes || "";
+  if (el.leadCustomFields) {
+    el.leadCustomFields.value = stringifyJsonField(lead.custom_fields || {}, "");
+  }
   if (el.deleteLeadBtn) {
     el.deleteLeadBtn.disabled = false;
     el.deleteLeadBtn.classList.remove("is-busy");
@@ -4051,6 +4247,12 @@ function renderConfig() {
   if (el.configLeadCapturePreferredChannel) el.configLeadCapturePreferredChannel.checked = leadCaptureFields.preferred_contact_channel !== false;
   if (el.configLeadCaptureEmail) el.configLeadCaptureEmail.checked = leadCaptureFields.email !== false;
   if (el.configLeadCapturePhone) el.configLeadCapturePhone.checked = Boolean(leadCaptureFields.phone);
+  if (el.configLeadCustomFields) {
+    el.configLeadCustomFields.value = stringifyJsonField(
+      config?.lead_capture?.custom_fields || [],
+      ""
+    );
+  }
   renderKnowledgeSources(config?.knowledge_sources || {});
   normalizeKnowledgeCopy();
   renderSectorPresets();
@@ -4087,6 +4289,18 @@ function renderConfig() {
     if (el.configExternalLeadType) {
       el.configExternalLeadType.value =
         config?.integrations?.lead_forms?.website_stack || "custom_code";
+    }
+    if (el.configExternalLeadOwner) {
+      el.configExternalLeadOwner.value =
+        config?.integrations?.lead_forms?.setup_owner || "developer";
+    }
+    if (el.configExternalLeadGoal) {
+      el.configExternalLeadGoal.value =
+        config?.integrations?.lead_forms?.capture_goal || "";
+    }
+    if (el.configExternalLeadNotes) {
+      el.configExternalLeadNotes.value =
+        config?.integrations?.lead_forms?.custom_capture_notes || "";
     }
     el.configMetaLeadSource.value =
       config?.integrations?.lead_forms?.meta_source || "google_sheets";
@@ -4973,11 +5187,12 @@ async function saveLead() {
       preferred_contact_channel: el.leadPreferredContactChannel.value,
       crm_status: el.crmStatus.value,
       quote_status: el.quoteStatus.value,
-      assigned_to: el.assignedTo.value,
-      next_action: el.nextAction.value,
-      follow_up_at: el.followUpAt.value ? new Date(el.followUpAt.value).toISOString() : null,
-      internal_notes: el.internalNotes.value,
-    };
+        assigned_to: el.assignedTo.value,
+        next_action: el.nextAction.value,
+        follow_up_at: el.followUpAt.value ? new Date(el.followUpAt.value).toISOString() : null,
+        internal_notes: el.internalNotes.value,
+        custom_fields: parseJsonField(el.leadCustomFields?.value, {}),
+      };
 
     const response = await fetchJson(`${API_BASE}/leads/${state.selectedLead.id}`, {
       method: "POST",
@@ -5586,8 +5801,12 @@ el.adminCreateAccountBtn?.addEventListener("click", createAdminAccount);
 el.logoutBtn?.addEventListener("click", logoutCrm);
 el.configBackBtn?.addEventListener("click", () => setMainView("sales"));
 el.crmLoginForm?.addEventListener("submit", loginCrm);
+el.crmPasswordSetupForm?.addEventListener("submit", setupCrmPassword);
 el.crmBootstrapForm?.addEventListener("submit", bootstrapAdmin);
 el.crmAuthSwitchBtn?.addEventListener("click", () => {
+  if (new URLSearchParams(window.location.search).get("setup_token")) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
   setAuthMode("login");
   setStatus(el.crmAuthStatus, "");
   el.crmLoginEmail.value = el.crmBootstrapEmail.value || "";
@@ -5752,6 +5971,15 @@ el.configCopyExternalPayloadBtn?.addEventListener("click", () => {
 el.configExternalLeadType?.addEventListener("change", () => {
   renderExternalLeadIntegration(buildConfigPayload());
 });
+el.configExternalLeadOwner?.addEventListener("change", () => {
+  renderExternalLeadIntegration(buildConfigPayload());
+});
+el.configExternalLeadGoal?.addEventListener("input", () => {
+  renderExternalLeadIntegration(buildConfigPayload());
+});
+el.configExternalLeadNotes?.addEventListener("input", () => {
+  renderExternalLeadIntegration(buildConfigPayload());
+});
 el.configWidgetPreviewBtn?.addEventListener("click", () => {
   const account = getActiveAccount();
   if (!account?.id) {
@@ -5786,6 +6014,15 @@ async function startCrm() {
     el.mobileDateFilter.value = el.dateFilter.value;
   }
   syncMobileAdaptiveUi();
+
+  const params = new URLSearchParams(window.location.search);
+  const setupToken = params.get("setup_token") || "";
+  if (setupToken) {
+    setAuthenticatedUi(false);
+    setAuthMode("password_setup");
+    el.crmPasswordSetupEmail.value = params.get("email") || "";
+    return;
+  }
 
   const user = await hydrateCurrentUser();
   if (user) {

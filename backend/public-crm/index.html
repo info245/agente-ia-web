@@ -25,6 +25,22 @@
         <button id="crmLoginBtn" type="submit">Entrar</button>
       </form>
 
+      <form id="crmPasswordSetupForm" class="crm-auth-form is-hidden">
+        <label>
+          Email
+          <input id="crmPasswordSetupEmail" type="email" autocomplete="username" readonly />
+        </label>
+        <label>
+          Nueva contraseÃ±a
+          <input id="crmPasswordSetupPassword" type="password" autocomplete="new-password" />
+        </label>
+        <label>
+          Repetir contraseÃ±a
+          <input id="crmPasswordSetupPasswordConfirm" type="password" autocomplete="new-password" />
+        </label>
+        <button id="crmPasswordSetupBtn" type="submit">Establecer contraseÃ±a</button>
+      </form>
+
       <form id="crmBootstrapForm" class="crm-auth-form is-hidden">
         <label>
           Nombre
@@ -201,7 +217,7 @@
                 </label>
                 <label>
                   Password admin cliente
-                  <input id="adminCreateAdminPassword" type="password" placeholder="Minimo 8 caracteres" />
+                  <input id="adminCreateAdminPassword" type="password" placeholder="Opcional: si lo dejas vacio se envia invitacion" />
                 </label>
                 <label>
                   Nombre visible admin
@@ -454,6 +470,11 @@
                 <label>
                   Notas internas
                   <textarea id="internalNotes" name="internal_notes" rows="8"></textarea>
+                </label>
+
+                <label>
+                  Campos personalizados
+                  <textarea id="leadCustomFields" name="custom_fields" rows="6" placeholder='{"nivel_idioma":"B2","disponibilidad":"martes 17:00"}'></textarea>
                 </label>
 
                 <div class="lead-form-actions">
@@ -878,7 +899,7 @@
                           <small class="config-field-help">Estos son los campos estructurados soportados hoy por el CRM. Si luego quieres añadir más campos como edad o localidad, habría que incorporarlos también al modelo de lead.</small>
                         </div>
                       </div>
-                      <div class="config-capture-grid">
+                        <div class="config-capture-grid">
                         <label class="config-check-card"><input id="configLeadCaptureName" type="checkbox" /> <span>Nombre</span></label>
                         <label class="config-check-card"><input id="configLeadCaptureCompanyName" type="checkbox" /> <span>Empresa</span></label>
                         <label class="config-check-card"><input id="configLeadCaptureBusinessType" type="checkbox" /> <span>Tipo de negocio</span></label>
@@ -890,8 +911,12 @@
                         <label class="config-check-card"><input id="configLeadCapturePreferredChannel" type="checkbox" /> <span>Canal preferido</span></label>
                         <label class="config-check-card"><input id="configLeadCaptureEmail" type="checkbox" /> <span>Email</span></label>
                         <label class="config-check-card"><input id="configLeadCapturePhone" type="checkbox" /> <span>Teléfono / WhatsApp</span></label>
-                      </div>
-                    </section>
+                        </div>
+                        <label class="knowledge-field">
+                          Campos personalizados
+                          <textarea id="configLeadCustomFields" rows="7" placeholder='[{"key":"nivel_idioma","label":"Nivel de idioma","type":"select","required":true,"options":["A1","A2","B1","B2","C1","C2"],"prompt":"¿Qué nivel de idioma tienes?"},{"key":"disponibilidad","label":"Disponibilidad","type":"text","required":false,"prompt":"¿Qué día y hora te vendría bien?"}]'></textarea>
+                        </label>
+                      </section>
 
                     <div class="quote-grid-full services-editor">
                       <div class="services-editor-head">
@@ -1377,11 +1402,29 @@
                       <label class="quote-grid-full">
                         Tipo de web o integración
                         <select id="configExternalLeadType">
+                          <option value="unknown">No lo sé todavía</option>
                           <option value="custom_code">Código propio / Next.js / backend propio</option>
                           <option value="wordpress">WordPress / plugin de formularios</option>
                           <option value="website_builder">Webflow / Wix / constructor visual</option>
                           <option value="automation">Make / n8n / Zapier / otro CRM</option>
                         </select>
+                      </label>
+                      <label>
+                        Quién lo va a conectar
+                        <select id="configExternalLeadOwner">
+                          <option value="developer">Mi desarrollador</option>
+                          <option value="tmedia">TMedia</option>
+                          <option value="automation">Con Make / n8n / Zapier</option>
+                          <option value="unknown">Aún no lo sé</option>
+                        </select>
+                      </label>
+                      <label>
+                        Qué queréis capturar
+                        <input id="configExternalLeadGoal" type="text" placeholder="Ej. nombre, email, empresa, mensaje, presupuesto..." />
+                      </label>
+                      <label class="quote-grid-full">
+                        Campos especiales u observaciones
+                        <textarea id="configExternalLeadNotes" rows="4" placeholder="Aquí puedes indicar si tu formulario tiene campos raros, consentimientos propios, varios pasos o cualquier matiz importante."></textarea>
                       </label>
                     </div>
                     <div id="configExternalLeadTypeHint" class="config-inline-note">
@@ -1400,51 +1443,54 @@
                       </article>
                     </div>
 
-                    <div class="quote-grid">
-                      <label class="quote-grid-full">
-                        Endpoint de entrada
-                        <input id="configExternalLeadEndpoint" type="text" readonly />
-                      </label>
+                    <details class="config-external-technical">
+                      <summary>Ver detalles técnicos para desarrollo</summary>
+                      <div class="quote-grid">
+                        <label class="quote-grid-full">
+                          Endpoint de entrada
+                          <input id="configExternalLeadEndpoint" type="text" readonly />
+                        </label>
 
-                      <label>
-                        Header de autenticación
-                        <input id="configExternalLeadAuthHeader" type="text" readonly />
-                      </label>
+                        <label>
+                          Header de autenticación
+                          <input id="configExternalLeadAuthHeader" type="text" readonly />
+                        </label>
 
-                      <label>
-                        Account slug
-                        <input id="configExternalLeadAccountSlug" type="text" readonly />
-                      </label>
+                        <label>
+                          Account slug
+                          <input id="configExternalLeadAccountSlug" type="text" readonly />
+                        </label>
 
-                      <label>
-                        Source platform
-                        <input id="configExternalLeadSourcePlatform" type="text" readonly />
-                      </label>
+                        <label>
+                          Source platform
+                          <input id="configExternalLeadSourcePlatform" type="text" readonly />
+                        </label>
 
-                      <label>
-                        Form name sugerido
-                        <input id="configExternalLeadFormName" type="text" readonly />
-                      </label>
-                      <label class="quote-grid-full">
-                        Mapeo recomendado
-                        <textarea id="configExternalLeadMapping" rows="8" readonly></textarea>
-                      </label>
-                      <label class="quote-grid-full">
-                        Ejemplo listo para pasar
-                        <textarea id="configExternalLeadSnippet" rows="12" readonly></textarea>
-                      </label>
+                        <label>
+                          Form name sugerido
+                          <input id="configExternalLeadFormName" type="text" readonly />
+                        </label>
+                        <label class="quote-grid-full">
+                          Campos habituales del CRM
+                          <textarea id="configExternalLeadMapping" rows="8" readonly></textarea>
+                        </label>
+                        <label class="quote-grid-full">
+                          Ejemplo listo para pasar
+                          <textarea id="configExternalLeadSnippet" rows="12" readonly></textarea>
+                        </label>
 
-                      <label class="quote-grid-full">
-                        Payload base
-                        <textarea id="configExternalLeadPayload" rows="10" readonly></textarea>
-                      </label>
-                    </div>
+                        <label class="quote-grid-full">
+                          Payload base flexible
+                          <textarea id="configExternalLeadPayload" rows="10" readonly></textarea>
+                        </label>
+                      </div>
 
-                    <div class="config-inline-actions">
-                      <button id="configCopyExternalEndpointBtn" type="button" class="crm-secondary-btn">Copiar endpoint</button>
-                      <button id="configCopyExternalSnippetBtn" type="button" class="crm-secondary-btn">Copiar ejemplo</button>
-                      <button id="configCopyExternalPayloadBtn" type="button" class="crm-secondary-btn">Copiar payload</button>
-                    </div>
+                      <div class="config-inline-actions">
+                        <button id="configCopyExternalEndpointBtn" type="button" class="crm-secondary-btn">Copiar endpoint</button>
+                        <button id="configCopyExternalSnippetBtn" type="button" class="crm-secondary-btn">Copiar ejemplo</button>
+                        <button id="configCopyExternalPayloadBtn" type="button" class="crm-secondary-btn">Copiar payload</button>
+                      </div>
+                    </details>
                     <div id="configExternalLeadCopyStatus" class="save-status" aria-live="polite"></div>
                   </article>
                 </div>
