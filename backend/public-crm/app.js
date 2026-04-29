@@ -577,6 +577,8 @@ const el = {
   configExternalLeadNotes: document.getElementById("configExternalLeadNotes"),
   configExternalLeadTypeHint: document.getElementById("configExternalLeadTypeHint"),
   configExternalLeadGuide: document.getElementById("configExternalLeadGuide"),
+  configExternalLeadActionPlan: document.getElementById("configExternalLeadActionPlan"),
+  configExternalLeadInstructions: document.getElementById("configExternalLeadInstructions"),
   configExternalLeadEndpoint: document.getElementById("configExternalLeadEndpoint"),
   configExternalLeadAuthHeader: document.getElementById("configExternalLeadAuthHeader"),
   configExternalLeadAccountSlug: document.getElementById("configExternalLeadAccountSlug"),
@@ -586,6 +588,7 @@ const el = {
   configExternalLeadSnippet: document.getElementById("configExternalLeadSnippet"),
   configExternalLeadPayload: document.getElementById("configExternalLeadPayload"),
   configCopyExternalEndpointBtn: document.getElementById("configCopyExternalEndpointBtn"),
+  configCopyExternalInstructionsBtn: document.getElementById("configCopyExternalInstructionsBtn"),
   configCopyExternalSnippetBtn: document.getElementById("configCopyExternalSnippetBtn"),
   configCopyExternalPayloadBtn: document.getElementById("configCopyExternalPayloadBtn"),
   configExternalLeadCopyStatus: document.getElementById("configExternalLeadCopyStatus"),
@@ -1708,6 +1711,92 @@ function buildExternalLeadHumanSummary(config = state.appConfig || {}, type = "c
   return summary.join(" ");
 }
 
+function getExternalLeadActionSteps(config = state.appConfig || {}, type = "custom_code") {
+  const owner = String(
+    config?.integrations?.lead_forms?.setup_owner ||
+      el.configExternalLeadOwner?.value ||
+      "developer"
+  ).trim() || "developer";
+  const goal = String(
+    config?.integrations?.lead_forms?.capture_goal ||
+      el.configExternalLeadGoal?.value ||
+      ""
+  ).trim();
+
+  if (type === "unknown") {
+    return [
+      "Identifica cómo está hecha la web o quién lleva el formulario.",
+      "Pásanos el acceso, el repo o una captura del sistema.",
+      "Cuando lo sepamos, elegimos la vía más simple para conectar el lead al CRM.",
+    ];
+  }
+
+  if (owner === "tmedia") {
+    return [
+      "Déjanos guardado aquí qué queréis capturar y cualquier campo especial.",
+      "Pásanos acceso, repo, plugin o captura del sistema del formulario.",
+      "Nosotros te diremos la conexión exacta o la implementaremos contigo.",
+    ];
+  }
+
+  if (owner === "automation") {
+    return [
+      "Usa Make, n8n o Zapier como capa intermedia para transformar el lead.",
+      "Haz un POST al endpoint del CRM con el secreto compartido.",
+      goal
+        ? `Mapea al menos estos datos: ${goal}.`
+        : "Mapea al menos nombre, email, mensaje y consentimiento si existe.",
+    ];
+  }
+
+  return [
+    "Copia las instrucciones y pásaselas al desarrollador de la web.",
+    "Mantén el email como aviso secundario y el CRM como destino principal.",
+    goal
+      ? `Pide que capture al menos esto: ${goal}.`
+      : "Pide que mande los campos que existan; no hace falta una estructura rígida cerrada.",
+  ];
+}
+
+function buildExternalLeadInstructions(config = state.appConfig || {}, type = "custom_code") {
+  const owner = String(
+    config?.integrations?.lead_forms?.setup_owner ||
+      el.configExternalLeadOwner?.value ||
+      "developer"
+  ).trim() || "developer";
+  const goal = String(
+    config?.integrations?.lead_forms?.capture_goal ||
+      el.configExternalLeadGoal?.value ||
+      ""
+  ).trim();
+  const notes = String(
+    config?.integrations?.lead_forms?.custom_capture_notes ||
+      el.configExternalLeadNotes?.value ||
+      ""
+  ).trim();
+  const details = getExternalLeadModeDetails(type);
+  const endpoint = `${getBaseOrigin()}/api/integrations/external-lead`;
+  const account = getActiveAccount();
+  const slug = String(account?.slug || "").trim() || "cliente-demo";
+
+  const lines = [
+    `Tipo de origen: ${details.formName} (${details.sourcePlatform})`,
+    `Quién lo conecta: ${owner}`,
+    `Endpoint del CRM: ${endpoint}`,
+    `Header: x-integrations-secret`,
+    `Account slug: ${slug}`,
+    goal ? `Qué queremos capturar: ${goal}` : "Qué queremos capturar: nombre, email, mensaje y lo que exista en el formulario.",
+    notes ? `Observaciones: ${notes}` : "Observaciones: si hay campos extra o raros, pueden enviarse dentro de custom_fields.",
+    "",
+    "Notas importantes:",
+    "- El CRM no exige que todos los formularios tengan los mismos campos.",
+    "- Envía primero lo que exista y deja los campos extra en custom_fields.",
+    "- Usa el CRM como destino principal y el email solo como notificación secundaria.",
+  ];
+
+  return lines.join("\n");
+}
+
 function buildExternalLeadSnippet(config = state.appConfig || {}, type = "custom_code") {
   const account = getActiveAccount();
   const accountSlug = String(account?.slug || "").trim() || "cliente-demo";
@@ -1807,6 +1896,21 @@ function renderExternalLeadIntegration(config = state.appConfig || {}) {
         `
       )
       .join("");
+  }
+  if (el.configExternalLeadActionPlan) {
+    el.configExternalLeadActionPlan.innerHTML = getExternalLeadActionSteps(config, type)
+      .map(
+        (step, index) => `
+          <div class="config-external-action-step">
+            <span>${index + 1}</span>
+            <p>${escapeHtml(step)}</p>
+          </div>
+        `
+      )
+      .join("");
+  }
+  if (el.configExternalLeadInstructions) {
+    el.configExternalLeadInstructions.value = buildExternalLeadInstructions(config, type);
   }
   if (el.configExternalLeadStatusBadge) {
     el.configExternalLeadStatusBadge.textContent = accountSlug ? details.badge : "Falta slug";
@@ -5951,6 +6055,13 @@ el.configCopyExternalEndpointBtn?.addEventListener("click", () => {
   copyToClipboard(
     el.configExternalLeadEndpoint?.value || "",
     "Endpoint de entrada copiado.",
+    el.configExternalLeadCopyStatus
+  );
+});
+el.configCopyExternalInstructionsBtn?.addEventListener("click", () => {
+  copyToClipboard(
+    el.configExternalLeadInstructions?.value || "",
+    "Instrucciones de integración copiadas.",
     el.configExternalLeadCopyStatus
   );
 });
