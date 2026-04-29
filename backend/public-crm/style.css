@@ -2787,6 +2787,46 @@ textarea {
   scrollbar-color: rgba(109, 65, 243, 0.38) transparent;
 }
 
+.lead-bulk-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(191, 208, 234, 0.9);
+  border-radius: 18px;
+  background: rgba(248, 250, 255, 0.9);
+}
+
+.lead-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lead-bulk-check,
+.lead-mobile-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.lead-check-col {
+  width: 56px;
+  min-width: 56px;
+  text-align: center;
+}
+
+.lead-row-checkbox,
+.lead-mobile-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
 .lead-mobile-list {
   display: none;
 }
@@ -2930,13 +2970,15 @@ textarea {
 
 .lead-table th:nth-child(1),
 .lead-table td:nth-child(1) {
-  min-width: 220px;
-  white-space: nowrap;
+  min-width: 56px;
+  width: 56px;
+  text-align: center;
 }
 
 .lead-table th:nth-child(2),
 .lead-table td:nth-child(2) {
-  min-width: 140px;
+  min-width: 220px;
+  white-space: nowrap;
 }
 
 .lead-table th:nth-child(3),
@@ -2946,29 +2988,34 @@ textarea {
 
 .lead-table th:nth-child(4),
 .lead-table td:nth-child(4) {
-  min-width: 110px;
+  min-width: 140px;
 }
 
 .lead-table th:nth-child(5),
 .lead-table td:nth-child(5) {
-  min-width: 140px;
+  min-width: 110px;
 }
 
 .lead-table th:nth-child(6),
 .lead-table td:nth-child(6) {
+  min-width: 140px;
+}
+
+.lead-table th:nth-child(7),
+.lead-table td:nth-child(7) {
   min-width: 260px;
   white-space: normal;
   word-break: break-word;
 }
 
-.lead-table th:nth-child(7),
-.lead-table td:nth-child(7) {
+.lead-table th:nth-child(8),
+.lead-table td:nth-child(8) {
   min-width: 170px;
   white-space: nowrap;
 }
 
-.lead-table th:nth-child(8),
-.lead-table td:nth-child(8) {
+.lead-table th:nth-child(9),
+.lead-table td:nth-child(9) {
   min-width: 150px;
 }
 
@@ -3589,6 +3636,15 @@ textarea {
     display: grid;
     gap: 12px;
     margin-top: 8px;
+  }
+
+  .lead-bulk-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .lead-bulk-actions {
+    justify-content: space-between;
   }
 
   .lead-mobile-card {

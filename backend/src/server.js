@@ -4713,6 +4713,30 @@ async function handleCrmLeadUpdate(req, res) {
 
 app.patch("/api/crm/leads/:leadId", handleCrmLeadUpdate);
 app.post("/api/crm/leads/:leadId", handleCrmLeadUpdate);
+app.post("/api/crm/leads/bulk-delete", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const leadIds = Array.isArray(req.body?.lead_ids)
+      ? req.body.lead_ids.map((item) => String(item || "").trim()).filter(Boolean)
+      : [];
+
+    if (!leadIds.length) {
+      return res.status(400).json({ ok: false, error: "No se han recibido leads para eliminar." });
+    }
+
+    const deletedIds = [];
+    for (const leadId of leadIds) {
+      await deleteCrmLeadById(leadId, { accountId: account.id });
+      deletedIds.push(leadId);
+    }
+
+    res.json({ ok: true, deleted_ids: deletedIds, deleted_count: deletedIds.length });
+  } catch (error) {
+    const message = String(error.message || "");
+    const status = message.toLowerCase().includes("no encontrado") ? 404 : 500;
+    res.status(status).json({ ok: false, error: error.message });
+  }
+});
 app.delete("/api/crm/leads/:leadId", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);

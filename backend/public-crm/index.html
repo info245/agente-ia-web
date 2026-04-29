@@ -312,10 +312,22 @@
               <span id="leadTableInfo" class="table-count">0 resultados</span>
             </div>
 
+            <div class="lead-bulk-toolbar">
+              <label class="lead-bulk-check">
+                <input id="leadSelectPageCheckbox" type="checkbox" />
+                <span>Seleccionar esta página</span>
+              </label>
+              <div class="lead-bulk-actions">
+                <span id="leadBulkSelectionInfo" class="table-count">0 seleccionados</span>
+                <button id="leadBulkDeleteBtn" type="button" class="crm-danger-btn" disabled>Eliminar seleccionados</button>
+              </div>
+            </div>
+
             <div class="lead-table-wrap">
               <table class="lead-table">
                 <thead>
                   <tr>
+                    <th class="lead-check-col">Sel.</th>
                     <th>Nombre de lead</th>
                     <th>Servicio</th>
                     <th>Presupuesto</th>

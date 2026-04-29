@@ -6,6 +6,7 @@ const state = {
   adminOverview: [],
   leads: [],
   filteredLeads: [],
+  selectedLeadIds: new Set(),
   selectedLead: null,
   selectedQuote: null,
   selectedAnalysis: null,
@@ -624,6 +625,9 @@ const el = {
   leadTableBody: document.getElementById("leadTableBody"),
   leadMobileList: document.getElementById("leadMobileList"),
   leadTableInfo: document.getElementById("leadTableInfo"),
+  leadSelectPageCheckbox: document.getElementById("leadSelectPageCheckbox"),
+  leadBulkSelectionInfo: document.getElementById("leadBulkSelectionInfo"),
+  leadBulkDeleteBtn: document.getElementById("leadBulkDeleteBtn"),
   leadPrevBtn: document.getElementById("leadPrevBtn"),
   leadNextBtn: document.getElementById("leadNextBtn"),
   leadPaginationInfo: document.getElementById("leadPaginationInfo"),
@@ -3280,29 +3284,33 @@ function applyLeadFilters() {
 }
 
 function renderLeadTable() {
+  normalizeLeadSelection();
   applyLeadFilters();
   el.leadTableBody.innerHTML = "";
   el.leadMobileList.innerHTML = "";
 
   if (!state.filteredLeads.length) {
     el.leadTableBody.innerHTML =
-      '<tr><td colspan="8" class="empty">No hay leads para esos filtros.</td></tr>';
+      '<tr><td colspan="9" class="empty">No hay leads para esos filtros.</td></tr>';
     el.leadMobileList.innerHTML = '<div class="empty">No hay leads para esos filtros.</div>';
     el.leadTableInfo.textContent = "0 resultados";
     el.leadPaginationInfo.textContent = "Pagina 1 de 1";
     el.leadPrevBtn.disabled = true;
     el.leadNextBtn.disabled = true;
+    renderLeadBulkToolbar([]);
     return;
   }
 
-  const totalPages = Math.max(1, Math.ceil(state.filteredLeads.length / LEAD_PAGE_SIZE));
-  const start = state.leadPage * LEAD_PAGE_SIZE;
-  const pageItems = state.filteredLeads.slice(start, start + LEAD_PAGE_SIZE);
+  const { totalPages, safePage, pageItems } = getCurrentLeadPageItems();
+  state.leadPage = safePage;
 
   for (const lead of pageItems) {
     const row = document.createElement("tr");
     row.className = `lead-row${state.selectedLead?.id === lead.id ? " active" : ""}`;
     row.innerHTML = `
+      <td class="lead-check-col" data-label="Seleccion">
+        <input type="checkbox" class="lead-row-checkbox" ${isLeadSelected(lead.id) ? "checked" : ""} />
+      </td>
       <td data-label="Nombre de lead"><button type="button" class="lead-name-btn">${getLeadDisplayName(lead)}</button></td>
       <td data-label="Servicio">${lead.interest_service || "-"}</td>
       <td data-label="Presupuesto">${lead.budget_range || "-"}</td>
@@ -3316,6 +3324,13 @@ function renderLeadTable() {
     row.querySelector(".lead-name-btn")?.addEventListener("click", (event) => {
       event.stopPropagation();
       selectLead(lead.id);
+    });
+    row.querySelector(".lead-row-checkbox")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+    row.querySelector(".lead-row-checkbox")?.addEventListener("change", (event) => {
+      toggleLeadSelection(lead.id, Boolean(event.target?.checked));
+      renderLeadBulkToolbar(pageItems);
     });
     el.leadTableBody.appendChild(row);
 
@@ -3338,6 +3353,10 @@ function renderLeadTable() {
         </div>
       </summary>
       <div class="lead-mobile-details">
+        <label class="lead-mobile-check">
+          <input type="checkbox" class="lead-mobile-checkbox" ${isLeadSelected(lead.id) ? "checked" : ""} />
+          <span>Seleccionar para borrado masivo</span>
+        </label>
         <div><span>Canal</span><strong>${lead.channel || "web"}</strong></div>
         <div><span>Presupuesto</span><strong>${lead.budget_range || "-"}</strong></div>
         <div><span>Telefono</span><strong>${lead.phone || "-"}</strong></div>
@@ -3356,6 +3375,13 @@ function renderLeadTable() {
     mobileCard.querySelector(".lead-mobile-open-btn")?.addEventListener("click", () => {
       selectLead(lead.id);
     });
+    mobileCard.querySelector(".lead-mobile-checkbox")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+    mobileCard.querySelector(".lead-mobile-checkbox")?.addEventListener("change", (event) => {
+      toggleLeadSelection(lead.id, Boolean(event.target?.checked));
+      renderLeadBulkToolbar(pageItems);
+    });
     el.leadMobileList.appendChild(mobileCard);
   }
 
@@ -3363,6 +3389,7 @@ function renderLeadTable() {
   el.leadPaginationInfo.textContent = `Pagina ${state.leadPage + 1} de ${totalPages}`;
   el.leadPrevBtn.disabled = state.leadPage === 0;
   el.leadNextBtn.disabled = state.leadPage >= totalPages - 1;
+  renderLeadBulkToolbar(pageItems);
 }
 
 function renderLeadDetail() {
@@ -3923,6 +3950,55 @@ function setStatus(target, message = "", kind = "") {
   target.className = `save-status${kind ? ` ${kind}` : ""}`;
 }
 
+function getCurrentLeadPageItems() {
+  applyLeadFilters();
+  const totalPages = Math.max(1, Math.ceil(state.filteredLeads.length / LEAD_PAGE_SIZE));
+  const safePage = Math.min(state.leadPage, Math.max(totalPages - 1, 0));
+  const start = safePage * LEAD_PAGE_SIZE;
+  return {
+    totalPages,
+    safePage,
+    pageItems: state.filteredLeads.slice(start, start + LEAD_PAGE_SIZE),
+  };
+}
+
+function normalizeLeadSelection() {
+  const validIds = new Set((state.leads || []).map((lead) => String(lead.id)));
+  state.selectedLeadIds = new Set(
+    Array.from(state.selectedLeadIds || []).filter((id) => validIds.has(String(id)))
+  );
+}
+
+function isLeadSelected(leadId) {
+  return state.selectedLeadIds.has(String(leadId));
+}
+
+function toggleLeadSelection(leadId, selected) {
+  const key = String(leadId || "");
+  if (!key) return;
+  if (selected) state.selectedLeadIds.add(key);
+  else state.selectedLeadIds.delete(key);
+}
+
+function renderLeadBulkToolbar(pageItems = []) {
+  const selectedCount = state.selectedLeadIds.size;
+  if (el.leadBulkSelectionInfo) {
+    el.leadBulkSelectionInfo.textContent = `${selectedCount} seleccionados`;
+  }
+  if (el.leadBulkDeleteBtn) {
+    el.leadBulkDeleteBtn.disabled = selectedCount === 0;
+  }
+  if (el.leadSelectPageCheckbox) {
+    const selectableIds = pageItems.map((lead) => String(lead.id));
+    const selectedOnPage = selectableIds.filter((id) => state.selectedLeadIds.has(id));
+    el.leadSelectPageCheckbox.checked =
+      selectableIds.length > 0 && selectedOnPage.length === selectableIds.length;
+    el.leadSelectPageCheckbox.indeterminate =
+      selectedOnPage.length > 0 && selectedOnPage.length < selectableIds.length;
+    el.leadSelectPageCheckbox.disabled = selectableIds.length === 0;
+  }
+}
+
 async function getServiceFacts(serviceName) {
   if (!serviceName) return null;
   const encoded = encodeURIComponent(serviceName);
@@ -3933,6 +4009,7 @@ async function getServiceFacts(serviceName) {
 async function loadLeads() {
   const data = await fetchJson(`${API_BASE}/leads`);
   state.leads = data.leads || [];
+  normalizeLeadSelection();
   populateServiceFilter(state.leads);
 
   if (!state.selectedLead && state.leads.length) {
@@ -4569,6 +4646,7 @@ async function deleteSelectedLead() {
     });
 
     const deletedLeadId = state.selectedLead.id;
+    state.selectedLeadIds.delete(String(deletedLeadId));
     state.leads = state.leads.filter((lead) => lead.id !== deletedLeadId);
     state.filteredLeads = state.filteredLeads.filter((lead) => lead.id !== deletedLeadId);
     state.selectedLead = state.leads[0] || null;
@@ -4602,6 +4680,71 @@ async function deleteSelectedLead() {
       el.deleteLeadBtn.disabled = !state.selectedLead;
       el.deleteLeadBtn.classList.remove("is-busy");
     }
+  }
+}
+
+async function deleteSelectedLeadsBulk() {
+  const selectedIds = Array.from(state.selectedLeadIds || []);
+  if (!selectedIds.length) return;
+
+  const confirmed = window.confirm(
+    `¿Seguro que quieres eliminar ${selectedIds.length} lead${selectedIds.length === 1 ? "" : "s"} del CRM? Esta acción borra también sus propuestas y análisis guardados.`
+  );
+  if (!confirmed) return;
+
+  if (el.leadBulkDeleteBtn) {
+    el.leadBulkDeleteBtn.disabled = true;
+    el.leadBulkDeleteBtn.classList.add("is-busy");
+  }
+  setStatus(el.leadSaveStatus, `Eliminando ${selectedIds.length} leads...`);
+
+  try {
+    const data = await fetchJson(`${API_BASE}/leads/bulk-delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lead_ids: selectedIds }),
+    });
+
+    const deletedIds = Array.isArray(data?.deleted_ids) ? data.deleted_ids.map(String) : selectedIds;
+    state.selectedLeadIds = new Set(
+      Array.from(state.selectedLeadIds || []).filter((id) => !deletedIds.includes(String(id)))
+    );
+    state.leads = state.leads.filter((lead) => !deletedIds.includes(String(lead.id)));
+    state.filteredLeads = state.filteredLeads.filter((lead) => !deletedIds.includes(String(lead.id)));
+
+    if (state.selectedLead && deletedIds.includes(String(state.selectedLead.id))) {
+      state.selectedLead = state.leads[0] || null;
+    }
+
+    renderLeadTable();
+    renderLeadDetail();
+
+    if (state.selectedLead?.conversation_id) {
+      await loadMessages(state.selectedLead.conversation_id);
+    } else {
+      renderMessages([]);
+    }
+
+    if (state.selectedLead?.id) {
+      await loadQuote(state.selectedLead.id);
+      await loadAnalysis(state.selectedLead.id);
+    } else {
+      renderQuote(null);
+      renderAnalysis(null);
+    }
+
+    setStatus(el.leadSaveStatus, `${deletedIds.length} leads eliminados.`, "ok");
+    loadAnalytics().catch((error) => {
+      console.warn("CRM analytics reload after bulk delete failed", error);
+    });
+  } catch (error) {
+    setStatus(el.leadSaveStatus, `No se pudieron eliminar los leads: ${error.message}`, "error");
+  } finally {
+    if (el.leadBulkDeleteBtn) {
+      el.leadBulkDeleteBtn.disabled = state.selectedLeadIds.size === 0;
+      el.leadBulkDeleteBtn.classList.remove("is-busy");
+    }
+    renderLeadBulkToolbar(getCurrentLeadPageItems().pageItems);
   }
 }
 
@@ -4990,6 +5133,13 @@ async function copyToClipboard(value, successMessage, target = el.configWidgetIn
 
 el.saveBtn.addEventListener("click", saveLead);
 el.deleteLeadBtn?.addEventListener("click", deleteSelectedLead);
+el.leadBulkDeleteBtn?.addEventListener("click", deleteSelectedLeadsBulk);
+el.leadSelectPageCheckbox?.addEventListener("change", (event) => {
+  const { pageItems } = getCurrentLeadPageItems();
+  const checked = Boolean(event.target?.checked);
+  pageItems.forEach((lead) => toggleLeadSelection(lead.id, checked));
+  renderLeadTable();
+});
 el.refreshBtn.addEventListener("click", loadLeads);
 el.accountSelect?.addEventListener("change", () =>
   handleAccountChange(el.accountSelect.value).catch((error) => {
@@ -5239,5 +5389,5 @@ async function startCrm() {
 startCrm().catch((error) => {
   setAuthenticatedUi(false);
   setStatus(el.crmAuthStatus, `No se pudo iniciar el CRM: ${error.message}`, "error");
-  el.leadTableBody.innerHTML = `<tr><td colspan="8" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
+  el.leadTableBody.innerHTML = `<tr><td colspan="9" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
 });
