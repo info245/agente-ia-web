@@ -4711,8 +4711,6 @@ async function handleCrmLeadUpdate(req, res) {
   }
 }
 
-app.patch("/api/crm/leads/:leadId", handleCrmLeadUpdate);
-app.post("/api/crm/leads/:leadId", handleCrmLeadUpdate);
 app.post("/api/crm/leads/bulk-delete", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
@@ -4737,6 +4735,8 @@ app.post("/api/crm/leads/bulk-delete", async (req, res) => {
     res.status(status).json({ ok: false, error: error.message });
   }
 });
+app.patch("/api/crm/leads/:leadId", handleCrmLeadUpdate);
+app.post("/api/crm/leads/:leadId", handleCrmLeadUpdate);
 app.delete("/api/crm/leads/:leadId", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
