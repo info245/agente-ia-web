@@ -74,6 +74,11 @@ export function detectStrongCommercialIntent(text = "") {
   return (
     t.includes("precio") ||
     t.includes("presupuesto") ||
+    t.includes("propuesta") ||
+    t.includes("mandame la propuesta") ||
+    t.includes("mandes la propuesta") ||
+    t.includes("enviame la propuesta") ||
+    t.includes("enviarme la propuesta") ||
     t.includes("cuanto cuesta") ||
     t.includes("cuánto cuesta") ||
     t.includes("trabajar contigo") ||
@@ -119,9 +124,6 @@ function shouldUseCommercialCloseFlow({
     hasContact(lead);
 
   if (hasExplicitCloseIntent) return true;
-  if (isShortAffirmativeResponse(text) && (analysisReady || hasCommercialContext)) {
-    return true;
-  }
 
   return false;
 }

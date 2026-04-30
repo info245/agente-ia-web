@@ -20,8 +20,39 @@ test("accepts a plain name only when the close flow is explicitly asking for it"
   assert.equal(rejected.name, null);
 });
 
+test("extracts corrected names from natural user corrections", () => {
+  const corrected = extractLeadDataFromText(
+    "No me llamo instagram, me llamo Antonii",
+    { current_step: "close_ask_phone", name: "Instagram" }
+  );
+  const reminder = extractLeadDataFromText("David, te lo dije antes", {
+    current_step: "ask_name",
+  });
+
+  assert.equal(corrected.name, "Antonii");
+  assert.equal(reminder.name, "David");
+});
+
+test("mergeLeadData replaces bad remembered names when the user corrects them", () => {
+  const merged = mergeLeadData({
+    currentLead: { name: "Instagram", current_step: "close_ask_phone" },
+    extractedLead: { name: "Antonii" },
+    lastUserMessage: "No me llamo instagram, me llamo Antonii",
+  });
+
+  assert.equal(merged.name, "Antonii");
+});
+
 test("does not treat ecommerce/platform answers as names in close flow", () => {
   const result = extractLeadDataFromText("shopify", {
+    current_step: "close_ask_name",
+  });
+
+  assert.equal(result.name, null);
+});
+
+test("does not treat apology words as names in close flow", () => {
+  const result = extractLeadDataFromText("perdona", {
     current_step: "close_ask_name",
   });
 

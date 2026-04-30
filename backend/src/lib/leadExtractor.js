@@ -95,6 +95,10 @@ const NAME_STOPWORDS = new Set([
   "hola",
   "buenas",
   "gracias",
+  "perdona",
+  "perdon",
+  "perdón",
+  "disculpa",
   "favor",
   "por",
   "vale",
@@ -275,6 +279,10 @@ export function looksLikeValidName(name = "") {
     "tienda online",
     "ecommerce",
     "e-commerce",
+    "perdona",
+    "perdon",
+    "perdón",
+    "disculpa",
     "tengo una",
     "tenemos una",
     "me dedico",
@@ -348,7 +356,31 @@ function isLikelyServiceIntent(text = "") {
 function extractNameFromPhrases(text = "") {
   const t = cleanText(text);
 
+  const namePattern = "([\\p{L}]+(?:\\s+[\\p{L}]+){0,2})";
+  const correctionPatterns = [
+    new RegExp(`\\bno\\s+me\\s+llamo\\s+${namePattern}[^\\p{L}]+me\\s+llamo\\s+${namePattern}\\b`, "iu"),
+    new RegExp(`\\bno\\s+soy\\s+${namePattern}[^\\p{L}]+soy\\s+${namePattern}\\b`, "iu"),
+  ];
+
+  for (const re of correctionPatterns) {
+    const m = t.match(re);
+    const correctedName = m?.[2];
+    if (correctedName && looksLikeValidName(correctedName)) {
+      return toTitleCase(correctedName.trim());
+    }
+  }
+
+  const reminder = t.match(
+    new RegExp(`^${namePattern}\\s*,?\\s+te\\s+lo\\s+dije\\s+antes\\b`, "iu")
+  );
+  if (reminder?.[1] && looksLikeValidName(reminder[1])) {
+    return toTitleCase(reminder[1].trim());
+  }
+
   const patterns = [
+    new RegExp(`\\bme\\s+llamo\\s+${namePattern}\\b`, "iu"),
+    new RegExp(`\\bmi\\s+nombre\\s+es\\s+${namePattern}\\b`, "iu"),
+    new RegExp(`\\bsoy\\s+${namePattern}\\b`, "iu"),
     /\bme llamo\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,2})\b/i,
     /\bmi nombre es\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,2})\b/i,
     /\bsoy\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+(?:\s+[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+){0,2})\b/i,

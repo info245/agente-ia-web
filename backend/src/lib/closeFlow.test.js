@@ -19,7 +19,7 @@ test("detects explicit contact channel without confusing adjacent words", () => 
   assert.equal(prefersEmailChannel("quiero seguir por correo"), true);
 });
 
-test("starts close flow after affirmative response when value was already delivered", () => {
+test("does not start close flow just because the user says yes after value", () => {
   const step = getCommercialCloseStep({
     lead: { interest_service: "SEO" },
     text: "si por favor",
@@ -28,13 +28,25 @@ test("starts close flow after affirmative response when value was already delive
     isGreeting: false,
   });
 
-  assert.equal(step, "close_ask_name");
+  assert.equal(step, null);
 });
 
-test("asks for channel after having a valid name", () => {
+test("does not advance close flow on a plain yes unless there is explicit close intent", () => {
   const step = getCommercialCloseStep({
     lead: { name: "Antonio", interest_service: "SEO" },
     text: "si",
+    channel: "web",
+    analysisReady: true,
+    isGreeting: false,
+  });
+
+  assert.equal(step, null);
+});
+
+test("asks for channel after explicit commercial intent with a valid name", () => {
+  const step = getCommercialCloseStep({
+    lead: { name: "Antonio", interest_service: "SEO" },
+    text: "quiero que me mandes la propuesta",
     channel: "web",
     analysisReady: true,
     isGreeting: false,

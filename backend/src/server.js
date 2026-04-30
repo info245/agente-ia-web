@@ -568,6 +568,10 @@ function isLikelyValidName(value) {
     "captación",
     "confianza",
     "home",
+    "perdona",
+    "perdon",
+    "perdón",
+    "disculpa",
     "mejorar posiciones",
     "conseguir mas leads",
     "conseguir más leads",
@@ -1908,9 +1912,6 @@ function buildStructuredCloseReply({
   if (isGreeting(text)) return null;
 
   const safeName = getSafeLeadName(lead);
-  const hasValueDelivered = hasAnalysisSnapshot(analysisSnapshot);
-  const hasCommercialContext =
-    hasService(lead) || hasMainGoal(lead) || hasBusinessActivity(lead);
   const availableChannels = getPreferredConfiguredChannels(appConfig);
   const closeStep = getCommercialCloseStep({
     lead,
@@ -1919,15 +1920,6 @@ function buildStructuredCloseReply({
     analysisReady: hasAnalysisSnapshot(analysisSnapshot),
     isGreeting: isGreeting(text),
   });
-
-  if (
-    !safeName &&
-    !detectStrongCommercialIntent(text) &&
-    isShortAffirmativeResponse(text) &&
-    (hasValueDelivered || hasCommercialContext)
-  ) {
-    return buildValueThenAskNameReply(analysisSnapshot, lead);
-  }
 
   if (!closeStep) {
     return null;
