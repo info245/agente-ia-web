@@ -104,6 +104,66 @@ function buildClientFriendlySummary(lead = {}) {
   return parts.join(" ");
 }
 
+function compact(value) {
+  return String(value || "").trim();
+}
+
+function buildLeadDetailsSummary(lead = {}) {
+  const lines = [];
+  const add = (label, value) => {
+    const safeValue = compact(value);
+    if (safeValue) lines.push(`${label}: ${safeValue}`);
+  };
+
+  add("Servicio", lead?.interest_service);
+  add("Objetivo", lead?.main_goal);
+  add("Situacion actual", lead?.current_situation);
+  add("Puntos de dolor", lead?.pain_points);
+  add("Tipo de negocio", lead?.business_type);
+  add("Actividad", lead?.business_activity);
+  add("Empresa", lead?.company_name);
+  add("Presupuesto", lead?.budget_range);
+  add("Urgencia", lead?.urgency);
+  add("Canal preferido", lead?.preferred_contact_channel);
+  add("Origen", lead?.source_platform);
+  add("Campana", lead?.source_campaign);
+  add("Formulario", lead?.source_form_name);
+  add("Anuncio", lead?.source_ad_name);
+  add("Conjunto de anuncios", lead?.source_adset_name);
+  add("Notas internas", lead?.internal_notes);
+  add("Siguiente accion", lead?.next_action);
+
+  const customFields =
+    lead?.custom_fields && typeof lead.custom_fields === "object"
+      ? lead.custom_fields
+      : {};
+  for (const [key, value] of Object.entries(customFields)) {
+    if (value === null || value === undefined || value === "") continue;
+    const label = String(key || "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+    add(label, Array.isArray(value) ? value.join(", ") : value);
+  }
+
+  return lines.join("\n");
+}
+
+function buildConversationExcerpt(messages = []) {
+  if (!Array.isArray(messages) || !messages.length) return "";
+
+  return messages
+    .filter((message) => message?.role === "user" || message?.role === "assistant")
+    .slice(-12)
+    .map((message) => {
+      const label = message.role === "user" ? "Usuario" : "Asistente";
+      const content = compact(message.content).replace(/\s+/g, " ");
+      if (!content) return null;
+      return `${label}: ${content.slice(0, 700)}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 let defaultTransporter = null;
 
 function getProviderDefaults(provider = "smtp") {
@@ -265,6 +325,7 @@ export async function sendLeadEmail({
   changedFields = [],
   emailConfig = null,
   recipients = null,
+  conversationMessages = [],
 }) {
   if (!internalEnabled) return { skipped: true, reason: "internal-disabled" };
   const targetRecipients = Array.isArray(recipients) && recipients.length ? recipients : internalTo;
@@ -280,16 +341,44 @@ export async function sendLeadEmail({
     ["Nombre", lead?.name],
     ["Email", lead?.email],
     ["Telefono", lead?.phone],
+    ["Empresa", lead?.company_name],
+    ["Tipo de negocio", lead?.business_type],
+    ["Actividad", lead?.business_activity],
     ["Servicio de interes", lead?.interest_service],
+    ["Objetivo principal", lead?.main_goal],
+    ["Situacion actual", lead?.current_situation],
+    ["Puntos de dolor", lead?.pain_points],
     ["Urgencia", lead?.urgency],
     ["Presupuesto", lead?.budget_range],
+    ["Canal preferido", lead?.preferred_contact_channel],
     ["Lead score", lead?.lead_score],
+    ["Origen", lead?.source_platform],
+    ["Campana", lead?.source_campaign],
+    ["Formulario", lead?.source_form_name],
+    ["Anuncio", lead?.source_ad_name],
+    ["Conjunto de anuncios", lead?.source_adset_name],
+    ["Siguiente accion", lead?.next_action],
+    [
+      "Campos personalizados",
+      lead?.custom_fields && typeof lead.custom_fields === "object"
+        ? Object.entries(lead.custom_fields)
+            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
+            .join(" | ")
+        : "",
+    ],
     ["Consentimiento", lead?.consent ? "Si" : "No"],
     ["Conversation ID", conversation_id || lead?.conversation_id],
     ["Creado", lead?.created_at],
   ];
 
-  const summaryText = lead?.summary || "Sin resumen disponible";
+  const detailSummary = buildLeadDetailsSummary(lead);
+  const conversationExcerpt = buildConversationExcerpt(conversationMessages);
+  const summaryBlocks = [
+    lead?.summary,
+    detailSummary ? `Ficha del lead:\n${detailSummary}` : "",
+    conversationExcerpt ? `Conversacion reciente:\n${conversationExcerpt}` : "",
+  ].filter((block) => compact(block));
+  const summaryText = summaryBlocks.join("\n\n") || "Sin resumen disponible";
   const changedHtml =
     type === "update" && changedFields.length
       ? `<p><b>Campos actualizados:</b> ${escapeHtml(changedFields.join(", "))}</p>`
@@ -306,7 +395,7 @@ export async function sendLeadEmail({
           .join("")}
       </tbody>
     </table>
-    <h3 style="margin: 18px 0 8px;">Resumen final de la conversacion</h3>
+    <h3 style="margin: 18px 0 8px;">Resumen y contexto del lead</h3>
     <div style="font-size: 14px; background: #f7f7f7; border: 1px solid #ddd; padding: 12px; border-radius: 6px;">
       ${nl2br(summaryText)}
     </div>
@@ -315,8 +404,8 @@ export async function sendLeadEmail({
   const textBase = rows.map(([k, v]) => `${k}: ${v ?? ""}`).join("\n");
   const text =
     type === "update" && changedFields.length
-      ? `Campos actualizados: ${changedFields.join(", ")}\n\n${textBase}\n\nResumen final de la conversacion:\n${summaryText}`
-      : `${textBase}\n\nResumen final de la conversacion:\n${summaryText}`;
+      ? `Campos actualizados: ${changedFields.join(", ")}\n\n${textBase}\n\nResumen y contexto del lead:\n${summaryText}`
+      : `${textBase}\n\nResumen y contexto del lead:\n${summaryText}`;
 
   const t = getTransporter(emailConfig);
   const info = await t.sendMail({
@@ -395,6 +484,12 @@ export async function sendQuoteEmailToLead({
   lead,
   quote,
   previewUrl,
+  brandName = "TMedia Global",
+  subject = "",
+  introText = "",
+  previewButtonLabel = "Abrir propuesta",
+  showHumanButton = true,
+  humanButtonLabel = "Hablar con una persona",
   emailConfig = null,
 }) {
   if (!clientEnabled) return { skipped: true, reason: "client-disabled" };
@@ -403,9 +498,9 @@ export async function sendQuoteEmailToLead({
   const runtime = resolveEmailRuntimeConfig(emailConfig);
   if (!runtime.clientFromAddress) throw new Error("Falta el email de salida.");
 
-  const subject = quote?.title
-    ? `${quote.title} - TMedia Global`
-    : "Tu propuesta - TMedia Global";
+  const finalSubject =
+    String(subject || "").trim() ||
+    (quote?.title ? `${quote.title} - ${brandName}` : `Tu propuesta - ${brandName}`);
 
   const whatsappText = [
     `Hola${lead?.name ? `, soy ${lead.name}` : ""}.`,
@@ -422,29 +517,42 @@ export async function sendQuoteEmailToLead({
   const html = `
   <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
     <h2>Hola${lead?.name ? ", " + escapeHtml(lead.name) : ""}</h2>
-    <p>Te compartimos tu propuesta preparada por TMedia Global.</p>
+    <p>${escapeHtml(
+      String(introText || "").trim() ||
+        `Te compartimos tu propuesta preparada por ${brandName}.`
+    ).replace(/\n/g, "<br>")}</p>
     <p><b>Servicio:</b> ${escapeHtml(lead?.interest_service || "No indicado")}</p>
     <p><b>Importe total:</b> ${escapeHtml(totalText)}</p>
     <p>Puedes revisarla aqui:</p>
-    <p><a href="${escapeHtml(previewUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#1f5eff;color:#fff;text-decoration:none;font-weight:bold;">Abrir propuesta</a></p>
+    <p><a href="${escapeHtml(previewUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#1f5eff;color:#fff;text-decoration:none;font-weight:bold;">${escapeHtml(
+      previewButtonLabel || "Abrir propuesta"
+    )}</a></p>
     ${
-      whatsappUrl
+      showHumanButton && whatsappUrl
         ? `<p style="margin-top:14px;">Si prefieres resolver cualquier duda por WhatsApp, tambien puedes seguir por aqui:</p>
-    <p><a href="${escapeHtml(whatsappUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#1faa59;color:#fff;text-decoration:none;font-weight:bold;">Resolver dudas por WhatsApp</a></p>`
+    <p><a href="${escapeHtml(whatsappUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#1faa59;color:#fff;text-decoration:none;font-weight:bold;">${escapeHtml(
+          humanButtonLabel || "Hablar con una persona"
+        )}</a></p>`
         : ""
     }
     <p>Si quieres, podemos comentarla contigo y ajustarla antes de cerrarla.</p>
   </div>`;
 
-  const text = `Hola${lead?.name ? ", " + lead.name : ""}\n\nTe compartimos tu propuesta preparada por TMedia Global.\n\nServicio: ${lead?.interest_service || "No indicado"}\nImporte total: ${totalText}\n\nAbrir propuesta:\n${previewUrl}${
-    whatsappUrl ? `\n\nResolver dudas por WhatsApp:\n${whatsappUrl}` : ""
+  const text = `Hola${lead?.name ? ", " + lead.name : ""}\n\n${
+    String(introText || "").trim() || `Te compartimos tu propuesta preparada por ${brandName}.`
+  }\n\nServicio: ${lead?.interest_service || "No indicado"}\nImporte total: ${totalText}\n\n${
+    previewButtonLabel || "Abrir propuesta"
+  }:\n${previewUrl}${
+    showHumanButton && whatsappUrl
+      ? `\n\n${humanButtonLabel || "Hablar con una persona"}:\n${whatsappUrl}`
+      : ""
   }\n\nSi quieres, podemos comentarla contigo y ajustarla antes de cerrarla.`;
 
   const t = getTransporter(emailConfig);
   const info = await t.sendMail({
     from: runtime.clientFromAddress,
     to: lead.email,
-    subject,
+    subject: finalSubject,
     text,
     html,
     replyTo: runtime.replyToAddress || undefined,

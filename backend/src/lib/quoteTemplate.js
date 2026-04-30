@@ -24,6 +24,14 @@ export function renderQuotePreviewHtml({
   acceptUrl = "",
   rejectUrl = "",
   humanAgentUrl = "",
+  previewButtonLabel = "Abrir propuesta",
+  ctaIntro = "",
+  showAcceptButton = true,
+  acceptButtonLabel = "Aceptar propuesta",
+  showRejectButton = true,
+  rejectButtonLabel = "No me encaja ahora",
+  showHumanButton = true,
+  humanButtonLabel = "Hablar con una persona",
 } = {}) {
   const content = quote?.content_json || {};
   const items = Array.isArray(content.items) ? content.items : [];
@@ -648,7 +656,10 @@ export function renderQuotePreviewHtml({
       <h2>Mensaje de la propuesta</h2>
       <div class="copy">${escapeHtml(content.body || "")}</div>
       <div class="cta-box">
-        <p>Si te encaja, puedes aceptar la propuesta desde aqui. Si no te encaja ahora, tambien puedes indicarlo y dejaremos el CRM actualizado. Y si prefieres hablarlo antes, tienes acceso directo a un agente humano.</p>
+        <p>${escapeHtml(
+          ctaIntro ||
+            "Si te encaja, puedes aceptar la propuesta desde aqui. Si no te encaja ahora, tambien puedes indicarlo. Y si prefieres hablarlo antes, tienes acceso directo a una persona del equipo."
+        )}</p>
         ${
           quoteStatus === "accepted"
             ? `<div class="response-banner">Esta propuesta ya fue aceptada.</div>`
@@ -656,18 +667,24 @@ export function renderQuotePreviewHtml({
             ? `<div class="response-banner">Esta propuesta fue marcada como no encaja ahora.</div>`
             : `<div class="cta-row">
                 ${
-                  acceptUrl
-                    ? `<a class="cta-button" href="${escapeHtml(acceptUrl)}">Aceptar propuesta</a>`
+                  showAcceptButton && acceptUrl
+                    ? `<a class="cta-button" href="${escapeHtml(acceptUrl)}">${escapeHtml(
+                        acceptButtonLabel || "Aceptar propuesta"
+                      )}</a>`
                     : ""
                 }
                 ${
-                  rejectUrl
-                    ? `<a class="cta-button reject" href="${escapeHtml(rejectUrl)}">No me encaja ahora</a>`
+                  showRejectButton && rejectUrl
+                    ? `<a class="cta-button reject" href="${escapeHtml(rejectUrl)}">${escapeHtml(
+                        rejectButtonLabel || "No me encaja ahora"
+                      )}</a>`
                     : ""
                 }
                 ${
-                  humanAgentUrl
-                    ? `<a class="cta-button secondary" href="${escapeHtml(humanAgentUrl)}" target="_blank" rel="noopener noreferrer">Hablar con un agente</a>`
+                  showHumanButton && humanAgentUrl
+                    ? `<a class="cta-button secondary" href="${escapeHtml(humanAgentUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(
+                        humanButtonLabel || "Hablar con una persona"
+                      )}</a>`
                     : ""
                 }
               </div>`

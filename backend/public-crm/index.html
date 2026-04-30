@@ -1123,6 +1123,54 @@
                   </div>
 
                 <div id="configMessageTemplatesList" class="message-template-grid"></div>
+
+                <section class="analysis-editor-card config-deliverables-card">
+                  <div class="analysis-editor-head">
+                    <div>
+                      <span>Emails y botones</span>
+                      <strong>Controla lo que ve el cliente en analisis y propuestas</strong>
+                      <p>Aqui puedes ajustar los botones y mensajes visibles en el HTML y en los emails que salen del CRM.</p>
+                    </div>
+                    <div class="analysis-editor-badge">Cliente-facing</div>
+                  </div>
+
+                  <div class="analysis-editor-grid">
+                    <label class="analysis-editor-field">
+                      <span>Boton principal del email de propuesta</span>
+                      <input id="configQuotePreviewButtonLabel" type="text" placeholder="Abrir propuesta" />
+                    </label>
+
+                    <label class="analysis-editor-field">
+                      <span>Boton principal del email de analisis</span>
+                      <input id="configAnalysisPreviewButtonLabel" type="text" placeholder="Abrir analisis" />
+                    </label>
+
+                    <label class="analysis-editor-field analysis-editor-field-full">
+                      <span>Texto introductorio de botones en la propuesta</span>
+                      <textarea id="configQuoteCtaIntro" rows="4" placeholder="Si te encaja, puedes aceptar la propuesta desde aqui..."></textarea>
+                    </label>
+
+                    <label class="analysis-editor-field">
+                      <span><input id="configQuoteShowAcceptButton" type="checkbox" checked /> Mostrar boton de aceptar</span>
+                      <input id="configQuoteAcceptButtonLabel" type="text" placeholder="Aceptar propuesta" />
+                    </label>
+
+                    <label class="analysis-editor-field">
+                      <span><input id="configQuoteShowRejectButton" type="checkbox" checked /> Mostrar boton de rechazar</span>
+                      <input id="configQuoteRejectButtonLabel" type="text" placeholder="No me encaja ahora" />
+                    </label>
+
+                    <label class="analysis-editor-field">
+                      <span><input id="configQuoteShowHumanButton" type="checkbox" checked /> Mostrar boton para hablar con una persona</span>
+                      <input id="configQuoteHumanButtonLabel" type="text" placeholder="Hablar con una persona" />
+                    </label>
+
+                    <label class="analysis-editor-field">
+                      <span><input id="configAnalysisShowHumanButton" type="checkbox" checked /> Mostrar boton para hablar con una persona en el analisis</span>
+                      <input id="configAnalysisHumanButtonLabel" type="text" placeholder="Hablar con una persona" />
+                    </label>
+                  </div>
+                </section>
               </section>
 
               <section id="configPanelAutomations" class="config-panel" data-config-panel="automations">

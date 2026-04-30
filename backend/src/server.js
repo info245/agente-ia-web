@@ -2561,6 +2561,8 @@ function buildAutomationTemplateVars({ lead, appConfig, previewUrl }) {
     email: lead?.email || "",
     telefono: lead?.phone || "",
     link_presupuesto: previewUrl || "",
+    link_analisis: previewUrl || "",
+    resumen_analisis: lead?.summary || "",
     whatsapp_humano: buildHumanAgentWhatsAppUrl(
       lead?.interest_service || "",
       appConfig
@@ -2734,12 +2736,24 @@ function isValidQuoteResponseToken({ leadId, quoteId, quoteUpdatedAt, token }) {
   return crypto.timingSafeEqual(expectedBuffer, tokenBuffer);
 }
 
-function buildQuoteResponseUrl({ baseUrl, leadId, action, token }) {
+function buildQuoteResponseUrl({ baseUrl, leadId, action, token, accountSlug = "" }) {
   const params = new URLSearchParams({
     action: String(action || ""),
     token: String(token || ""),
   });
+  if (String(accountSlug || "").trim()) {
+    params.set("account_slug", String(accountSlug || "").trim());
+  }
   return `${baseUrl}/crm/quotes/${leadId}/respond?${params.toString()}`;
+}
+
+function buildScopedCrmUrl(baseUrl, path, account = null) {
+  const url = new URL(path, `${baseUrl}/`);
+  const accountSlug = String(account?.slug || "").trim();
+  if (accountSlug) {
+    url.searchParams.set("account_slug", accountSlug);
+  }
+  return url.toString();
 }
 
 function inferBrandNameFromSnapshot(snapshot = {}) {
@@ -5260,6 +5274,7 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
           leadId: lead.id,
           action: "accept",
           token: responseToken,
+          accountSlug: account.slug,
         })
       : "";
     const rejectUrl = quote
@@ -5268,6 +5283,7 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
           leadId: lead.id,
           action: "reject",
           token: responseToken,
+          accountSlug: account.slug,
         })
       : "";
     const humanAgentUrl = quote
@@ -5276,6 +5292,7 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
           leadId: lead.id,
           action: "human",
           token: responseToken,
+          accountSlug: account.slug,
         })
       : buildHumanAgentWhatsAppUrl(lead?.interest_service || "", appConfig);
     const configuredLogoUrl = String(appConfig?.brand?.logo_url || "").trim();
@@ -5293,6 +5310,18 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
       acceptUrl,
       rejectUrl,
       humanAgentUrl,
+      ctaIntro:
+        appConfig?.deliverables?.quote?.cta_intro ||
+        "Si te encaja, puedes aceptar la propuesta desde aqui. Si no te encaja ahora, tambien puedes indicarlo. Y si prefieres comentarlo antes, tienes acceso directo a una persona del equipo.",
+      showAcceptButton: appConfig?.deliverables?.quote?.show_accept_button !== false,
+      acceptButtonLabel:
+        appConfig?.deliverables?.quote?.accept_button_label || "Aceptar propuesta",
+      showRejectButton: appConfig?.deliverables?.quote?.show_reject_button !== false,
+      rejectButtonLabel:
+        appConfig?.deliverables?.quote?.reject_button_label || "No me encaja ahora",
+      showHumanButton: appConfig?.deliverables?.quote?.show_human_button !== false,
+      humanButtonLabel:
+        appConfig?.deliverables?.quote?.human_button_label || "Hablar con una persona",
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(html);
@@ -5383,7 +5412,11 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
       lead?.interest_service || "",
       appConfig
     );
-    const previewUrl = `${req.protocol}://${req.get("host")}/crm/quotes/${lead.id}/preview`;
+    const previewUrl = buildScopedCrmUrl(
+      `${req.protocol}://${req.get("host")}`,
+      `/crm/quotes/${lead.id}/preview`,
+      account
+    );
 
     if (action === "human") {
       await trackConversationEvent({
@@ -5605,17 +5638,38 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
     }
 
     const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const previewUrl = `${baseUrl}/crm/quotes/${lead.id}/preview`;
+    const previewUrl = buildScopedCrmUrl(baseUrl, `/crm/quotes/${lead.id}/preview`, account);
 
     if (via === "email") {
       if (!lead.email) {
         return res.status(400).json({ ok: false, error: "Este lead no tiene email" });
       }
 
+      const quoteTemplateVars = buildAutomationTemplateVars({
+        lead,
+        appConfig,
+        previewUrl,
+      });
+
       await sendQuoteEmailToLead({
         lead,
         quote,
         previewUrl,
+        brandName: appConfig?.brand?.name || "TMedia Global",
+        subject: renderTemplateString(
+          appConfig?.message_templates?.quote_email?.subject ||
+            "Tu propuesta de {servicio} ya esta lista",
+          quoteTemplateVars
+        ),
+        introText: renderTemplateString(
+          appConfig?.message_templates?.quote_email?.body || "",
+          quoteTemplateVars
+        ),
+        previewButtonLabel:
+          appConfig?.deliverables?.quote?.preview_button_label || "Abrir propuesta",
+        showHumanButton: appConfig?.deliverables?.quote?.show_human_button !== false,
+        humanButtonLabel:
+          appConfig?.deliverables?.quote?.human_button_label || "Hablar con una persona",
         emailConfig: appConfig?.integrations?.email || null,
       });
     }
@@ -5699,15 +5753,28 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
     };
 
     const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const previewUrl = `${baseUrl}/crm/analysis/${lead.id}/preview`;
+    const previewUrl = buildScopedCrmUrl(
+      baseUrl,
+      `/crm/analysis/${lead.id}/preview`,
+      account
+    );
     const humanAgentUrl = buildHumanAgentWhatsAppUrl(
       lead?.interest_service || "",
       appConfig
     );
 
-    const subject = analysis?.title
-      ? `${analysis.title} - ${appConfig?.brand?.name || "TMedia Global"}`
-      : `Analisis inicial - ${appConfig?.brand?.name || "TMedia Global"}`;
+    const analysisTemplateVars = {
+      ...buildAutomationTemplateVars({ lead, appConfig, previewUrl }),
+      resumen_analisis:
+        analysis?.content_json?.summary ||
+        lead?.summary ||
+        "Hemos preparado una lectura inicial del caso.",
+    };
+    const subject = renderTemplateString(
+      appConfig?.message_templates?.analysis_email?.subject ||
+        "Tu analisis inicial de {servicio} ya esta listo",
+      analysisTemplateVars
+    );
 
     const html = renderAnalysisEmailHtml({
       lead,
@@ -5715,15 +5782,29 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
       previewUrl,
       humanAgentUrl,
       brandName: appConfig?.brand?.name || "TMedia Global",
+      previewButtonLabel:
+        appConfig?.deliverables?.analysis?.preview_button_label || "Abrir analisis",
+      humanButtonLabel:
+        appConfig?.deliverables?.analysis?.human_button_label || "Hablar con una persona",
+      showHumanButton: appConfig?.deliverables?.analysis?.show_human_button !== false,
+      introText: renderTemplateString(
+        appConfig?.message_templates?.analysis_email?.body || "",
+        analysisTemplateVars
+      ),
     });
 
     const text = [
       `Hola${lead?.name ? ` ${lead.name}` : ""},`,
       "",
-      `Te compartimos tu analisis inicial sobre ${analysis?.recommended_service || lead?.interest_service || "tu caso"}.`,
+      renderTemplateString(
+        appConfig?.message_templates?.analysis_email?.body || "",
+        analysisTemplateVars
+      ),
       "",
-      `Abrir analisis: ${previewUrl}`,
-      humanAgentUrl ? `Hablar con un agente: ${humanAgentUrl}` : "",
+      `${appConfig?.deliverables?.analysis?.preview_button_label || "Abrir analisis"}: ${previewUrl}`,
+      appConfig?.deliverables?.analysis?.show_human_button !== false && humanAgentUrl
+        ? `${appConfig?.deliverables?.analysis?.human_button_label || "Hablar con una persona"}: ${humanAgentUrl}`
+        : "",
     ]
       .filter(Boolean)
       .join("\n");

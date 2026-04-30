@@ -146,6 +146,13 @@ export const DEFAULT_APP_CONFIG = {
       body:
         "Hola {nombre},\n\nTe comparto tu propuesta de {servicio}: {link_presupuesto}\n\nSi quieres comentarla con un agente, tambien puedes escribirnos por WhatsApp: {whatsapp_humano}.\n\nUn saludo,\n{marca}",
     },
+    analysis_email: {
+      channel: "email",
+      label: "Envio de analisis por email",
+      subject: "Tu analisis inicial de {servicio} ya esta listo",
+      body:
+        "Hola {nombre},\n\nTe comparto el analisis inicial que hemos preparado sobre {servicio}.\n\nResumen: {resumen_analisis}\n\nPuedes revisarlo aqui: {link_analisis}\n\nSi prefieres comentarlo con una persona, tambien puedes responder a este correo.\n\nUn saludo,\n{marca}",
+    },
     recovery_whatsapp: {
       channel: "whatsapp",
       label: "Recuperacion por WhatsApp",
@@ -205,6 +212,24 @@ export const DEFAULT_APP_CONFIG = {
           active: true,
         },
       ],
+    },
+  },
+  deliverables: {
+    quote: {
+      preview_button_label: "Abrir propuesta",
+      cta_intro:
+        "Si te encaja, puedes aceptar la propuesta desde aqui. Si no te encaja ahora, tambien puedes indicarlo. Y si prefieres comentarlo antes, tienes acceso directo a una persona del equipo.",
+      show_accept_button: true,
+      accept_button_label: "Aceptar propuesta",
+      show_reject_button: true,
+      reject_button_label: "No me encaja ahora",
+      show_human_button: true,
+      human_button_label: "Hablar con una persona",
+    },
+    analysis: {
+      preview_button_label: "Abrir analisis",
+      show_human_button: true,
+      human_button_label: "Hablar con una persona",
     },
   },
   knowledge_sources: {
@@ -662,6 +687,61 @@ function sanitizeMessageTemplates(value = {}) {
   return result;
 }
 
+function sanitizeDeliverablesConfig(value = {}, defaults = {}) {
+  const quoteDefaults = defaults?.quote || {};
+  const analysisDefaults = defaults?.analysis || {};
+  const quoteIncoming = value?.quote || {};
+  const analysisIncoming = value?.analysis || {};
+
+  return {
+    quote: {
+      preview_button_label: resolveString(
+        quoteIncoming?.preview_button_label,
+        quoteDefaults?.preview_button_label
+      ),
+      cta_intro: resolveString(quoteIncoming?.cta_intro, quoteDefaults?.cta_intro),
+      show_accept_button:
+        typeof quoteIncoming?.show_accept_button === "boolean"
+          ? quoteIncoming.show_accept_button
+          : quoteDefaults?.show_accept_button !== false,
+      accept_button_label: resolveString(
+        quoteIncoming?.accept_button_label,
+        quoteDefaults?.accept_button_label
+      ),
+      show_reject_button:
+        typeof quoteIncoming?.show_reject_button === "boolean"
+          ? quoteIncoming.show_reject_button
+          : quoteDefaults?.show_reject_button !== false,
+      reject_button_label: resolveString(
+        quoteIncoming?.reject_button_label,
+        quoteDefaults?.reject_button_label
+      ),
+      show_human_button:
+        typeof quoteIncoming?.show_human_button === "boolean"
+          ? quoteIncoming.show_human_button
+          : quoteDefaults?.show_human_button !== false,
+      human_button_label: resolveString(
+        quoteIncoming?.human_button_label,
+        quoteDefaults?.human_button_label
+      ),
+    },
+    analysis: {
+      preview_button_label: resolveString(
+        analysisIncoming?.preview_button_label,
+        analysisDefaults?.preview_button_label
+      ),
+      show_human_button:
+        typeof analysisIncoming?.show_human_button === "boolean"
+          ? analysisIncoming.show_human_button
+          : analysisDefaults?.show_human_button !== false,
+      human_button_label: resolveString(
+        analysisIncoming?.human_button_label,
+        analysisDefaults?.human_button_label
+      ),
+    },
+  };
+}
+
 function sanitizeAutomationSteps(steps = []) {
   if (!Array.isArray(steps)) return [];
 
@@ -708,6 +788,10 @@ export function sanitizeAppConfig(input = {}, options = {}) {
   const services = sanitizeServices(input?.services);
   const message_templates = sanitizeMessageTemplates(input?.message_templates);
   const automation_flows = sanitizeAutomationFlows(input?.automation_flows);
+  const deliverables = sanitizeDeliverablesConfig(
+    input?.deliverables,
+    DEFAULT_APP_CONFIG.deliverables || {}
+  );
   const knowledge_sources = sanitizeKnowledgeSources(input?.knowledge_sources);
   const widget = sanitizeWidgetConfig(input?.widget);
   const requestedMode =
@@ -885,6 +969,7 @@ export function sanitizeAppConfig(input = {}, options = {}) {
       },
       },
       message_templates,
+      deliverables,
       automation_flows,
       knowledge_sources,
       services:

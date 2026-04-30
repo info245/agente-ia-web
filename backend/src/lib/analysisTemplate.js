@@ -34,8 +34,9 @@ export function renderAnalysisPreviewHtml({
   const content = analysis?.content_json || {};
   const findings = Array.isArray(content.findings) ? content.findings : [];
   const quickWins = Array.isArray(content.quick_wins) ? content.quick_wins : [];
-  const priorities = Array.isArray(content.priorities) ? content.priorities : [];
   const leadName = lead?.name || lead?.company_name || lead?.email || "Cliente";
+  const priorities = Array.isArray(content.priorities) ? content.priorities : [];
+  const hasPriorities = priorities.length > 0;
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -155,20 +156,6 @@ export function renderAnalysisPreviewHtml({
       line-height: 1.7;
       color: var(--muted);
     }
-    .next-step {
-      border-radius: 22px;
-      padding: 20px;
-      background: linear-gradient(135deg, rgba(109,65,243,0.08), rgba(255,255,255,0.96));
-      border: 1px solid var(--line);
-    }
-    .next-step strong {
-      display: block;
-      margin-bottom: 10px;
-      color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-size: 0.78rem;
-    }
     .footer {
       padding: 20px 36px 32px;
       color: var(--muted);
@@ -231,21 +218,16 @@ export function renderAnalysisPreviewHtml({
       </div>
     </section>
 
-    <section class="section">
-      <div class="grid">
-        <div class="box">
-          <h2>Prioridades</h2>
-          <ul>${renderList(priorities)}</ul>
-        </div>
-        <div class="next-step">
-          <strong>Siguiente paso recomendado</strong>
-          <div>${escapeHtml(
-            content?.next_step ||
-              "Convertir este analisis en una propuesta accionable y priorizada."
-          )}</div>
-        </div>
+    ${
+      hasPriorities
+        ? `<section class="section">
+      <div class="box">
+        <h2>Prioridades</h2>
+        <ul>${renderList(priorities)}</ul>
       </div>
-    </section>
+    </section>`
+        : ""
+    }
 
     <footer class="footer">
       Preparado por ${escapeHtml(brandName)} para ${escapeHtml(leadName)}.
@@ -261,30 +243,49 @@ export function renderAnalysisEmailHtml({
   previewUrl = "",
   humanAgentUrl = "",
   brandName = "TMedia Global",
+  previewButtonLabel = "Abrir analisis",
+  humanButtonLabel = "Hablar con una persona",
+  showHumanButton = true,
+  introText = "",
 } = {}) {
   const content = analysis?.content_json || {};
+  const bodyCopy = String(introText || "").trim();
+  const paragraphs = bodyCopy
+    ? bodyCopy
+        .split(/\n{2,}/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .map((item) => `<p>${escapeHtml(item).replace(/\n/g, "<br>")}</p>`)
+        .join("")
+    : `<p>Te compartimos un analisis inicial preparado por ${escapeHtml(
+        brandName
+      )} para ayudarte a avanzar con ${escapeHtml(
+        analysis?.recommended_service || lead?.interest_service || "tu caso"
+      )}.</p>`;
+
   return `
   <div style="font-family: Inter, Arial, sans-serif; line-height:1.65; color:#14213d;">
     <h2 style="margin-bottom:10px;">Hola${lead?.name ? ` ${escapeHtml(lead.name)}` : ""}</h2>
-    <p>Te compartimos un analisis inicial preparado por ${escapeHtml(brandName)} para ayudarte a avanzar con ${escapeHtml(
-      analysis?.recommended_service || lead?.interest_service || "tu caso"
-    )}.</p>
+    ${paragraphs}
     <p><strong>Resumen:</strong> ${escapeHtml(
       content?.summary || "Hemos detectado varias oportunidades de mejora con impacto comercial."
     )}</p>
     <p style="margin:20px 0;">
       <a href="${escapeHtml(
         previewUrl
-      )}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#6d41f3;color:#fff;text-decoration:none;font-weight:700;">Abrir analisis</a>
+      )}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#6d41f3;color:#fff;text-decoration:none;font-weight:700;">${escapeHtml(
+        previewButtonLabel || "Abrir analisis"
+      )}</a>
     </p>
     ${
-      humanAgentUrl
+      showHumanButton && humanAgentUrl
         ? `<p>Si prefieres comentarlo con una persona, puedes hacerlo aqui:</p>
       <p><a href="${escapeHtml(
         humanAgentUrl
-      )}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#16a34a;color:#fff;text-decoration:none;font-weight:700;">Hablar con un agente</a></p>`
+      )}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#16a34a;color:#fff;text-decoration:none;font-weight:700;">${escapeHtml(
+            humanButtonLabel || "Hablar con una persona"
+          )}</a></p>`
         : ""
     }
-    <p>Si te encaja, el siguiente paso natural es convertir este analisis en una propuesta accionable y priorizada.</p>
   </div>`;
 }

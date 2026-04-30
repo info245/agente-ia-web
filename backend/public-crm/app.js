@@ -25,6 +25,7 @@ const MESSAGE_TEMPLATE_ORDER = [
   "email_first_contact",
   "quote_whatsapp",
   "quote_email",
+  "analysis_email",
   "recovery_whatsapp",
   "recovery_email",
 ];
@@ -621,6 +622,17 @@ const el = {
   configCopyExternalPayloadBtn: document.getElementById("configCopyExternalPayloadBtn"),
   configExternalLeadCopyStatus: document.getElementById("configExternalLeadCopyStatus"),
   configMessageTemplatesList: document.getElementById("configMessageTemplatesList"),
+  configQuotePreviewButtonLabel: document.getElementById("configQuotePreviewButtonLabel"),
+  configQuoteCtaIntro: document.getElementById("configQuoteCtaIntro"),
+  configQuoteShowAcceptButton: document.getElementById("configQuoteShowAcceptButton"),
+  configQuoteAcceptButtonLabel: document.getElementById("configQuoteAcceptButtonLabel"),
+  configQuoteShowRejectButton: document.getElementById("configQuoteShowRejectButton"),
+  configQuoteRejectButtonLabel: document.getElementById("configQuoteRejectButtonLabel"),
+  configQuoteShowHumanButton: document.getElementById("configQuoteShowHumanButton"),
+  configQuoteHumanButtonLabel: document.getElementById("configQuoteHumanButtonLabel"),
+  configAnalysisPreviewButtonLabel: document.getElementById("configAnalysisPreviewButtonLabel"),
+  configAnalysisShowHumanButton: document.getElementById("configAnalysisShowHumanButton"),
+  configAnalysisHumanButtonLabel: document.getElementById("configAnalysisHumanButtonLabel"),
   configAutomationFlowsList: document.getElementById("configAutomationFlowsList"),
   configServicesList: document.getElementById("configServicesListKnowledge"),
   configAddServiceBtn: document.getElementById("configAddServiceBtnKnowledge"),
@@ -3548,6 +3560,23 @@ function buildConfigPayload() {
   const services = collectServiceConfig();
   const knowledge_sources = collectKnowledgeSources();
   const message_templates = collectMessageTemplates();
+  const deliverables = {
+    quote: {
+      preview_button_label: String(el.configQuotePreviewButtonLabel?.value || "").trim(),
+      cta_intro: String(el.configQuoteCtaIntro?.value || "").trim(),
+      show_accept_button: Boolean(el.configQuoteShowAcceptButton?.checked),
+      accept_button_label: String(el.configQuoteAcceptButtonLabel?.value || "").trim(),
+      show_reject_button: Boolean(el.configQuoteShowRejectButton?.checked),
+      reject_button_label: String(el.configQuoteRejectButtonLabel?.value || "").trim(),
+      show_human_button: Boolean(el.configQuoteShowHumanButton?.checked),
+      human_button_label: String(el.configQuoteHumanButtonLabel?.value || "").trim(),
+    },
+    analysis: {
+      preview_button_label: String(el.configAnalysisPreviewButtonLabel?.value || "").trim(),
+      show_human_button: Boolean(el.configAnalysisShowHumanButton?.checked),
+      human_button_label: String(el.configAnalysisHumanButtonLabel?.value || "").trim(),
+    },
+  };
   const automation_flows = collectAutomationFlows();
     const lead_capture = {
       fields: {
@@ -3654,6 +3683,7 @@ function buildConfigPayload() {
       },
     },
     message_templates,
+    deliverables,
     automation_flows,
     services,
   };
@@ -4584,6 +4614,49 @@ function renderConfig() {
     setEmailOauthStatus(buildGoogleOauthReadyMessage(config) || `Cuenta conectada: ${connectedEmail}`, "ok");
   }
   renderMessageTemplates(config?.message_templates || {});
+  const quoteDeliverables = config?.deliverables?.quote || {};
+  const analysisDeliverables = config?.deliverables?.analysis || {};
+  if (el.configQuotePreviewButtonLabel) {
+    el.configQuotePreviewButtonLabel.value =
+      quoteDeliverables.preview_button_label || "Abrir propuesta";
+  }
+  if (el.configQuoteCtaIntro) {
+    el.configQuoteCtaIntro.value =
+      quoteDeliverables.cta_intro ||
+      "Si te encaja, puedes aceptar la propuesta desde aqui. Si no te encaja ahora, tambien puedes indicarlo. Y si prefieres comentarlo antes, tienes acceso directo a una persona del equipo.";
+  }
+  if (el.configQuoteShowAcceptButton) {
+    el.configQuoteShowAcceptButton.checked = quoteDeliverables.show_accept_button !== false;
+  }
+  if (el.configQuoteAcceptButtonLabel) {
+    el.configQuoteAcceptButtonLabel.value =
+      quoteDeliverables.accept_button_label || "Aceptar propuesta";
+  }
+  if (el.configQuoteShowRejectButton) {
+    el.configQuoteShowRejectButton.checked = quoteDeliverables.show_reject_button !== false;
+  }
+  if (el.configQuoteRejectButtonLabel) {
+    el.configQuoteRejectButtonLabel.value =
+      quoteDeliverables.reject_button_label || "No me encaja ahora";
+  }
+  if (el.configQuoteShowHumanButton) {
+    el.configQuoteShowHumanButton.checked = quoteDeliverables.show_human_button !== false;
+  }
+  if (el.configQuoteHumanButtonLabel) {
+    el.configQuoteHumanButtonLabel.value =
+      quoteDeliverables.human_button_label || "Hablar con una persona";
+  }
+  if (el.configAnalysisPreviewButtonLabel) {
+    el.configAnalysisPreviewButtonLabel.value =
+      analysisDeliverables.preview_button_label || "Abrir analisis";
+  }
+  if (el.configAnalysisShowHumanButton) {
+    el.configAnalysisShowHumanButton.checked = analysisDeliverables.show_human_button !== false;
+  }
+  if (el.configAnalysisHumanButtonLabel) {
+    el.configAnalysisHumanButtonLabel.value =
+      analysisDeliverables.human_button_label || "Hablar con una persona";
+  }
   renderAutomationFlows(config?.automation_flows || {});
   renderServiceEditor(config?.services || {});
   if (!canAccessSalesWorkspace()) {
