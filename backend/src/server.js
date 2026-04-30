@@ -1912,6 +1912,14 @@ function buildStructuredCloseReply({
   if (isGreeting(text)) return null;
 
   const safeName = getSafeLeadName(lead);
+  const serviceFacts = getServiceFacts(lead?.interest_service, appConfig);
+  if (isPriceQuestionText(text)) {
+    return buildNoPublicPriceReply({
+      text,
+      lead,
+      serviceFacts,
+    });
+  }
   const availableChannels = getPreferredConfiguredChannels(appConfig);
   const closeStep = getCommercialCloseStep({
     lead,
