@@ -377,6 +377,45 @@ async function resolveRequestAccount(req) {
   return resolveAccount(accountInput);
 }
 
+function getExplicitRequestAccountInput(req) {
+  return (
+    req.query?.account_id ||
+    req.query?.account_slug ||
+    req.body?.account_id ||
+    req.body?.account_slug ||
+    null
+  );
+}
+
+async function resolveExplicitRequestAccount(req) {
+  if (req.crmUser?.role && req.crmUser.role !== "super_admin") {
+    return resolveAccount(req.crmUser.account_id);
+  }
+
+  const accountInput = String(getExplicitRequestAccountInput(req) || "").trim();
+  if (!accountInput) {
+    throw new Error(
+      "Falta account_slug o account_id en esta integracion. Vuelve a publicar el snippet del chat o revisa la integracion."
+    );
+  }
+
+  const accounts = await listAccounts();
+  const match =
+    accounts.find(
+      (account) =>
+        String(account.id || "").trim() === accountInput ||
+        String(account.slug || "").trim() === accountInput
+    ) || null;
+
+  if (!match) {
+    throw new Error(
+      `No se encontro la cuenta indicada (${accountInput}) para esta integracion.`
+    );
+  }
+
+  return match;
+}
+
 function getLogoDataUrl() {
   try {
     const logoPath = path.join(crmPublicDir, "assets", "tmedia-global-logo.png");
@@ -4676,7 +4715,7 @@ app.post("/api/crm/integrations/email/google/connect-url", async (req, res) => {
 
 app.get("/api/widget/config", async (req, res) => {
   try {
-    const account = await resolveRequestAccount(req);
+    const account = await resolveExplicitRequestAccount(req);
     const config = await getAppConfig({ accountId: account.id });
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const availableChannels = [];
@@ -5624,7 +5663,7 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
 
 app.post("/messages", async (req, res) => {
   try {
-    const account = await resolveRequestAccount(req);
+    const account = await resolveExplicitRequestAccount(req);
     const { text, conversation_id, external_user_id, channel } = req.body || {};
 
     const result = await processIncomingMessage({
@@ -5652,7 +5691,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       return res.status(401).json({ ok: false, error: "Unauthorized integration request" });
     }
 
-    const account = await resolveRequestAccount(req);
+    const account = await resolveExplicitRequestAccount(req);
     const accountConfig = await getAppConfig({ accountId: account.id }).catch(() => null);
     const payload = req.body || {};
     const sourcePlatform = norm(payload.source_platform || payload.platform || "external_form");

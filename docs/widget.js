@@ -27,6 +27,7 @@
   CONFIG.publicWhatsappNumber = "";
   CONFIG.availableChannels = [];
   CONFIG.initialMessage = "";
+  CONFIG.integrationReady = Boolean(CONFIG.accountId || CONFIG.accountSlug);
 
   async function loadRemoteWidgetConfig() {
     try {
@@ -43,6 +44,7 @@
       CONFIG.primaryColor = colorFromAttr || remote?.brand?.primary_color || CONFIG.primaryColor;
       CONFIG.accountId = CONFIG.accountId || remote?.account?.id || "";
       CONFIG.accountSlug = CONFIG.accountSlug || remote?.account?.slug || "";
+      CONFIG.integrationReady = Boolean(CONFIG.accountId || CONFIG.accountSlug);
       CONFIG.supportEmail = String(remote?.contact?.support_email || "").trim();
       CONFIG.publicWhatsappNumber = String(
         remote?.contact?.public_whatsapp_number || ""
@@ -213,6 +215,12 @@
 
   // ====== FETCH ROBUSTO ======
   async function postMessage({ text, conversationId, externalUserId }) {
+    if (!CONFIG.accountId && !CONFIG.accountSlug) {
+      throw new Error(
+        "Este chat no esta publicado correctamente. Falta account_slug o account_id en el snippet."
+      );
+    }
+
     const payload = {
       text,
       external_user_id: externalUserId,
