@@ -543,6 +543,10 @@ function isLikelyValidName(value) {
     "por favor",
     "si gracias",
     "sÃ­ gracias",
+    "de acuerdo",
+    "vale",
+    "ok",
+    "oka",
     "prefiero por whatsapp",
     "prefiero whatsapp",
     "por whatsapp",
@@ -1517,14 +1521,16 @@ function cleanReplyForChannelChoice(reply, { channel = "web", lead = null } = {}
 function isPriceQuestionText(text = "") {
   const t = normalizeText(text);
   return (
-    t.includes("precio") ||
-    t.includes("precios") ||
-    t.includes("cuanto cuesta") ||
-    t.includes("cuánto cuesta") ||
-    t.includes("coste") ||
-    t.includes("costes") ||
-    t.includes("tarifa") ||
-    t.includes("tarifas")
+    /\bprecio(s)?\b/.test(t) ||
+    /\bpresupuesto\b/.test(t) ||
+    /\bcoste(s)?\b/.test(t) ||
+    /\btarifa(s)?\b/.test(t) ||
+    /\bcuanto\s+cuesta\b/.test(t) ||
+    /\bcuanto\s+vale\b/.test(t) ||
+    /\bque\s+precio\b/.test(t) ||
+    /\bque\s+vale\b/.test(t) ||
+    /\bcu[aá]l\s+es\s+el\s+precio\b/.test(t) ||
+    /\bcostaria\b/.test(t)
   );
 }
 
