@@ -1721,6 +1721,84 @@ function buildValueThenAskNameReply(analysisSnapshot, lead = null) {
   return `${valueLine}\n\nAntes de seguir, ¿cómo te llamas?`;
 }
 
+function getLastAssistantMessage(history = []) {
+  const items = Array.isArray(history) ? history : [];
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    if (items[index]?.role === "assistant") {
+      return String(items[index]?.content || "").trim();
+    }
+  }
+  return "";
+}
+
+function buildAffirmativeContinuationReply({
+  text = "",
+  history = [],
+  lead = {},
+  appConfig = null,
+  analysisSnapshot = null,
+} = {}) {
+  if (!isShortAffirmativeResponse(text)) return null;
+
+  const lastAssistant = getLastAssistantMessage(history);
+  if (!lastAssistant) return null;
+
+  const isExplainFollowUp =
+    /(quieres que te ayude a entender|quieres que te explique|te interesa saber como|te interesa saber cómo|te ayudo a entender como|te ayudo a entender cómo)/i.test(
+      lastAssistant
+    );
+
+  if (!isExplainFollowUp) return null;
+
+  const brandName = String(appConfig?.brand?.name || "la plataforma").trim();
+  const situation = norm(lead?.current_situation);
+  const pain = norm(lead?.pain_points);
+  const focus = norm(analysisSnapshot?.recommended_focus);
+  const topPriority = Array.isArray(analysisSnapshot?.priorities)
+    ? norm(analysisSnapshot.priorities[0])
+    : "";
+
+  const lines = [];
+
+  if (/google ads|analytics|google analytics/.test(situation)) {
+    lines.push(
+      `Sí. En vuestro caso, ${brandName} serviría para unir Google Ads y Analytics en una sola lectura y dejar de revisar datos sueltos por separado.`
+    );
+  } else {
+    lines.push(
+      `Sí. La idea es que ${brandName} una los datos relevantes, detecte prioridades y te diga qué conviene mover primero con criterio.`
+    );
+  }
+
+  if (pain) {
+    lines.push(
+      `Así no dependéis solo de mirar métricas manualmente, sino de tener una lectura clara de qué está fallando y qué cambio tiene más sentido atacar primero.`
+    );
+  } else if (focus || topPriority) {
+    lines.push(
+      `Cuando detecta un cuello de botella, lo aterriza en una prioridad concreta para que el equipo no tenga que interpretar todo desde cero.`
+    );
+  } else {
+    lines.push(
+      `El objetivo es pasar de “tenemos datos” a “sabemos qué decisión toca tomar ahora y por qué”.`
+    );
+  }
+
+  return lines.join("\n\n");
+}
+
+function shouldUseWebsiteRagContext({
+  text = "",
+  detectedUrl = "",
+  analysisSnapshot = null,
+} = {}) {
+  if (detectedUrl) return true;
+  if (hasAnalysisSnapshot(analysisSnapshot)) return true;
+
+  const raw = String(text || "");
+  return /\b(web|website|pagina|página|home|landing|url|seo|sitio)\b/i.test(raw);
+}
+
 function buildWhatsAppContinuationReply({
   lead,
   analysisSnapshot,
@@ -3962,6 +4040,20 @@ async function processIncomingMessage({
   }
 
   if (!reply) {
+    const affirmativeContinuationReply = buildAffirmativeContinuationReply({
+      text: userText,
+      history,
+      lead: leadAfter || {},
+      appConfig,
+      analysisSnapshot,
+    });
+
+    if (affirmativeContinuationReply) {
+      reply = affirmativeContinuationReply;
+    }
+  }
+
+  if (!reply) {
     const leadForAi = leadAfter || relatedWebLead || {};
     const serviceFacts = getServiceFacts(leadForAi.interest_service, appConfig);
     const noPublicPriceReply = buildNoPublicPriceReply({
@@ -3998,9 +4090,11 @@ ${serviceFacts.notes}
 
     if (
       conversationPhase !== "discover" &&
-      (leadForAi.interest_service ||
-        hasAnalysisSnapshot(analysisSnapshot) ||
-        detectStrongCommercialIntent(userText))
+      shouldUseWebsiteRagContext({
+        text: userText,
+        detectedUrl,
+        analysisSnapshot,
+      })
     ) {
       try {
         const docs = await retrieveWebsiteContext(
