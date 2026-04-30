@@ -1006,6 +1006,48 @@ function detectBusinessType(text) {
   return null;
 }
 
+function hasCurrentSituationSignals(text = "") {
+  const t = normalizeText(text);
+  return (
+    t.includes("actualmente") ||
+    t.includes("ahora mismo") ||
+    t.includes("a dia de hoy") ||
+    t.includes("a día de hoy") ||
+    t.includes("usamos") ||
+    t.includes("utilizamos") ||
+    t.includes("tenemos") ||
+    t.includes("google ads") ||
+    t.includes("analytics") ||
+    t.includes("google analytics") ||
+    t.includes("campanas activas") ||
+    t.includes("campañas activas") ||
+    t.includes("revisando datos") ||
+    t.includes("revisar datos")
+  );
+}
+
+function hasPainPointSignals(text = "") {
+  const t = normalizeText(text);
+  return (
+    t.includes("falla") ||
+    t.includes("fallando") ||
+    t.includes("va mal") ||
+    t.includes("van mal") ||
+    t.includes("no sabemos") ||
+    t.includes("no se que") ||
+    t.includes("no sé qué") ||
+    t.includes("complicado") ||
+    t.includes("dificil") ||
+    t.includes("difícil") ||
+    t.includes("problema") ||
+    t.includes("problemas") ||
+    t.includes("cuesta") ||
+    t.includes("no falla el saber") ||
+    t.includes("no sabemos que esta fallando") ||
+    t.includes("no sabemos que está fallando")
+  );
+}
+
 function detectBusinessActivity(text) {
   const raw = norm(text);
   const t = normalizeText(text);
@@ -1015,6 +1057,7 @@ function detectBusinessActivity(text) {
   if (isLikelyValidName(text)) return null;
   if (detectService(text)) return null;
   if (detectEmail(text) || detectPhone(text)) return null;
+  if (hasCurrentSituationSignals(text) || hasPainPointSignals(text)) return null;
 
   const triggers = [
     "tengo una",
@@ -1057,6 +1100,7 @@ function detectMainGoal(text) {
 
   if (!raw) return null;
   if (isUserQuestion(text)) return null;
+  if (hasCurrentSituationSignals(text) || hasPainPointSignals(text)) return null;
 
   const triggers = [
     "quiero",
@@ -1075,6 +1119,41 @@ function detectMainGoal(text) {
 
   if (triggers.some((x) => t.includes(x))) return raw;
 
+  return null;
+}
+
+function detectCurrentSituation(text) {
+  const raw = norm(text);
+  if (!raw) return null;
+  if (isUserQuestion(text)) return null;
+  if (detectEmail(text) || detectPhone(text)) return null;
+  return hasCurrentSituationSignals(text) ? raw : null;
+}
+
+function detectPainPoints(text) {
+  const raw = norm(text);
+  if (!raw) return null;
+  if (isUserQuestion(text)) return null;
+  if (detectEmail(text) || detectPhone(text)) return null;
+  return hasPainPointSignals(text) ? raw : null;
+}
+
+function detectCompanyName(text) {
+  const raw = norm(text);
+  if (!raw) return null;
+  if (isUserQuestion(text)) return null;
+  if (detectEmail(text) || detectPhone(text)) return null;
+  if (detectService(text)) return null;
+  if (hasCurrentSituationSignals(text) || hasPainPointSignals(text)) return null;
+
+  const explicit =
+    String(text || "").match(/\bmi empresa se llama\s+(.+)$/i)?.[1] ||
+    String(text || "").match(/\bse llama\s+(.+)$/i)?.[1] ||
+    String(text || "").match(/\bempresa:\s*(.+)$/i)?.[1];
+  if (explicit) return String(explicit).trim();
+
+  if (/\b(sl|s\.l\.|sll|slu|sa|s\.a\.)\b/i.test(raw)) return raw;
+  if (/^[\p{L}\d&.' -]{2,40}$/u.test(raw) && raw.split(/\s+/).length <= 5) return raw;
   return null;
 }
 
@@ -3114,6 +3193,9 @@ function applyFlowPatch(
   const detectedBudget = normalizeBudget(text);
   const detectedBusinessType = detectBusinessType(text);
   const detectedBusinessActivity = detectBusinessActivity(text);
+  const detectedCurrentSituation = detectCurrentSituation(text);
+  const detectedPainPoints = detectPainPoints(text);
+  const detectedCompanyName = detectCompanyName(text);
   const detectedGoal = detectMainGoal(text);
   const explicitPreferredChannel = getExplicitPreferredChannel(text);
   const singleConfiguredChannel = getSingleConfiguredChannel(appConfig);
@@ -3132,6 +3214,15 @@ function applyFlowPatch(
   if (detectedBusinessType && !lead?.business_type) patch.business_type = detectedBusinessType;
   if (detectedBusinessActivity && !lead?.business_activity) {
     patch.business_activity = detectedBusinessActivity;
+  }
+  if (detectedCurrentSituation && !lead?.current_situation) {
+    patch.current_situation = detectedCurrentSituation;
+  }
+  if (detectedPainPoints && !lead?.pain_points) {
+    patch.pain_points = detectedPainPoints;
+  }
+  if (detectedCompanyName && !lead?.company_name) {
+    patch.company_name = detectedCompanyName;
   }
   if (detectedGoal && !lead?.main_goal) patch.main_goal = detectedGoal;
   if (detectedBudget && !lead?.budget_range) patch.budget_range = detectedBudget;
@@ -3187,8 +3278,8 @@ function applyFlowPatch(
         break;
 
       case "ask_company_name":
-        if (norm(text) && !isUnknownResponse(text) && !isUserQuestion(text)) {
-          patch.company_name = String(text || "").trim();
+        if (detectedCompanyName) {
+          patch.company_name = detectedCompanyName;
         }
         break;
 

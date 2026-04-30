@@ -356,6 +356,50 @@ function isLikelyServiceIntent(text = "") {
   );
 }
 
+function hasCurrentSituationSignals(text = "") {
+  const t = normalizeText(text);
+  return (
+    t.includes("actualmente") ||
+    t.includes("ahora mismo") ||
+    t.includes("a dia de hoy") ||
+    t.includes("a día de hoy") ||
+    t.includes("usamos") ||
+    t.includes("utilizamos") ||
+    t.includes("tenemos") ||
+    t.includes("google ads") ||
+    t.includes("analytics") ||
+    t.includes("google analytics") ||
+    t.includes("campanas activas") ||
+    t.includes("campañas activas") ||
+    t.includes("revisando datos") ||
+    t.includes("revisar datos")
+  );
+}
+
+function hasPainPointSignals(text = "") {
+  const t = normalizeText(text);
+  return (
+    t.includes("falla") ||
+    t.includes("fallando") ||
+    t.includes("va mal") ||
+    t.includes("van mal") ||
+    t.includes("no sabemos") ||
+    t.includes("no sabemos que") ||
+    t.includes("no se que") ||
+    t.includes("no sé qué") ||
+    t.includes("complicado") ||
+    t.includes("dificil") ||
+    t.includes("difícil") ||
+    t.includes("problema") ||
+    t.includes("problemas") ||
+    t.includes("cuesta") ||
+    t.includes("no da con") ||
+    t.includes("no falla el saber") ||
+    t.includes("no sabemos que esta fallando") ||
+    t.includes("no sabemos que está fallando")
+  );
+}
+
 function extractNameFromPhrases(text = "") {
   const t = cleanText(text);
 
@@ -567,6 +611,7 @@ function extractBusinessActivity(text = "") {
   if (looksLikeValidName(raw)) return null;
   if (extractEmail(raw) || extractPhone(raw)) return null;
   if (pickService(raw, null)) return null;
+  if (hasCurrentSituationSignals(raw) || hasPainPointSignals(raw)) return null;
 
   const triggers = [
     "tengo una",
@@ -600,6 +645,7 @@ function extractMainGoal(text = "") {
   if (!raw) return null;
   if (isLikelyQuestion(raw)) return null;
   if (looksLikeValidName(raw)) return null;
+  if (hasCurrentSituationSignals(raw) || hasPainPointSignals(raw)) return null;
 
   const triggers = [
     "quiero",
@@ -638,6 +684,46 @@ function extractPreferredContactChannel({ text = "", email, phone }) {
     /\bmail\b/.test(normalized)
   ) {
     return "email";
+  }
+
+  return null;
+}
+
+function extractCurrentSituation(text = "") {
+  const raw = cleanText(text);
+  if (!raw) return null;
+  if (isLikelyQuestion(raw)) return null;
+  if (extractEmail(raw) || extractPhone(raw)) return null;
+  return hasCurrentSituationSignals(raw) ? raw : null;
+}
+
+function extractPainPoints(text = "") {
+  const raw = cleanText(text);
+  if (!raw) return null;
+  if (isLikelyQuestion(raw)) return null;
+  if (extractEmail(raw) || extractPhone(raw)) return null;
+  return hasPainPointSignals(raw) ? raw : null;
+}
+
+function extractCompanyName(text = "") {
+  const raw = cleanText(text);
+  const t = normalizeText(raw);
+
+  if (!raw) return null;
+  if (isLikelyQuestion(raw)) return null;
+  if (extractEmail(raw) || extractPhone(raw)) return null;
+  if (hasCurrentSituationSignals(raw) || hasPainPointSignals(raw)) return null;
+  if (pickService(raw, null)) return null;
+
+  const explicit =
+    raw.match(/\bmi empresa se llama\s+(.+)$/i)?.[1] ||
+    raw.match(/\bse llama\s+(.+)$/i)?.[1] ||
+    raw.match(/\bempresa:\s*(.+)$/i)?.[1];
+  if (explicit) return cleanText(explicit);
+
+  if (/\b(sl|s\.l\.|sll|slu|sa|s\.a\.)\b/i.test(raw)) return raw;
+  if (/^[\p{L}\d&.' -]{2,40}$/u.test(raw) && raw.split(/\s+/).length <= 5) {
+    return raw;
   }
 
   return null;
@@ -698,7 +784,10 @@ export function extractLeadDataFromText(text, existingLead = null) {
   const consent = extractConsent(safeText);
   const business_type = extractBusinessType(safeText);
   const business_activity = extractBusinessActivity(safeText);
+  const company_name = extractCompanyName(safeText);
   const main_goal = extractMainGoal(safeText);
+  const current_situation = extractCurrentSituation(safeText);
+  const pain_points = extractPainPoints(safeText);
   const preferred_contact_channel = extractPreferredContactChannel({
     text: safeText,
     email,
@@ -737,10 +826,10 @@ export function extractLeadDataFromText(text, existingLead = null) {
     // nuevos campos para el flujo
     business_type,
     business_activity,
-    company_name: null,
+    company_name,
     main_goal,
-    current_situation: null,
-    pain_points: null,
+    current_situation,
+    pain_points,
     preferred_contact_channel,
     last_intent,
   };

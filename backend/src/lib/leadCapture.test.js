@@ -93,6 +93,25 @@ test("does not confuse 'emailing' with choosing email as contact channel", () =>
   assert.equal(result.preferred_contact_channel, null);
 });
 
+test("separates current situation, pain points and goal instead of mixing them", () => {
+  const setup = extractLeadDataFromText("Actualmente Google Ads y Analytics");
+  const pain = extractLeadDataFromText(
+    "tenemos 2, y tengo una persona revisando pero no falla el saber que está fallando"
+  );
+
+  assert.equal(setup.company_name, null);
+  assert.equal(setup.business_activity, null);
+  assert.equal(setup.main_goal, null);
+  assert.equal(setup.current_situation, "Actualmente Google Ads y Analytics");
+
+  assert.equal(pain.company_name, null);
+  assert.equal(pain.main_goal, null);
+  assert.equal(
+    pain.pain_points,
+    "tenemos 2, y tengo una persona revisando pero no falla el saber que está fallando"
+  );
+});
+
 test("mergeLeadData only accepts standalone name during close name step", () => {
   const accepted = mergeLeadData({
     currentLead: { current_step: "close_ask_name" },
