@@ -78,6 +78,11 @@ function nl2br(str = "") {
   return escapeHtml(str).replace(/\n/g, "<br>");
 }
 
+function resolveColor(value = "", fallback = "#1f5eff") {
+  const color = String(value || "").trim();
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color) ? color : fallback;
+}
+
 function buildClientFriendlySummary(lead = {}) {
   const parts = [];
 
@@ -490,6 +495,8 @@ export async function sendQuoteEmailToLead({
   previewButtonLabel = "Abrir propuesta",
   showHumanButton = true,
   humanButtonLabel = "Hablar con una persona",
+  primaryColor = "#1f5eff",
+  accentColor = "#1faa59",
   emailConfig = null,
 }) {
   if (!clientEnabled) return { skipped: true, reason: "client-disabled" };
@@ -514,6 +521,8 @@ export async function sendQuoteEmailToLead({
       ? `${String(quote.total)} ${quote?.currency || "EUR"}`
       : "No indicado";
 
+  const safePrimary = resolveColor(primaryColor, "#1f5eff");
+  const safeAccent = resolveColor(accentColor, "#1faa59");
   const html = `
   <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
     <h2>Hola${lead?.name ? ", " + escapeHtml(lead.name) : ""}</h2>
@@ -524,13 +533,13 @@ export async function sendQuoteEmailToLead({
     <p><b>Servicio:</b> ${escapeHtml(lead?.interest_service || "No indicado")}</p>
     <p><b>Importe total:</b> ${escapeHtml(totalText)}</p>
     <p>Puedes revisarla aqui:</p>
-    <p><a href="${escapeHtml(previewUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#1f5eff;color:#fff;text-decoration:none;font-weight:bold;">${escapeHtml(
+    <p><a href="${escapeHtml(previewUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:${escapeHtml(safePrimary)};color:#fff;text-decoration:none;font-weight:bold;">${escapeHtml(
       previewButtonLabel || "Abrir propuesta"
     )}</a></p>
     ${
       showHumanButton && whatsappUrl
         ? `<p style="margin-top:14px;">Si prefieres resolver cualquier duda por WhatsApp, tambien puedes seguir por aqui:</p>
-    <p><a href="${escapeHtml(whatsappUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#1faa59;color:#fff;text-decoration:none;font-weight:bold;">${escapeHtml(
+    <p><a href="${escapeHtml(whatsappUrl)}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:${escapeHtml(safeAccent)};color:#fff;text-decoration:none;font-weight:bold;">${escapeHtml(
           humanButtonLabel || "Hablar con una persona"
         )}</a></p>`
         : ""

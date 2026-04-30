@@ -5413,7 +5413,7 @@ function renderAnalysis(analysis) {
   el.analysisRecommendedService.textContent = recommendedService;
   el.analysisStatusLabel.textContent = status;
   el.analysisSummaryText.textContent = summary;
-  el.analysisNextStepText.textContent = nextStep;
+  if (el.analysisNextStepText) el.analysisNextStepText.textContent = nextStep;
   renderAnalysisList(el.analysisFindingsList, content?.findings || []);
   renderAnalysisList(el.analysisQuickWinsList, content?.quick_wins || []);
 

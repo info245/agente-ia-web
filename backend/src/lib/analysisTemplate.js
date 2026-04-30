@@ -7,6 +7,11 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function resolveColor(value = "", fallback = "#6d41f3") {
+  const color = String(value || "").trim();
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color) ? color : fallback;
+}
+
 function renderList(items = []) {
   if (!Array.isArray(items) || !items.length) {
     return `<li>Sin puntos destacados todavia.</li>`;
@@ -30,6 +35,8 @@ export function renderAnalysisPreviewHtml({
   analysis = {},
   logoUrl = "",
   brandName = "TMedia Global",
+  primaryColor = "#6d41f3",
+  accentColor = "#8f68ff",
 } = {}) {
   const content = analysis?.content_json || {};
   const findings = Array.isArray(content.findings) ? content.findings : [];
@@ -37,6 +44,9 @@ export function renderAnalysisPreviewHtml({
   const leadName = lead?.name || lead?.company_name || lead?.email || "Cliente";
   const priorities = Array.isArray(content.priorities) ? content.priorities : [];
   const hasPriorities = priorities.length > 0;
+
+  const safePrimary = resolveColor(primaryColor, "#6d41f3");
+  const safeAccent = resolveColor(accentColor, "#8f68ff");
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -51,8 +61,8 @@ export function renderAnalysisPreviewHtml({
       --line: #d6e1ff;
       --ink: #172554;
       --muted: #5c6b92;
-      --accent: #6d41f3;
-      --accent-2: #8f68ff;
+      --accent: ${safePrimary};
+      --accent-2: ${safeAccent};
     }
     * { box-sizing: border-box; }
     body {
@@ -75,7 +85,7 @@ export function renderAnalysisPreviewHtml({
     }
     .hero {
       padding: 34px 36px 28px;
-      background: linear-gradient(135deg, #6d41f3, #8f68ff 58%, #a58bff);
+      background: var(--accent);
       color: #fff;
     }
     .hero-top {
@@ -247,8 +257,12 @@ export function renderAnalysisEmailHtml({
   humanButtonLabel = "Hablar con una persona",
   showHumanButton = true,
   introText = "",
+  primaryColor = "#6d41f3",
+  accentColor = "#16a34a",
 } = {}) {
   const content = analysis?.content_json || {};
+  const safePrimary = resolveColor(primaryColor, "#6d41f3");
+  const safeAccent = resolveColor(accentColor, "#16a34a");
   const bodyCopy = String(introText || "").trim();
   const paragraphs = bodyCopy
     ? bodyCopy
@@ -273,7 +287,7 @@ export function renderAnalysisEmailHtml({
     <p style="margin:20px 0;">
       <a href="${escapeHtml(
         previewUrl
-      )}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#6d41f3;color:#fff;text-decoration:none;font-weight:700;">${escapeHtml(
+      )}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:${escapeHtml(safePrimary)};color:#fff;text-decoration:none;font-weight:700;">${escapeHtml(
         previewButtonLabel || "Abrir analisis"
       )}</a>
     </p>
@@ -282,7 +296,7 @@ export function renderAnalysisEmailHtml({
         ? `<p>Si prefieres comentarlo con una persona, puedes hacerlo aqui:</p>
       <p><a href="${escapeHtml(
         humanAgentUrl
-      )}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#16a34a;color:#fff;text-decoration:none;font-weight:700;">${escapeHtml(
+      )}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:${escapeHtml(safeAccent)};color:#fff;text-decoration:none;font-weight:700;">${escapeHtml(
             humanButtonLabel || "Hablar con una persona"
           )}</a></p>`
         : ""

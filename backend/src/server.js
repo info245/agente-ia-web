@@ -3501,6 +3501,20 @@ function sanitizeClientFacingAnalysisText(value, lead = {}, { nextStep = false }
   return text;
 }
 
+function normalizeAnalysisClientTitle(title = "", lead = {}) {
+  const raw = sanitizeClientFacingAnalysisText(title, lead);
+  const service =
+    sanitizeClientFacingAnalysisText(lead?.interest_service || "", lead) ||
+    "tu caso";
+  if (!raw) {
+    return `Análisis inicial de ${service}`;
+  }
+  if (/^(propuesta|presupuesto)\b/i.test(raw)) {
+    return `Análisis inicial de ${service}`;
+  }
+  return raw;
+}
+
 function sanitizeClientFacingAnalysisList(items = [], lead = {}, { objectItems = false } = {}) {
   if (!Array.isArray(items)) return [];
   return items
@@ -3521,7 +3535,7 @@ function sanitizeAnalysisForClient(analysis = {}, lead = {}) {
   const source = analysis && typeof analysis === "object" ? analysis : {};
   return {
     ...source,
-    title: sanitizeClientFacingAnalysisText(source.title || "", lead),
+    title: normalizeAnalysisClientTitle(source.title || "", lead),
     headline: sanitizeClientFacingAnalysisText(source.headline || "", lead),
     summary: sanitizeClientFacingAnalysisText(source.summary || "", lead),
     findings: sanitizeClientFacingAnalysisList(source.findings, lead, { objectItems: true }),
@@ -5300,12 +5314,14 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
       ? configuredLogoUrl.startsWith("http")
         ? configuredLogoUrl
         : `${baseUrl}${configuredLogoUrl.startsWith("/") ? "" : "/"}${configuredLogoUrl}`
-      : `${baseUrl}/crm/assets/tmedia-global-logo.png`;
+      : "";
     const html = renderQuotePreviewHtml({
       lead,
       quote,
       logoUrl: resolvedLogoUrl,
       brandName: appConfig?.brand?.name || "TMedia Global",
+      primaryColor: appConfig?.brand?.primary_color || "#ff5d6d",
+      accentColor: appConfig?.brand?.accent_color || "#7f54ff",
       autoPrint: req.query.print === "1",
       acceptUrl,
       rejectUrl,
@@ -5359,13 +5375,15 @@ app.get("/crm/analysis/:leadId/preview", async (req, res) => {
       ? configuredLogoUrl.startsWith("http")
         ? configuredLogoUrl
         : `${baseUrl}${configuredLogoUrl.startsWith("/") ? "" : "/"}${configuredLogoUrl}`
-      : `${baseUrl}/crm/assets/tmedia-global-logo.png`;
+      : "";
 
     const html = renderAnalysisPreviewHtml({
       lead,
       analysis,
       logoUrl: resolvedLogoUrl,
       brandName: appConfig?.brand?.name || "TMedia Global",
+      primaryColor: appConfig?.brand?.primary_color || "#6d41f3",
+      accentColor: appConfig?.brand?.accent_color || "#8f68ff",
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(html);
@@ -5670,6 +5688,8 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
         showHumanButton: appConfig?.deliverables?.quote?.show_human_button !== false,
         humanButtonLabel:
           appConfig?.deliverables?.quote?.human_button_label || "Hablar con una persona",
+        primaryColor: appConfig?.brand?.primary_color || "#1f5eff",
+        accentColor: appConfig?.brand?.accent_color || "#1faa59",
         emailConfig: appConfig?.integrations?.email || null,
       });
     }
@@ -5791,6 +5811,8 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
         appConfig?.message_templates?.analysis_email?.body || "",
         analysisTemplateVars
       ),
+      primaryColor: appConfig?.brand?.primary_color || "#6d41f3",
+      accentColor: appConfig?.brand?.accent_color || "#16a34a",
     });
 
     const text = [

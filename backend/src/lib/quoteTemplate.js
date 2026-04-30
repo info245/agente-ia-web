@@ -7,6 +7,11 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function resolveColor(value = "", fallback = "#ff5d6d") {
+  const color = String(value || "").trim();
+  return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color) ? color : fallback;
+}
+
 function formatMoney(value, currency = "EUR") {
   const amount = Number.isFinite(Number(value)) ? Number(value) : 0;
   return new Intl.NumberFormat("es-ES", {
@@ -32,6 +37,8 @@ export function renderQuotePreviewHtml({
   rejectButtonLabel = "No me encaja ahora",
   showHumanButton = true,
   humanButtonLabel = "Hablar con una persona",
+  primaryColor = "#ff5d6d",
+  accentColor = "#7f54ff",
 } = {}) {
   const content = quote?.content_json || {};
   const items = Array.isArray(content.items) ? content.items : [];
@@ -54,6 +61,8 @@ export function renderQuotePreviewHtml({
       ? "Personalizado"
       : "Mensual");
   const quoteStatus = String(quote?.status || "draft").trim().toLowerCase();
+  const safePrimary = resolveColor(primaryColor, "#ff5d6d");
+  const safeAccent = resolveColor(accentColor, "#7f54ff");
 
   const itemsRows = items.length
     ? items
@@ -125,9 +134,9 @@ export function renderQuotePreviewHtml({
       --line: #d9cfbf;
       --text: #221d18;
       --muted: #756b61;
-      --accent: #ff5d6d;
-      --accent-2: #cb4ea1;
-      --accent-3: #7f54ff;
+      --accent: ${safePrimary};
+      --accent-2: ${safePrimary};
+      --accent-3: ${safeAccent};
       --accent-soft: #f5edff;
       --ink-soft: rgba(255,255,255,0.85);
     }
@@ -154,9 +163,7 @@ export function renderQuotePreviewHtml({
     .hero {
       padding: 34px 38px 28px;
       color: #fff;
-      background:
-        radial-gradient(circle at top left, rgba(255,255,255,0.08), transparent 26%),
-        linear-gradient(120deg, var(--accent), var(--accent-2) 54%, var(--accent-3));
+      background: var(--accent);
       border-bottom: 1px solid var(--line);
     }
     .brand {
