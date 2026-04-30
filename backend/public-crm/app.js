@@ -6192,7 +6192,17 @@ async function deleteSelectedLeadsBulk() {
   }
 }
 
-function buildServiceItems(service, serviceFacts = null) {
+function buildAccountScopedServiceItems(service, serviceFacts = null) {
+  const configuredPrice = String(serviceFacts?.min_monthly_fee || serviceFacts?.min_project_fee || "")
+    .match(/(\d+)/)?.[1];
+  return [
+    {
+      concept: `Servicio base de ${service}`,
+      quantity: 1,
+      unit_price: configuredPrice ? Number(configuredPrice) : 0,
+    },
+  ];
+
   const normalizedService = String(service || "").toLowerCase();
 
   if (normalizedService.includes("google ads")) {
@@ -6261,11 +6271,12 @@ function getBillingTypeLabel(value) {
   return "Mensual";
 }
 
-function buildQuoteSuggestion(lead, serviceFacts = null) {
+function buildAccountScopedQuoteSuggestion(lead, serviceFacts = null) {
   const service = lead?.interest_service || "servicio de marketing";
   const business = lead?.business_activity || lead?.business_type || "tu proyecto";
   const goal = lead?.main_goal || "mejorar resultados";
-  const items = buildServiceItems(service, serviceFacts);
+  const items = buildAccountScopedServiceItems(service, serviceFacts);
+  const hasConfiguredPrice = items.some((item) => Number(item?.unit_price || 0) > 0);
   const billingType = inferBillingType(service);
   const billingLabel = getBillingTypeLabel(billingType);
   const includedBase = serviceFacts?.description
@@ -6276,6 +6287,20 @@ function buildQuoteSuggestion(lead, serviceFacts = null) {
         "Configuracion y optimizacion continua.",
         "Seguimiento de resultados y mejoras.",
       ].join(" ");
+
+  if (!hasConfiguredPrice) {
+    return {
+      title: `Propuesta ${service}`,
+      summary: `${service} para ${business}`,
+      tax_rate: 21,
+      billing_type: billingType,
+      billing_label: billingLabel,
+      items,
+      scope: includedBase,
+      body: `Te compartimos un borrador inicial de ${service} para ${business}, orientado a ${goal}. El precio queda pendiente de definir segun el alcance real y las tarifas configuradas de esta cuenta antes del envio definitivo al cliente.`,
+      assumptions: "Precio pendiente de definir con la configuracion real de esta cuenta.",
+    };
+  }
 
   return {
     title: `Propuesta ${service}`,
@@ -6299,7 +6324,7 @@ async function autofillQuote() {
     serviceFacts = null;
   }
 
-  const draft = buildQuoteSuggestion(state.selectedLead, serviceFacts);
+  const draft = buildAccountScopedQuoteSuggestion(state.selectedLead, serviceFacts);
   el.quoteTitle.value = draft.title;
   el.quoteBillingType.value = draft.billing_type;
   el.quoteBillingLabel.value = draft.billing_label;

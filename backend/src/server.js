@@ -1974,10 +1974,10 @@ function buildStructuredCloseReply({
 
   if (closeStep === "close_ready" && isFarewellOrThanks(text)) {
     if (preferredChannel.includes("whatsapp") && hasPhone(lead)) {
-      return `Perfecto, ${safeName}. Queda todo preparado para seguir por WhatsApp con el contexto de lo que hemos visto.`;
+      return `Perfecto, ${safeName}. Queda todo preparado para seguir por WhatsApp con el contexto de lo que hemos visto. Si más adelante quieres retomar algo por aquí, sigo contigo desde este punto.`;
     }
     if (preferredChannel.includes("email") && lead?.email) {
-      return `Perfecto, ${safeName}. Queda todo preparado y te lo envío por email con lo que hemos revisado.`;
+      return `Perfecto, ${safeName}. Queda todo preparado y te lo envío por email con lo que hemos revisado. Si después quieres seguir afinándolo por aquí, continúo contigo desde este punto.`;
     }
     return safeName
       ? `Perfecto, ${safeName}. Queda todo preparado y seguimos desde aquí cuando quieras.`
@@ -1987,18 +1987,20 @@ function buildStructuredCloseReply({
   if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
     return hasAnalysisSnapshot(analysisSnapshot)
       ? `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.\n\nCuando me escribas por WhatsApp, continúo desde este punto sin empezar de cero.`
-      : `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y seguimos por ahí con tu propuesta y el siguiente paso ya preparado.`;
+      : `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y seguimos por ahí con tu propuesta y el siguiente paso ya preparado. Por aquí ya queda todo listo.`;
   }
 
   if (preferredChannel.includes("whatsapp") && hasPhone(lead)) {
-    return `Perfecto, ${safeName}. Te sigo por WhatsApp con la propuesta y el siguiente paso ya preparado.`;
+    return `Perfecto, ${safeName}. Te sigo por WhatsApp con la propuesta y el siguiente paso ya preparado. Por aquí ya queda todo listo.`;
   }
 
   if (preferredChannel.includes("email") && lead?.email) {
-    return `Perfecto, ${safeName}. Te lo preparo por email con lo que ya hemos revisado.`;
+    return `Perfecto, ${safeName}. Te lo preparo por email con lo que ya hemos revisado. Por aquí ya queda todo listo.`;
   }
 
-  return null;
+  return safeName
+    ? `Perfecto, ${safeName}. Ya tengo lo necesario para preparar el siguiente paso. Si quieres, seguimos afinando algo más por aquí.`
+    : "Perfecto. Ya tengo lo necesario para preparar el siguiente paso. Si quieres, seguimos afinando algo más por aquí.";
 }
 
 function hasPhone(lead) {
