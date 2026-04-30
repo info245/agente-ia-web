@@ -58,7 +58,9 @@ import {
 import {
   countCrmUsers,
   createCrmUser,
+  createPasswordSetupToken,
   getCrmUserById,
+  setCrmUserPasswordFromToken,
   verifyCrmUserCredentials,
 } from "./lib/authStore.js";
 import { uploadBrandLogo } from "./lib/storageStore.js";
@@ -195,6 +197,59 @@ function norm(v) {
 
 function buildPublicBaseUrl(req) {
   return CRM_PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
+}
+
+function buildPasswordSetupUrl(req, token, email = "") {
+  const url = new URL(`${buildPublicBaseUrl(req)}/crm`);
+  url.searchParams.set("setup_token", token);
+  if (email) url.searchParams.set("email", email);
+  return url.toString();
+}
+
+async function sendPasswordSetupInvite({
+  req,
+  user,
+  accountName = "",
+  emailConfig = null,
+} = {}) {
+  const setupToken = await createPasswordSetupToken(user.id);
+  const setupUrl = buildPasswordSetupUrl(req, setupToken.token, user.email);
+  const brandName = accountName || "TMedia Global";
+  const subject = `Activa tu acceso al CRM - ${brandName}`;
+  const text = [
+    `Hola${user.display_name ? ` ${user.display_name}` : ""},`,
+    "",
+    `Te hemos creado un acceso al CRM de ${brandName}.`,
+    "Establece tu contrasena desde este enlace:",
+    setupUrl,
+    "",
+    "El enlace caduca en 7 dias. Si no esperabas este acceso, puedes ignorar este email.",
+  ].join("\n");
+  const html = `
+  <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
+    <h2>Activa tu acceso al CRM</h2>
+    <p>Hola${user.display_name ? ` ${escapeHtml(user.display_name)}` : ""},</p>
+    <p>Te hemos creado un acceso al CRM de ${escapeHtml(brandName)}.</p>
+    <p><a href="${escapeHtml(setupUrl)}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font-weight:bold;">Establecer contrasena</a></p>
+    <p style="font-size:13px;color:#555;">El enlace caduca en 7 dias. Si no esperabas este acceso, puedes ignorar este email.</p>
+  </div>`;
+
+  const emailResult = await sendTransactionalEmail({
+    to: user.email,
+    subject,
+    text,
+    html,
+    emailConfig,
+  }).catch((error) => ({
+    ok: false,
+    error: error.message,
+  }));
+
+  return {
+    setup_url: setupUrl,
+    expires_at: setupToken.expires_at,
+    email: emailResult,
+  };
 }
 
 function cleanupGoogleEmailOauthStates() {
@@ -603,6 +658,110 @@ function getSingleConfiguredChannel(appConfig = null) {
   return channels.length === 1 ? channels[0] : "";
 }
 
+function getConfiguredCustomFields(appConfig = null) {
+  return Array.isArray(appConfig?.lead_capture?.custom_fields)
+    ? appConfig.lead_capture.custom_fields.filter((field) => field?.key && field?.label)
+    : [];
+}
+
+function normalizeCustomFieldKey(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function normalizeCustomFieldValue(value, field = {}) {
+  if (value === null || value === undefined) return null;
+  const type = String(field?.type || "text").trim().toLowerCase();
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (type === "boolean") {
+    const t = normalizeText(raw);
+    if (["si", "sí", "true", "yes", "1"].includes(t)) return true;
+    if (["no", "false", "0"].includes(t)) return false;
+    return raw;
+  }
+  if (type === "number") {
+    const n = Number(raw.replace(",", "."));
+    return Number.isFinite(n) ? n : raw;
+  }
+  if (type === "select" && Array.isArray(field?.options) && field.options.length) {
+    const match = field.options.find(
+      (option) => normalizeText(option) === normalizeText(raw)
+    );
+    return match || raw;
+  }
+  return raw.slice(0, 500);
+}
+
+function sanitizeCustomFieldsPayload(value = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const output = {};
+  for (const [key, rawValue] of Object.entries(value)) {
+    const cleanKey = normalizeCustomFieldKey(key);
+    if (!cleanKey) continue;
+    const cleanValue = normalizeCustomFieldValue(rawValue, {});
+    if (cleanValue !== null) output[cleanKey] = cleanValue;
+  }
+  return output;
+}
+
+function extractCustomFieldsFromText(text = "", lead = {}, appConfig = null) {
+  const fields = getConfiguredCustomFields(appConfig);
+  if (!fields.length) return {};
+
+  const currentStep = String(lead?.current_step || "");
+  const currentCustomKey = currentStep.startsWith("ask_custom:")
+    ? normalizeCustomFieldKey(currentStep.split(":")[1])
+    : "";
+  const output = {};
+  const raw = String(text || "").trim();
+
+  if (currentCustomKey) {
+    const field = fields.find((item) => item.key === currentCustomKey);
+    const value = normalizeCustomFieldValue(raw, field);
+    if (field && value !== null) output[field.key] = value;
+  }
+
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(output, field.key)) continue;
+    const labelPattern = String(field.label || "")
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\s+/g, "\\s+");
+    const keyPattern = String(field.key || "").replace(/_/g, "[_\\s-]*");
+    const match =
+      raw.match(new RegExp(`(?:${labelPattern}|${keyPattern})\\s*[:=-]\\s*([^\\n|,;]+)`, "i")) ||
+      raw.match(new RegExp(`(?:mi|el|la)\\s+${labelPattern}\\s+(?:es|seria|sería)\\s+([^\\n|,;]+)`, "i"));
+    if (match?.[1]) {
+      const value = normalizeCustomFieldValue(match[1], field);
+      if (value !== null) output[field.key] = value;
+    }
+  }
+
+  return output;
+}
+
+function getNextCustomFieldStep(lead = {}, appConfig = null) {
+  const fields = getConfiguredCustomFields(appConfig);
+  if (!fields.length) return null;
+
+  const values =
+    lead?.custom_fields && typeof lead.custom_fields === "object"
+      ? lead.custom_fields
+      : {};
+  const next = fields.find((field) => {
+    if (!field.required) return false;
+    const value = values[field.key];
+    return value === null || value === undefined || value === "";
+  });
+
+  return next ? `ask_custom:${next.key}` : null;
+}
+
 function buildConfiguredServicesPrompt(appConfig = null, { fallback = "" } = {}) {
   const services = getConfiguredServiceNames(appConfig);
   if (!services.length) {
@@ -984,12 +1143,19 @@ function getCurrentStep(lead, appConfig = null) {
   ) {
     return "ask_contact";
   }
+  const customStep = getNextCustomFieldStep(lead, appConfig);
+  if (customStep) return customStep;
   return "ready_for_ai";
 }
 
 function getQuestionForStep(step, lead, appConfig = null) {
   const safeName = getSafeLeadName(lead);
   const availableChannels = getPreferredConfiguredChannels(appConfig);
+  if (String(step || "").startsWith("ask_custom:")) {
+    const key = normalizeCustomFieldKey(String(step || "").split(":")[1]);
+    const field = getConfiguredCustomFields(appConfig).find((item) => item.key === key);
+    return field?.prompt || (field?.label ? `Para orientarte bien, ¿cuál es ${field.label}?` : "Para orientarte bien, ¿me das ese dato?");
+  }
 
   switch (step) {
     case "ask_name":
@@ -1126,6 +1292,7 @@ function buildLeadSignature(lead) {
     last_intent: lead?.last_intent || null,
     current_step: lead?.current_step || null,
     last_question: lead?.last_question || null,
+    custom_fields: lead?.custom_fields || null,
     summary: lead?.summary || null,
   });
 }
@@ -1144,7 +1311,10 @@ function hasUsefulLeadDataForNotification(lead) {
     norm(lead?.main_goal) ||
     norm(lead?.current_situation) ||
     norm(lead?.pain_points) ||
-    norm(lead?.preferred_contact_channel)
+    norm(lead?.preferred_contact_channel) ||
+    (lead?.custom_fields &&
+      typeof lead.custom_fields === "object" &&
+      Object.keys(lead.custom_fields).length > 0)
   );
 }
 
@@ -1301,6 +1471,43 @@ function cleanReplyForChannelChoice(reply, { channel = "web", lead = null } = {}
     : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
 }
 
+function isPriceQuestionText(text = "") {
+  const t = normalizeText(text);
+  return (
+    t.includes("precio") ||
+    t.includes("precios") ||
+    t.includes("cuanto cuesta") ||
+    t.includes("cuánto cuesta") ||
+    t.includes("coste") ||
+    t.includes("costes") ||
+    t.includes("tarifa") ||
+    t.includes("tarifas")
+  );
+}
+
+function hasPublicPriceFacts(serviceFacts = null) {
+  return !!(
+    norm(serviceFacts?.min_monthly_fee) ||
+    norm(serviceFacts?.min_project_fee)
+  );
+}
+
+function buildNoPublicPriceReply({ text = "", lead = {}, serviceFacts = null } = {}) {
+  if (!isPriceQuestionText(text)) return null;
+  if (hasPublicPriceFacts(serviceFacts)) return null;
+
+  const service = norm(lead?.interest_service);
+  const serviceLabel = service ? ` para ${service}` : "";
+  const safeName = getSafeLeadName(lead);
+
+  return [
+    `Ahora mismo no tengo un precio público configurado${serviceLabel}. Lo correcto es tratarlo como precio personalizado para no inventarte una cifra.`,
+    safeName
+      ? `Si quieres, lo dejo preparado con lo que ya hemos visto y lo revisa un agente.`
+      : "Si quieres, dime tu nombre y lo dejo preparado para que lo revise un agente.",
+  ].join("\n\n");
+}
+
 function hasGoogleAdsCampaignContext(lead, text = "") {
   const combined = normalizeText(
     [
@@ -1377,7 +1584,7 @@ function buildValueThenAskNameReply(analysisSnapshot, lead = null) {
       ? `Perfecto. La prioridad mÃ¡s clara ahora mismo serÃ­a ${topPriority}.`
       : summary
       ? `Perfecto. Viendo lo detectado, hay margen real para mejorar captaciÃ³n y conversiÃ³n con unos ajustes bien enfocados.`
-      : `Perfecto. Con lo que ya he visto, sÃ­ tiene sentido profundizar un poco mÃ¡s antes de plantearte el siguiente paso.`;
+      : `Perfecto. Entonces te aterrizo el siguiente paso de forma mÃ¡s concreta.`;
 
   if (hasContact(lead) || norm(lead?.preferred_contact_channel)) {
     return `${valueLine}\n\nSi te va bien, sigo contigo desde aquí y te preparo el siguiente paso sin pedirte de nuevo los datos básicos.`;
@@ -2209,7 +2416,17 @@ function buildAutomationBaseUrl(req) {
 }
 
 function buildAutomationTemplateVars({ lead, appConfig, previewUrl }) {
+  const customVars =
+    lead?.custom_fields && typeof lead.custom_fields === "object"
+      ? Object.fromEntries(
+          Object.entries(lead.custom_fields).map(([key, value]) => [
+            normalizeCustomFieldKey(key),
+            Array.isArray(value) ? value.join(", ") : value,
+          ])
+        )
+      : {};
   return {
+    ...customVars,
     nombre: getSafeLeadName(lead) || lead?.name || "hola",
     marca: appConfig?.brand?.name || "TMedia Global",
     servicio: lead?.interest_service || "nuestros servicios",
@@ -2872,6 +3089,16 @@ function applyFlowPatch(
   if (detectedGoal && !lead?.main_goal) patch.main_goal = detectedGoal;
   if (detectedBudget && !lead?.budget_range) patch.budget_range = detectedBudget;
 
+  const detectedCustomFields = extractCustomFieldsFromText(text, lead, appConfig);
+  if (Object.keys(detectedCustomFields).length) {
+    patch.custom_fields = {
+      ...(lead?.custom_fields && typeof lead.custom_fields === "object"
+        ? lead.custom_fields
+        : {}),
+      ...detectedCustomFields,
+    };
+  }
+
   if (
     !lead?.urgency &&
     (
@@ -3259,13 +3486,14 @@ async function processIncomingMessage({
     main_goal: extracted?.main_goal ?? null,
     current_situation: extracted?.current_situation ?? null,
     pain_points: extracted?.pain_points ?? null,
-    preferred_contact_channel:
-      extracted?.preferred_contact_channel ??
-      (channel === "whatsapp" ? "whatsapp" : null),
-    last_intent: extracted?.last_intent ?? null,
-    current_step: leadBefore?.current_step ?? null,
-    last_question: leadBefore?.last_question ?? null,
-  };
+      preferred_contact_channel:
+        extracted?.preferred_contact_channel ??
+        (channel === "whatsapp" ? "whatsapp" : null),
+      last_intent: extracted?.last_intent ?? null,
+      custom_fields: leadBefore?.custom_fields || {},
+      current_step: leadBefore?.current_step ?? null,
+      last_question: leadBefore?.last_question ?? null,
+    };
 
   if (!incoming.budget_range) {
     const detectedBudget = normalizeBudget(userText);
@@ -3400,6 +3628,10 @@ async function processIncomingMessage({
           relatedWebLead?.preferred_contact_channel ||
           "whatsapp",
         last_intent: leadAfter?.last_intent || relatedWebLead?.last_intent,
+        custom_fields: {
+          ...(relatedWebLead?.custom_fields || {}),
+          ...(leadAfter?.custom_fields || {}),
+        },
       },
       lastUserMessage: userText,
     });
@@ -3416,6 +3648,10 @@ async function processIncomingMessage({
       current_situation:
         leadAfter?.current_situation || relatedWebLead?.current_situation,
       pain_points: leadAfter?.pain_points || relatedWebLead?.pain_points,
+      custom_fields: {
+        ...(relatedWebLead?.custom_fields || {}),
+        ...(leadAfter?.custom_fields || {}),
+      },
       current_step: leadAfter?.current_step ?? relatedWebLead?.current_step ?? null,
       last_question: leadAfter?.last_question ?? relatedWebLead?.last_question ?? null,
     });
@@ -3562,16 +3798,27 @@ async function processIncomingMessage({
   if (!reply) {
     const leadForAi = leadAfter || relatedWebLead || {};
     const serviceFacts = getServiceFacts(leadForAi.interest_service, appConfig);
+    const noPublicPriceReply = buildNoPublicPriceReply({
+      text: userText,
+      lead: leadForAi,
+      serviceFacts,
+    });
+
+    if (noPublicPriceReply) {
+      reply = noPublicPriceReply;
+    } else {
 
     let factsBlock = "";
 
     if (serviceFacts) {
+      const priceLabel =
+        serviceFacts.min_monthly_fee || serviceFacts.min_project_fee || "Precio personalizado/no publicado";
       factsBlock = `
 INFORMACIÃ“N VERIFICADA DE LA WEB
 
 Servicio: ${leadForAi.interest_service}
 
-Precio mÃ­nimo: ${serviceFacts.min_monthly_fee || serviceFacts.min_project_fee}
+Precio mÃ­nimo: ${priceLabel}
 
 PÃ¡gina oficial:
 ${serviceFacts.url}
@@ -3704,6 +3951,7 @@ ${ragContext}
     if (structuredCloseReply) {
       reply = structuredCloseReply;
     }
+    }
 
     reply = cleanReply(reply);
     reply = cleanReplyForChannelChoice(reply, {
@@ -3815,6 +4063,11 @@ ${ragContext}
         (chatCompleted && !previousSignature));
 
     if (shouldNotify && signature !== previousSignature) {
+      const notificationMessages = await getConversationMessages(
+        currentConversationId,
+        40
+      ).catch(() => []);
+
       await sendLeadEmail({
         lead: latestLead,
         conversation_id: currentConversationId,
@@ -3822,6 +4075,7 @@ ${ragContext}
         changedFields: [],
         emailConfig: appConfig?.integrations?.email || null,
         recipients: notificationRecipients,
+        conversationMessages: notificationMessages,
       });
 
       lastLeadEmailSent.set(currentConversationId, signature);
@@ -4048,6 +4302,32 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+app.post("/api/auth/setup-password", async (req, res) => {
+  try {
+    const user = await setCrmUserPasswordFromToken(
+      req.body?.token,
+      req.body?.password
+    );
+
+    const token = signSessionToken({
+      user_id: user.id,
+      role: user.role,
+      exp: Date.now() + CRM_SESSION_TTL_MS,
+    });
+    writeSessionCookie(res, token);
+
+    res.json({ ok: true, user });
+  } catch (error) {
+    const message = String(error?.message || "");
+    const status =
+      message.toLowerCase().includes("enlace") ||
+      message.toLowerCase().includes("caduc")
+        ? 400
+        : 500;
+    res.status(status).json({ ok: false, error: error.message });
+  }
+});
+
 app.post("/api/auth/logout", async (_req, res) => {
   clearSessionCookie(res);
   res.json({ ok: true });
@@ -4102,8 +4382,12 @@ app.post("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) 
     }
     const adminEmail = String(req.body?.admin_email || "").trim();
     const adminPassword = String(req.body?.admin_password || "").trim();
+    const shouldSendInvite =
+      adminEmail &&
+      (!adminPassword || req.body?.admin_send_invite === true);
 
     let clientAdmin = null;
+    let clientAdminInvite = null;
     if (adminEmail && adminPassword) {
       clientAdmin = await createCrmUser({
         email: adminEmail,
@@ -4113,6 +4397,20 @@ app.post("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) 
         account_id: account.id,
         status: "active",
       });
+    } else if (shouldSendInvite) {
+      clientAdmin = await createCrmUser({
+        email: adminEmail,
+        display_name: req.body?.admin_display_name || account.name,
+        role: "client_admin",
+        account_id: account.id,
+        status: "invited",
+        require_password: false,
+      });
+      clientAdminInvite = await sendPasswordSetupInvite({
+        req,
+        user: clientAdmin,
+        accountName: account.name,
+      });
     }
     res.json({
       ok: true,
@@ -4121,6 +4419,7 @@ app.post("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) 
         product_mode: requestedProductMode,
       },
       client_admin: clientAdmin,
+      client_admin_invite: clientAdminInvite,
     });
   } catch (error) {
     const message = String(error?.message || "");
@@ -5359,6 +5658,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
     const sourceFormName = norm(payload.source_form_name || payload.form_name || "");
     const sourceAdName = norm(payload.source_ad_name || payload.ad_name || "");
     const sourceAdsetName = norm(payload.source_adset_name || payload.adset_name || "");
+    const customFields = sanitizeCustomFieldsPayload(payload.custom_fields || {});
     const preferredContactChannel = normalizeText(
       payload.preferred_contact_channel || payload.contact_channel || ""
     );
@@ -5406,6 +5706,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       source_form_name: sourceFormName,
       source_ad_name: sourceAdName,
       source_adset_name: sourceAdsetName,
+      custom_fields: customFields,
       account_id: account.id,
     };
 
@@ -5426,6 +5727,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       source_form_name: sourceFormName,
       source_ad_name: sourceAdName,
       source_adset_name: sourceAdsetName,
+      custom_fields: customFields,
       crm_status: "nuevo",
       quote_status: "sin_presupuesto",
       assigned_to: null,
@@ -5467,6 +5769,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         source_form_name: sourceFormName,
         source_ad_name: sourceAdName,
         source_adset_name: sourceAdsetName,
+        custom_fields: customFields,
         preferred_contact_channel: preferredContactChannel || null,
       },
     });
@@ -5483,6 +5786,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         lead: {
           ...lead,
           summary: leadPayload.summary,
+          custom_fields: customFields,
         },
         conversation_id: conversation.id,
         type: "new",
