@@ -1394,13 +1394,14 @@
                     </div>
                     <div class="config-integration-tools">
                       <div class="config-integration-meta">
-                        <span id="configExternalLeadStatusMessage">Usa estos datos para conectar formularios externos, automatizaciones o CRMs de terceros.</span>
-                        <small>Este endpoint crea leads dentro de la cuenta activa.</small>
+                          <span id="configExternalLeadStatusMessage">Elige tu caso y te diremos qué hacer sin meterte en líos técnicos.</span>
+                          <small>Si luego hace falta, abajo tienes el bloque técnico para desarrollo.</small>
                       </div>
                     </div>
+                    <div class="config-external-kicker">No hace falta saber código. Empieza por estas 3 decisiones.</div>
                     <div class="quote-grid">
                       <label class="quote-grid-full">
-                        Tipo de web o integración
+                        1. Cómo está hecha tu web
                         <select id="configExternalLeadType">
                           <option value="unknown">No lo sé todavía</option>
                           <option value="custom_code">Código propio / Next.js / backend propio</option>
@@ -1410,7 +1411,7 @@
                         </select>
                       </label>
                       <label>
-                        Quién lo va a conectar
+                        2. Quién lo va a conectar
                         <select id="configExternalLeadOwner">
                           <option value="developer">Mi desarrollador</option>
                           <option value="tmedia">TMedia</option>
@@ -1419,11 +1420,11 @@
                         </select>
                       </label>
                       <label>
-                        Qué queréis capturar
+                        3. Qué quieres que llegue al CRM
                         <input id="configExternalLeadGoal" type="text" placeholder="Ej. nombre, email, empresa, mensaje, presupuesto..." />
                       </label>
                       <label class="quote-grid-full">
-                        Campos especiales u observaciones
+                        Algo especial que debamos tener en cuenta
                         <textarea id="configExternalLeadNotes" rows="4" placeholder="Aquí puedes indicar si tu formulario tiene campos raros, consentimientos propios, varios pasos o cualquier matiz importante."></textarea>
                       </label>
                     </div>
@@ -1432,30 +1433,32 @@
                     </div>
                     <div id="configExternalLeadGuide" class="config-external-guide"></div>
                     <div class="config-external-actions-card">
-                      <strong>Qué hacer ahora</strong>
+                      <strong>4. Qué hacer ahora</strong>
                       <div id="configExternalLeadActionPlan" class="config-external-action-plan"></div>
                       <label class="quote-grid-full">
-                        Instrucciones listas para copiar
+                        Mensaje listo para copiar
                         <textarea id="configExternalLeadInstructions" rows="8" readonly></textarea>
                       </label>
                       <div class="config-inline-actions">
-                        <button id="configCopyExternalInstructionsBtn" type="button" class="crm-secondary-btn">Copiar instrucciones</button>
+                        <button id="configCopyExternalInstructionsBtn" type="button" class="crm-secondary-btn">Copiar mensaje</button>
                       </div>
                     </div>
 
-                    <div class="config-helper-stack">
-                      <article class="config-helper-card">
-                        <strong>1. Qué necesita el desarrollador</strong>
-                        <p>Endpoint, cabecera de autenticación, slug de cuenta y un payload base con el mapeo correcto.</p>
-                      </article>
-                      <article class="config-helper-card">
-                        <strong>2. Cómo recomendamos integrarlo</strong>
-                        <p>Usa el CRM como destino principal y deja email o automatizaciones como aviso secundario, no como fuente única del lead.</p>
-                      </article>
-                    </div>
-
+                    <details class="config-external-help">
+                      <summary>Ver recomendaciones extra</summary>
+                      <div class="config-helper-stack">
+                        <article class="config-helper-card">
+                          <strong>Qué necesita la persona técnica</strong>
+                          <p>Endpoint, cabecera de autenticación, slug de cuenta y un ejemplo base. Nada más.</p>
+                        </article>
+                        <article class="config-helper-card">
+                          <strong>Cómo recomendamos conectarlo</strong>
+                          <p>Usa el CRM como destino principal y deja email o automatizaciones como aviso secundario, no como fuente única del lead.</p>
+                        </article>
+                      </div>
+                    </details>
                     <details class="config-external-technical">
-                      <summary>Ver detalles técnicos para desarrollo</summary>
+                      <summary>Ver bloque técnico para desarrollo</summary>
                       <div class="quote-grid">
                         <label class="quote-grid-full">
                           Endpoint de entrada

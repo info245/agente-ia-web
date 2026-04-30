@@ -1740,36 +1740,36 @@ function getExternalLeadActionSteps(config = state.appConfig || {}, type = "cust
 
   if (type === "unknown") {
     return [
-      "Identifica cómo está hecha la web o quién lleva el formulario.",
-      "Pásanos el acceso, el repo o una captura del sistema.",
-      "Cuando lo sepamos, elegimos la vía más simple para conectar el lead al CRM.",
+      "Averigua si la web usa WordPress, código propio o un constructor como Wix o Webflow.",
+      "Si no lo sabes, pásanos una captura o el acceso y lo identificamos contigo.",
+      "En cuanto lo sepamos, te diremos el camino más simple para conectarlo.",
     ];
   }
 
   if (owner === "tmedia") {
     return [
-      "Déjanos guardado aquí qué queréis capturar y cualquier campo especial.",
-      "Pásanos acceso, repo, plugin o captura del sistema del formulario.",
-      "Nosotros te diremos la conexión exacta o la implementaremos contigo.",
+      "Guarda aquí qué quieres que llegue al CRM y cualquier detalle especial.",
+      "Pásanos acceso, repo, plugin o una captura del formulario.",
+      "Nosotros te diremos exactamente qué hace falta o lo conectaremos contigo.",
     ];
   }
 
   if (owner === "automation") {
     return [
-      "Usa Make, n8n o Zapier como capa intermedia para transformar el lead.",
-      "Haz un POST al endpoint del CRM con el secreto compartido.",
+      "Usa Make, n8n o Zapier para recoger el formulario y transformarlo.",
+      "Desde esa automatización, envía el lead al endpoint del CRM.",
       goal
-        ? `Mapea al menos estos datos: ${goal}.`
-        : "Mapea al menos nombre, email, mensaje y consentimiento si existe.",
+        ? `Haz que lleguen al menos estos datos: ${goal}.`
+        : "Haz que lleguen al menos nombre, email y mensaje.",
     ];
   }
 
   return [
-    "Copia las instrucciones y pásaselas al desarrollador de la web.",
-    "Mantén el email como aviso secundario y el CRM como destino principal.",
+    "Copia el mensaje de abajo y pásaselo a la persona que lleva la web.",
+    "Pídele que use el CRM como destino principal del formulario.",
     goal
-      ? `Pide que capture al menos esto: ${goal}.`
-      : "Pide que mande los campos que existan; no hace falta una estructura rígida cerrada.",
+      ? `Pide que haga llegar al menos esto: ${goal}.`
+      : "Pide que mande los campos que existan; no hace falta una estructura fija.",
   ];
 }
 
@@ -1797,21 +1797,23 @@ function buildExternalLeadInstructions(config = state.appConfig || {}, type = "c
   const notesText = notes || "Si el formulario tiene campos especiales, se pueden enviar como custom_fields.";
 
   const lines = [
-    `Tipo de web o integración: ${getExternalLeadTypeLabel(type)}.`,
-    `Responsable de la conexión: ${getExternalLeadOwnerLabel(owner)}.`,
-    `La web debe enviar los leads a este endpoint del CRM: ${endpoint}.`,
+    "Hola, necesitamos que este formulario mande los leads al CRM.",
+    "",
+    `Tipo de web: ${getExternalLeadTypeLabel(type)}.`,
+    `Responsable: ${getExternalLeadOwnerLabel(owner)}.`,
+    `Endpoint del CRM: ${endpoint}.`,
     `Header obligatorio: x-integrations-secret.`,
     `Slug de la cuenta: ${slug}.`,
-    `Queremos recoger al menos esto: ${goalText}.`,
-    `Observaciones: ${notesText}`,
+    `Datos mínimos que queremos recibir: ${goalText}.`,
+    `Notas: ${notesText}`,
     "",
-    "Importante:",
-    "- El CRM no exige que todos los formularios tengan exactamente los mismos campos.",
-    "- Se pueden mandar solo los campos que existan en ese formulario.",
-    "- Si hay campos especiales, se pueden incluir dentro de custom_fields.",
-    "- Recomendamos usar el CRM como destino principal y el email solo como aviso secundario.",
+    "Puntos importantes:",
+    "- No hace falta que todos los formularios tengan los mismos campos.",
+    "- Manda al CRM los campos que existan en este formulario.",
+    "- Si hay campos extra, se pueden incluir dentro de custom_fields.",
+    "- Deja el email como aviso secundario, no como destino principal del lead.",
     "",
-    `Referencia técnica sugerida: ${details.formName} / ${details.sourcePlatform}.`,
+    `Referencia técnica: ${details.formName} / ${details.sourcePlatform}.`,
   ];
 
   return lines.join("\n");
