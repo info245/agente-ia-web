@@ -51,6 +51,8 @@ export const DEFAULT_APP_CONFIG = {
   integrations: {
     whatsapp: {
       provider: "meta_cloud",
+      setup_owner: "tmedia",
+      setup_goal: "Recibir y continuar conversaciones por WhatsApp",
       phone_number_id: "",
       business_account_id: "",
       status_label: "Pendiente de conectar",
@@ -302,6 +304,8 @@ export const BLANK_APP_CONFIG = {
   integrations: {
     whatsapp: {
       provider: "meta_cloud",
+      setup_owner: "tmedia",
+      setup_goal: "Recibir y continuar conversaciones por WhatsApp",
       phone_number_id: "",
       business_account_id: "",
       status_label: "Pendiente de conectar",
@@ -754,6 +758,12 @@ export function sanitizeAppConfig(input = {}, options = {}) {
         provider:
           cleanString(input?.integrations?.whatsapp?.provider) ||
           defaults.integrations.whatsapp.provider,
+        setup_owner:
+          cleanString(input?.integrations?.whatsapp?.setup_owner) ||
+          defaults.integrations.whatsapp.setup_owner,
+        setup_goal:
+          cleanString(input?.integrations?.whatsapp?.setup_goal) ||
+          defaults.integrations.whatsapp.setup_goal,
         phone_number_id: cleanString(
           input?.integrations?.whatsapp?.phone_number_id
         ),

@@ -1166,34 +1166,84 @@
                         <small id="configWhatsappLastValidated">Ultima validacion: -</small>
                       </div>
                     </div>
-
+                    <div class="config-external-kicker">No hace falta conocer la API. Empieza por estas 2 decisiones.</div>
                     <div class="quote-grid">
                       <label>
-                        Proveedor
-                        <select id="configWhatsappProvider">
-                          <option value="meta_cloud">Meta Cloud API</option>
-                          <option value="twilio">Twilio</option>
-                          <option value="360dialog">360dialog</option>
-                          <option value="manual">Manual</option>
+                        1. Quién lo va a conectar
+                        <select id="configWhatsappSetupOwner">
+                          <option value="tmedia">TMedia</option>
+                          <option value="developer">Mi desarrollador</option>
+                          <option value="unknown">Aún no lo sé</option>
                         </select>
                       </label>
 
                       <label>
-                        Estado visible
-                        <input id="configWhatsappStatusLabel" type="text" placeholder="Conectado, pendiente, en prueba..." />
-                      </label>
-
-                      <label>
-                        Phone Number ID
-                        <input id="configWhatsappPhoneNumberId" type="text" placeholder="ID del numero en Meta/Twilio" />
-                      </label>
-
-                      <label>
-                        Business Account ID
-                        <input id="configWhatsappBusinessAccountId" type="text" placeholder="ID de cuenta de negocio" />
+                        2. Qué quieres conseguir con WhatsApp
+                        <input id="configWhatsappSetupGoal" type="text" placeholder="Ej. que el chat continúe por WhatsApp, recibir leads, mandar propuestas..." />
                       </label>
                     </div>
-                  </article>
+
+                    <div id="configWhatsappGuideHint" class="config-inline-note">
+                      Te diremos el siguiente paso según quién lo conecte y para qué lo quieres usar.
+                    </div>
+                    <div id="configWhatsappGuide" class="config-external-guide"></div>
+
+                    <div class="config-external-actions-card">
+                      <strong>Qué hacer ahora</strong>
+                      <div id="configWhatsappActionPlan" class="config-external-action-plan"></div>
+                      <label class="quote-grid-full">
+                        Mensaje listo para copiar
+                        <textarea id="configWhatsappInstructions" rows="7" readonly></textarea>
+                      </label>
+                      <div class="config-inline-actions">
+                        <button id="configCopyWhatsappInstructionsBtn" type="button" class="crm-secondary-btn">Copiar mensaje</button>
+                      </div>
+                    </div>
+
+                    <details class="config-external-help">
+                      <summary>Ver recomendaciones extra</summary>
+                      <div class="config-helper-stack">
+                        <article class="config-helper-card">
+                          <strong>Qué suele hacer falta</strong>
+                          <p>Elegir proveedor, definir el número que va a usar el negocio y comprobar que el canal puede recibir y enviar mensajes.</p>
+                        </article>
+                        <article class="config-helper-card">
+                          <strong>Cómo recomendamos usarlo</strong>
+                          <p>Úsalo como continuación natural del chat y del seguimiento comercial, no como único sitio donde viva toda la información.</p>
+                        </article>
+                      </div>
+                    </details>
+
+                    <details class="config-external-technical">
+                      <summary>Ver bloque técnico para desarrollo</summary>
+                      <div class="quote-grid">
+                        <label>
+                          Proveedor
+                          <select id="configWhatsappProvider">
+                            <option value="meta_cloud">Meta Cloud API</option>
+                            <option value="twilio">Twilio</option>
+                            <option value="360dialog">360dialog</option>
+                            <option value="manual">Manual</option>
+                          </select>
+                        </label>
+
+                        <label>
+                          Estado visible
+                          <input id="configWhatsappStatusLabel" type="text" placeholder="Conectado, pendiente, en prueba..." />
+                        </label>
+
+                        <label>
+                          Phone Number ID
+                          <input id="configWhatsappPhoneNumberId" type="text" placeholder="ID del numero en Meta/Twilio" />
+                        </label>
+
+                        <label>
+                          Business Account ID
+                          <input id="configWhatsappBusinessAccountId" type="text" placeholder="ID de cuenta de negocio" />
+                        </label>
+                      </div>
+                    </details>
+                    </article>
 
                   <article class="config-integration-card">
                     <div class="config-integration-head">

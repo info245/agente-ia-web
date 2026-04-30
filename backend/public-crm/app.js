@@ -530,6 +530,13 @@ const el = {
   configAccentColor: document.getElementById("configAccentColor"),
   configPromptAdditions: document.getElementById("configPromptAdditions"),
   configWhatsappProvider: document.getElementById("configWhatsappProvider"),
+  configWhatsappSetupOwner: document.getElementById("configWhatsappSetupOwner"),
+  configWhatsappSetupGoal: document.getElementById("configWhatsappSetupGoal"),
+  configWhatsappGuideHint: document.getElementById("configWhatsappGuideHint"),
+  configWhatsappGuide: document.getElementById("configWhatsappGuide"),
+  configWhatsappActionPlan: document.getElementById("configWhatsappActionPlan"),
+  configWhatsappInstructions: document.getElementById("configWhatsappInstructions"),
+  configCopyWhatsappInstructionsBtn: document.getElementById("configCopyWhatsappInstructionsBtn"),
   configWhatsappStatusLabel: document.getElementById("configWhatsappStatusLabel"),
   configWhatsappPhoneNumberId: document.getElementById("configWhatsappPhoneNumberId"),
   configWhatsappBusinessAccountId: document.getElementById("configWhatsappBusinessAccountId"),
@@ -3580,11 +3587,13 @@ function buildConfigPayload() {
       notifications,
       knowledge_sources,
       integrations: {
-      whatsapp: {
-        provider: el.configWhatsappProvider.value,
-        status_label: el.configWhatsappStatusLabel.value,
-        phone_number_id: el.configWhatsappPhoneNumberId.value,
-        business_account_id: el.configWhatsappBusinessAccountId.value,
+        whatsapp: {
+          provider: el.configWhatsappProvider.value,
+          setup_owner: el.configWhatsappSetupOwner?.value || "tmedia",
+          setup_goal: el.configWhatsappSetupGoal?.value || "",
+          status_label: el.configWhatsappStatusLabel.value,
+          phone_number_id: el.configWhatsappPhoneNumberId.value,
+          business_account_id: el.configWhatsappBusinessAccountId.value,
         validation: state.appConfig?.integrations?.whatsapp?.validation || {},
       },
       lead_forms: {
@@ -4406,6 +4415,14 @@ function renderConfig() {
   }
   el.configWhatsappProvider.value =
     config?.integrations?.whatsapp?.provider || "meta_cloud";
+  if (el.configWhatsappSetupOwner) {
+    el.configWhatsappSetupOwner.value =
+      config?.integrations?.whatsapp?.setup_owner || "tmedia";
+  }
+  if (el.configWhatsappSetupGoal) {
+    el.configWhatsappSetupGoal.value =
+      config?.integrations?.whatsapp?.setup_goal || "";
+  }
   el.configWhatsappStatusLabel.value =
     config?.integrations?.whatsapp?.status_label || "";
     el.configWhatsappPhoneNumberId.value =
@@ -4490,6 +4507,7 @@ function renderConfig() {
     config?.integrations?.whatsapp?.validation || {},
     config?.integrations?.whatsapp?.status_label || "Pendiente"
   );
+  renderWhatsappGuide(config);
   renderIntegrationValidation(
     "lead_forms",
     config?.integrations?.lead_forms?.validation || {}
@@ -4582,6 +4600,153 @@ function renderAnalysisList(target, rows = []) {
       )}</li>`;
     })
       .join("");
+}
+
+function buildWhatsappGuide(config = state.appConfig || {}) {
+  const owner = String(
+    config?.integrations?.whatsapp?.setup_owner ||
+      el.configWhatsappSetupOwner?.value ||
+      "tmedia"
+  ).trim() || "tmedia";
+  const goal = String(
+    config?.integrations?.whatsapp?.setup_goal ||
+      el.configWhatsappSetupGoal?.value ||
+      ""
+  ).trim();
+  const provider = String(
+    config?.integrations?.whatsapp?.provider || "meta_cloud"
+  ).trim();
+
+  const providerLabel =
+    provider === "twilio"
+      ? "Twilio"
+      : provider === "360dialog"
+        ? "360dialog"
+        : provider === "manual"
+          ? "Integración manual"
+          : "Meta Cloud API";
+
+  const hint =
+    owner === "unknown"
+      ? "Primero necesitamos saber quién lo va a conectar y qué número usaréis."
+      : owner === "developer"
+        ? "Esto está pensado para pasarle el siguiente paso a la persona técnica."
+        : "Déjanos aquí el objetivo y nosotros te diremos el acceso exacto que necesitamos.";
+
+  const cards =
+    owner === "developer"
+      ? [
+          {
+            title: "Qué tienes que hacer tú",
+            copy:
+              "Pásale al desarrollador qué queréis hacer con WhatsApp y qué proveedor vais a usar. Si no lo tenéis claro, Meta Cloud API suele ser la vía más normal.",
+          },
+          {
+            title: "Qué necesitaremos si algo no cuadra",
+            copy:
+              "El número que usaréis, el proveedor elegido y, si ya existe, el panel o cuenta donde esté montado WhatsApp Business.",
+          },
+        ]
+      : owner === "unknown"
+        ? [
+            {
+              title: "Qué necesitamos saber primero",
+              copy:
+                "Quién lo va a conectar, qué número queréis usar y si ya existe una cuenta de WhatsApp Business para este cliente.",
+            },
+            {
+              title: "Qué haremos después",
+              copy:
+                "Con eso te diremos si vamos por Meta Cloud, Twilio, 360dialog o una integración manual más simple.",
+            },
+          ]
+        : [
+            {
+              title: "Qué tienes que hacer tú",
+              copy:
+                "Déjanos aquí el objetivo, el proveedor si ya lo sabes y el número que queréis usar. Así te pediremos solo el acceso justo.",
+            },
+            {
+              title: "Qué necesitaremos",
+              copy:
+                "Acceso a la cuenta técnica o a la cuenta de Meta Business si WhatsApp se va a montar sobre Meta Cloud.",
+            },
+          ];
+
+  const actionSteps =
+    owner === "developer"
+      ? [
+          "Copia el mensaje de abajo y pásaselo a tu desarrollador.",
+          "Definid qué proveedor vais a usar y con qué número.",
+          goal
+            ? `Pídele que configure WhatsApp para esto: ${goal}.`
+            : "Pídele que deje WhatsApp listo para continuar conversaciones y seguimiento.",
+        ]
+      : owner === "unknown"
+        ? [
+            "Define quién se encargará de la conexión.",
+            "Decide qué número queréis usar para este cliente.",
+            "En cuanto lo sepamos, te diremos el camino más simple.",
+          ]
+        : [
+            "Guarda aquí el objetivo y el proveedor si lo sabes.",
+            "Pásanos el número o la cuenta de negocio que queréis usar.",
+            "Nosotros te diremos exactamente qué acceso necesitamos o lo conectaremos contigo.",
+          ];
+
+  const instructions = [
+    "Hola, necesitamos dejar WhatsApp conectado para esta cuenta.",
+    "",
+    `Proveedor previsto: ${providerLabel}.`,
+    `Responsable de la conexión: ${getExternalLeadOwnerLabel(owner)}.`,
+    `Objetivo: ${goal || "continuar conversaciones del chat y hacer seguimiento comercial"}.`,
+    "",
+    "Qué necesitamos:",
+    "- Saber qué número se va a usar.",
+    "- Confirmar si ya existe cuenta de WhatsApp Business o Meta Business.",
+    "- Elegir proveedor: Meta Cloud API, Twilio, 360dialog o integración manual.",
+    "",
+    "Importante:",
+    "- No hace falta decidir toda la parte técnica hoy.",
+    "- Primero dejamos claro el objetivo, el número y el responsable.",
+  ].join("\n");
+
+  return { hint, cards, actionSteps, instructions };
+}
+
+function renderWhatsappGuide(config = state.appConfig || {}) {
+  const guide = buildWhatsappGuide(config);
+
+  if (el.configWhatsappGuideHint) {
+    el.configWhatsappGuideHint.textContent = guide.hint;
+  }
+  if (el.configWhatsappGuide) {
+    el.configWhatsappGuide.innerHTML = guide.cards
+      .map(
+        (card) => `
+          <article class="config-external-guide-card">
+            <strong>${escapeHtml(card.title)}</strong>
+            <p>${escapeHtml(card.copy)}</p>
+          </article>
+        `
+      )
+      .join("");
+  }
+  if (el.configWhatsappActionPlan) {
+    el.configWhatsappActionPlan.innerHTML = guide.actionSteps
+      .map(
+        (step, index) => `
+          <div class="config-external-action-step">
+            <span>${index + 1}</span>
+            <p>${escapeHtml(step)}</p>
+          </div>
+        `
+      )
+      .join("");
+  }
+  if (el.configWhatsappInstructions) {
+    el.configWhatsappInstructions.value = guide.instructions;
+  }
 }
 
 function normaliseAnalysisEditorList(rows = []) {
@@ -5949,6 +6114,19 @@ el.configPreviewContextBtn?.addEventListener("click", previewKnowledgeContext);
 el.configValidateWhatsappBtn?.addEventListener("click", () =>
   validateIntegration("whatsapp", el.configValidateWhatsappBtn)
 );
+el.configCopyWhatsappInstructionsBtn?.addEventListener("click", () => {
+  copyToClipboard(
+    el.configWhatsappInstructions?.value || "",
+    "Mensaje de WhatsApp copiado.",
+    el.configSaveStatus
+  );
+});
+el.configWhatsappSetupOwner?.addEventListener("change", () => {
+  renderWhatsappGuide(buildConfigPayload());
+});
+el.configWhatsappSetupGoal?.addEventListener("input", () => {
+  renderWhatsappGuide(buildConfigPayload());
+});
 el.configValidateLeadFormsBtn?.addEventListener("click", () =>
   validateIntegration("lead_forms", el.configValidateLeadFormsBtn)
 );
