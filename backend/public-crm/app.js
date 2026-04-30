@@ -545,6 +545,13 @@ const el = {
   configWhatsappValidationMessage: document.getElementById("configWhatsappValidationMessage"),
   configWhatsappLastValidated: document.getElementById("configWhatsappLastValidated"),
   configIntegrationsOverviewGrid: document.getElementById("configIntegrationsOverviewGrid"),
+  configLeadFormsOwner: document.getElementById("configLeadFormsOwner"),
+  configLeadFormsGoal: document.getElementById("configLeadFormsGoal"),
+  configLeadFormsGuideHint: document.getElementById("configLeadFormsGuideHint"),
+  configLeadFormsGuide: document.getElementById("configLeadFormsGuide"),
+  configLeadFormsActionPlan: document.getElementById("configLeadFormsActionPlan"),
+  configLeadFormsInstructions: document.getElementById("configLeadFormsInstructions"),
+  configCopyLeadFormsInstructionsBtn: document.getElementById("configCopyLeadFormsInstructionsBtn"),
   configMetaLeadSource: document.getElementById("configMetaLeadSource"),
   configGoogleLeadSource: document.getElementById("configGoogleLeadSource"),
   configLeadSheetDocument: document.getElementById("configLeadSheetDocument"),
@@ -3596,12 +3603,14 @@ function buildConfigPayload() {
           business_account_id: el.configWhatsappBusinessAccountId.value,
         validation: state.appConfig?.integrations?.whatsapp?.validation || {},
       },
-      lead_forms: {
-        website_stack: el.configExternalLeadType?.value || "custom_code",
-        setup_owner: el.configExternalLeadOwner?.value || "developer",
-        capture_goal: el.configExternalLeadGoal?.value || "",
-        custom_capture_notes: el.configExternalLeadNotes?.value || "",
-        meta_source: el.configMetaLeadSource.value,
+        lead_forms: {
+          website_stack: el.configExternalLeadType?.value || "custom_code",
+          setup_owner: el.configExternalLeadOwner?.value || "developer",
+          capture_goal: el.configExternalLeadGoal?.value || "",
+          custom_capture_notes: el.configExternalLeadNotes?.value || "",
+          intake_owner: el.configLeadFormsOwner?.value || "tmedia",
+          intake_goal: el.configLeadFormsGoal?.value || "",
+          meta_source: el.configMetaLeadSource.value,
         google_source: el.configGoogleLeadSource.value,
         sheet_document: el.configLeadSheetDocument.value,
         sheet_tabs: el.configLeadSheetTabs.value,
@@ -4445,6 +4454,14 @@ function renderConfig() {
       el.configExternalLeadNotes.value =
         config?.integrations?.lead_forms?.custom_capture_notes || "";
     }
+    if (el.configLeadFormsOwner) {
+      el.configLeadFormsOwner.value =
+        config?.integrations?.lead_forms?.intake_owner || "tmedia";
+    }
+    if (el.configLeadFormsGoal) {
+      el.configLeadFormsGoal.value =
+        config?.integrations?.lead_forms?.intake_goal || "";
+    }
     el.configMetaLeadSource.value =
       config?.integrations?.lead_forms?.meta_source || "google_sheets";
   el.configGoogleLeadSource.value =
@@ -4512,6 +4529,7 @@ function renderConfig() {
     "lead_forms",
     config?.integrations?.lead_forms?.validation || {}
   );
+  renderLeadFormsGuide(config);
   const effectiveEmailValidation = getEffectiveEmailValidation(config);
   renderIntegrationValidation(
     "email",
@@ -4746,6 +4764,158 @@ function renderWhatsappGuide(config = state.appConfig || {}) {
   }
   if (el.configWhatsappInstructions) {
     el.configWhatsappInstructions.value = guide.instructions;
+  }
+}
+
+function buildLeadFormsGuide(config = state.appConfig || {}) {
+  const owner = String(
+    config?.integrations?.lead_forms?.intake_owner ||
+      el.configLeadFormsOwner?.value ||
+      "tmedia"
+  ).trim() || "tmedia";
+  const goal = String(
+    config?.integrations?.lead_forms?.intake_goal ||
+      el.configLeadFormsGoal?.value ||
+      ""
+  ).trim();
+  const metaSource = String(config?.integrations?.lead_forms?.meta_source || "google_sheets").trim();
+  const googleSource = String(config?.integrations?.lead_forms?.google_source || "webhook_n8n").trim();
+
+  const cards =
+    owner === "developer"
+      ? [
+          {
+            title: "Qué tienes que hacer tú",
+            copy:
+              "Pásale al desarrollador cómo queréis recibir los leads y qué origen vais a usar para Meta y Google.",
+          },
+          {
+            title: "Qué necesitaremos si algo no cuadra",
+            copy:
+              "El acceso al flujo actual, la hoja o el webhook donde hoy se reciben los leads, si ya existe algo montado.",
+          },
+        ]
+      : owner === "automation"
+        ? [
+            {
+              title: "Qué tienes que hacer tú",
+              copy:
+                "Decide si la entrada va a pasar por Make, n8n, Zapier o Google Sheets antes de llegar al CRM.",
+            },
+            {
+              title: "Qué haremos después",
+              copy:
+                "Con eso ajustaremos el mapping y la prueba de entrada sin exigir una estructura rígida.",
+            },
+          ]
+        : owner === "unknown"
+          ? [
+              {
+                title: "Qué necesitamos saber primero",
+                copy:
+                  "Quién lo va a conectar y por dónde entran hoy los leads de Meta y Google, si ya existe algún flujo montado.",
+              },
+              {
+                title: "Qué haremos después",
+                copy:
+                  "Cuando lo sepamos, te diremos si conviene webhook, Make, n8n o una hoja puente.",
+              },
+            ]
+          : [
+              {
+                title: "Qué tienes que hacer tú",
+                copy:
+                  "Déjanos aquí el objetivo y si ya sabéis si usaréis webhook, Make, n8n o Google Sheets.",
+              },
+              {
+                title: "Qué necesitaremos",
+                copy:
+                  "Acceso al flujo o a la cuenta que hoy recibe esos leads para conectarlo bien al CRM.",
+              },
+            ];
+
+  const actionSteps =
+    owner === "developer"
+      ? [
+          "Copia el mensaje de abajo y pásaselo a tu desarrollador.",
+          `Definid por dónde entrará Meta (${metaSource}) y Google (${googleSource}).`,
+          goal
+            ? `Pide que lo dejen listo para esto: ${goal}.`
+            : "Pide que los leads de Meta y Google entren al CRM automáticamente.",
+        ]
+      : owner === "automation"
+        ? [
+            "Define si usarás Make, n8n, Zapier o Google Sheets como puente.",
+            "Haz que ese flujo mande el lead al CRM y no solo a una hoja.",
+            goal
+              ? `Asegúrate de cumplir este objetivo: ${goal}.`
+              : "Asegúrate de que el lead acabe en el CRM y no solo en una herramienta intermedia.",
+          ]
+        : owner === "unknown"
+          ? [
+              "Averigua si ya existe algún flujo para Meta o Google.",
+              "Decide quién se va a encargar de conectarlo.",
+              "Con eso ya podremos decirte el camino más simple.",
+            ]
+          : [
+              "Guarda aquí el objetivo y la vía de entrada prevista.",
+              "Pásanos el acceso a la automatización, hoja o webhook si ya existe.",
+              "Nosotros te diremos exactamente qué falta o lo conectaremos contigo.",
+            ];
+
+  const instructions = [
+    "Hola, necesitamos que los leads de Meta y Google entren automáticamente al CRM.",
+    "",
+    `Responsable: ${getExternalLeadOwnerLabel(owner)}.`,
+    `Entrada prevista Meta: ${metaSource}.`,
+    `Entrada prevista Google: ${googleSource}.`,
+    `Objetivo: ${goal || "que los leads entren al CRM y podamos trabajarlos desde ahí"}.`,
+    "",
+    "Qué necesitamos:",
+    "- Saber por dónde entra hoy cada fuente, si ya existe algo montado.",
+    "- Si hay webhook o automatización, revisar ese punto de entrada.",
+    "- Si no hay nada, definir una vía simple: webhook, Make, n8n o Google Sheets.",
+  ].join("\n");
+
+  const hint =
+    owner === "unknown"
+      ? "Primero necesitamos saber quién lo conectará y si ya existe algún flujo para Meta o Google."
+      : "Te diremos el siguiente paso según quién lo conecte y por dónde quieras hacer entrar los leads.";
+
+  return { cards, actionSteps, instructions, hint };
+}
+
+function renderLeadFormsGuide(config = state.appConfig || {}) {
+  const guide = buildLeadFormsGuide(config);
+  if (el.configLeadFormsGuideHint) {
+    el.configLeadFormsGuideHint.textContent = guide.hint;
+  }
+  if (el.configLeadFormsGuide) {
+    el.configLeadFormsGuide.innerHTML = guide.cards
+      .map(
+        (card) => `
+          <article class="config-external-guide-card">
+            <strong>${escapeHtml(card.title)}</strong>
+            <p>${escapeHtml(card.copy)}</p>
+          </article>
+        `
+      )
+      .join("");
+  }
+  if (el.configLeadFormsActionPlan) {
+    el.configLeadFormsActionPlan.innerHTML = guide.actionSteps
+      .map(
+        (step, index) => `
+          <div class="config-external-action-step">
+            <span>${index + 1}</span>
+            <p>${escapeHtml(step)}</p>
+          </div>
+        `
+      )
+      .join("");
+  }
+  if (el.configLeadFormsInstructions) {
+    el.configLeadFormsInstructions.value = guide.instructions;
   }
 }
 
@@ -6130,6 +6300,25 @@ el.configWhatsappSetupGoal?.addEventListener("input", () => {
 el.configValidateLeadFormsBtn?.addEventListener("click", () =>
   validateIntegration("lead_forms", el.configValidateLeadFormsBtn)
 );
+el.configCopyLeadFormsInstructionsBtn?.addEventListener("click", () => {
+  copyToClipboard(
+    el.configLeadFormsInstructions?.value || "",
+    "Mensaje de Lead forms copiado.",
+    el.configSaveStatus
+  );
+});
+el.configLeadFormsOwner?.addEventListener("change", () => {
+  renderLeadFormsGuide(buildConfigPayload());
+});
+el.configLeadFormsGoal?.addEventListener("input", () => {
+  renderLeadFormsGuide(buildConfigPayload());
+});
+el.configMetaLeadSource?.addEventListener("change", () => {
+  renderLeadFormsGuide(buildConfigPayload());
+});
+el.configGoogleLeadSource?.addEventListener("change", () => {
+  renderLeadFormsGuide(buildConfigPayload());
+});
 el.configValidateEmailBtn?.addEventListener("click", () =>
   validateIntegration("email", el.configValidateEmailBtn)
 );

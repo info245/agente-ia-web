@@ -67,6 +67,8 @@ export const DEFAULT_APP_CONFIG = {
         setup_owner: "developer",
         capture_goal: "",
         custom_capture_notes: "",
+        intake_owner: "tmedia",
+        intake_goal: "Recibir leads de Meta o Google dentro del CRM",
         meta_source: "google_sheets",
         google_source: "webhook_n8n",
         sheet_document: "",
@@ -320,6 +322,8 @@ export const BLANK_APP_CONFIG = {
         setup_owner: "developer",
         capture_goal: "",
         custom_capture_notes: "",
+        intake_owner: "tmedia",
+        intake_goal: "Recibir leads de Meta o Google dentro del CRM",
         meta_source: "google_sheets",
         google_source: "webhook_n8n",
         sheet_document: "",
@@ -791,6 +795,12 @@ export function sanitizeAppConfig(input = {}, options = {}) {
           custom_capture_notes: cleanString(
             input?.integrations?.lead_forms?.custom_capture_notes
           ),
+          intake_owner:
+            cleanString(input?.integrations?.lead_forms?.intake_owner) ||
+            defaults.integrations.lead_forms.intake_owner,
+          intake_goal:
+            cleanString(input?.integrations?.lead_forms?.intake_goal) ||
+            defaults.integrations.lead_forms.intake_goal,
           meta_source:
             cleanString(input?.integrations?.lead_forms?.meta_source) ||
             defaults.integrations.lead_forms.meta_source,

@@ -1260,44 +1260,94 @@
                         <small id="configLeadFormsLastValidated">Ultima validacion: -</small>
                       </div>
                     </div>
-
+                    <div class="config-external-kicker">Aquí solo decidimos cómo quieres que entren los leads de Meta y Google.</div>
                     <div class="quote-grid">
                       <label>
-                        Meta Lead Ads entra por
-                        <select id="configMetaLeadSource">
-                          <option value="google_sheets">Google Sheets</option>
-                          <option value="webhook_n8n">Webhook n8n</option>
-                          <option value="make">Make</option>
-                          <option value="manual">Manual</option>
+                        1. Quién lo va a conectar
+                        <select id="configLeadFormsOwner">
+                          <option value="tmedia">TMedia</option>
+                          <option value="developer">Mi desarrollador</option>
+                          <option value="automation">Con Make / n8n / Zapier</option>
+                          <option value="unknown">Aún no lo sé</option>
                         </select>
                       </label>
 
                       <label>
-                        Google Lead Forms entra por
-                        <select id="configGoogleLeadSource">
-                          <option value="webhook_n8n">Webhook n8n</option>
-                          <option value="google_sheets">Google Sheets</option>
-                          <option value="make">Make</option>
-                          <option value="manual">Manual</option>
-                        </select>
-                      </label>
-
-                      <label class="quote-grid-full">
-                        Documento Google Sheets
-                        <input id="configLeadSheetDocument" type="text" placeholder="Nombre o URL del sheet centralizado" />
-                      </label>
-
-                      <label>
-                        Hojas conectadas
-                        <input id="configLeadSheetTabs" type="text" placeholder="FB_SEO, FB_GOOGLE_ADS, GOOGLE_LEADS..." />
-                      </label>
-
-                      <label>
-                        Webhook principal
-                        <input id="configLeadWebhookUrl" type="url" placeholder="https://n8n.t-mediaglobal.com/webhook/..." />
+                        2. Qué quieres conseguir
+                        <input id="configLeadFormsGoal" type="text" placeholder="Ej. que los leads de Facebook y Google entren al CRM y avisen por email..." />
                       </label>
                     </div>
-                  </article>
+                    <div id="configLeadFormsGuideHint" class="config-inline-note">
+                      Elige el responsable y el objetivo y te diremos el siguiente paso.
+                    </div>
+                    <div id="configLeadFormsGuide" class="config-external-guide"></div>
+
+                    <div class="config-external-actions-card">
+                      <strong>Qué hacer ahora</strong>
+                      <div id="configLeadFormsActionPlan" class="config-external-action-plan"></div>
+                      <label class="quote-grid-full">
+                        Mensaje listo para copiar
+                        <textarea id="configLeadFormsInstructions" rows="7" readonly></textarea>
+                      </label>
+                      <div class="config-inline-actions">
+                        <button id="configCopyLeadFormsInstructionsBtn" type="button" class="crm-secondary-btn">Copiar mensaje</button>
+                      </div>
+                    </div>
+
+                    <details class="config-external-help">
+                      <summary>Ver recomendaciones extra</summary>
+                      <div class="config-helper-stack">
+                        <article class="config-helper-card">
+                          <strong>Qué suele hacer falta</strong>
+                          <p>Decidir si la entrada vendrá por webhook, Make, n8n o Google Sheets y dejar claro qué cuenta o formulario origina cada lead.</p>
+                        </article>
+                        <article class="config-helper-card">
+                          <strong>Cómo recomendamos usarlo</strong>
+                          <p>Haz que los leads entren al CRM como fuente principal y deja las hojas o automatizaciones como apoyo operativo, no como almacén único.</p>
+                        </article>
+                      </div>
+                    </details>
+
+                    <details class="config-external-technical">
+                      <summary>Ver bloque técnico para desarrollo</summary>
+                      <div class="quote-grid">
+                        <label>
+                          Meta Lead Ads entra por
+                          <select id="configMetaLeadSource">
+                            <option value="google_sheets">Google Sheets</option>
+                            <option value="webhook_n8n">Webhook n8n</option>
+                            <option value="make">Make</option>
+                            <option value="manual">Manual</option>
+                          </select>
+                        </label>
+
+                        <label>
+                          Google Lead Forms entra por
+                          <select id="configGoogleLeadSource">
+                            <option value="webhook_n8n">Webhook n8n</option>
+                            <option value="google_sheets">Google Sheets</option>
+                            <option value="make">Make</option>
+                            <option value="manual">Manual</option>
+                          </select>
+                        </label>
+
+                        <label class="quote-grid-full">
+                          Documento Google Sheets
+                          <input id="configLeadSheetDocument" type="text" placeholder="Nombre o URL del sheet centralizado" />
+                        </label>
+
+                        <label>
+                          Hojas conectadas
+                          <input id="configLeadSheetTabs" type="text" placeholder="FB_SEO, FB_GOOGLE_ADS, GOOGLE_LEADS..." />
+                        </label>
+
+                        <label>
+                          Webhook principal
+                          <input id="configLeadWebhookUrl" type="url" placeholder="https://n8n.t-mediaglobal.com/webhook/..." />
+                        </label>
+                      </div>
+                    </details>
+                    </article>
 
                   <article class="config-integration-card">
                     <div class="config-integration-head">
