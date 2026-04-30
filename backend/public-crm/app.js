@@ -560,6 +560,13 @@ const el = {
   configValidateLeadFormsBtn: document.getElementById("configValidateLeadFormsBtn"),
   configLeadFormsValidationMessage: document.getElementById("configLeadFormsValidationMessage"),
   configLeadFormsLastValidated: document.getElementById("configLeadFormsLastValidated"),
+  configEmailSetupOwner: document.getElementById("configEmailSetupOwner"),
+  configEmailSetupGoal: document.getElementById("configEmailSetupGoal"),
+  configEmailGuideHint: document.getElementById("configEmailGuideHint"),
+  configEmailGuide: document.getElementById("configEmailGuide"),
+  configEmailActionPlan: document.getElementById("configEmailActionPlan"),
+  configEmailInstructions: document.getElementById("configEmailInstructions"),
+  configCopyEmailInstructionsBtn: document.getElementById("configCopyEmailInstructionsBtn"),
   configEmailProvider: document.getElementById("configEmailProvider"),
   configEmailFromAddress: document.getElementById("configEmailFromAddress"),
   configEmailReplyTo: document.getElementById("configEmailReplyTo"),
@@ -577,6 +584,13 @@ const el = {
   configValidateEmailBtn: document.getElementById("configValidateEmailBtn"),
   configEmailValidationMessage: document.getElementById("configEmailValidationMessage"),
   configEmailLastValidated: document.getElementById("configEmailLastValidated"),
+  configAutomationSetupOwner: document.getElementById("configAutomationSetupOwner"),
+  configAutomationSetupGoal: document.getElementById("configAutomationSetupGoal"),
+  configAutomationsGuideHint: document.getElementById("configAutomationsGuideHint"),
+  configAutomationsGuide: document.getElementById("configAutomationsGuide"),
+  configAutomationsActionPlan: document.getElementById("configAutomationsActionPlan"),
+  configAutomationsInstructions: document.getElementById("configAutomationsInstructions"),
+  configCopyAutomationsInstructionsBtn: document.getElementById("configCopyAutomationsInstructionsBtn"),
   configAutomationPlatform: document.getElementById("configAutomationPlatform"),
   configAutomationWorkspaceUrl: document.getElementById("configAutomationWorkspaceUrl"),
   configAutomationNotes: document.getElementById("configAutomationNotes"),
@@ -3619,6 +3633,8 @@ function buildConfigPayload() {
       },
       email: {
         provider: el.configEmailProvider.value,
+        setup_owner: el.configEmailSetupOwner?.value || "client_team",
+        setup_goal: el.configEmailSetupGoal?.value || "",
         from_email: el.configEmailFromAddress.value,
         reply_to_email: el.configEmailReplyTo.value,
         smtp_host: el.configEmailSmtpHost?.value || "",
@@ -3629,6 +3645,8 @@ function buildConfigPayload() {
         validation: state.appConfig?.integrations?.email?.validation || {},
       },
       automations: {
+        setup_owner: el.configAutomationSetupOwner?.value || "tmedia",
+        setup_goal: el.configAutomationSetupGoal?.value || "",
         platform: el.configAutomationPlatform.value,
         workspace_url: el.configAutomationWorkspaceUrl.value,
         notes: el.configAutomationNotes.value,
@@ -4474,6 +4492,14 @@ function renderConfig() {
     config?.integrations?.lead_forms?.webhook_url || "";
   el.configEmailProvider.value =
     config?.integrations?.email?.provider || "smtp";
+  if (el.configEmailSetupOwner) {
+    el.configEmailSetupOwner.value =
+      config?.integrations?.email?.setup_owner || "client_team";
+  }
+  if (el.configEmailSetupGoal) {
+    el.configEmailSetupGoal.value =
+      config?.integrations?.email?.setup_goal || "";
+  }
   el.configEmailFromAddress.value =
     config?.integrations?.email?.from_email || "";
   el.configEmailReplyTo.value =
@@ -4511,6 +4537,14 @@ function renderConfig() {
   }
   el.configAutomationPlatform.value =
     config?.integrations?.automations?.platform || "n8n";
+  if (el.configAutomationSetupOwner) {
+    el.configAutomationSetupOwner.value =
+      config?.integrations?.automations?.setup_owner || "tmedia";
+  }
+  if (el.configAutomationSetupGoal) {
+    el.configAutomationSetupGoal.value =
+      config?.integrations?.automations?.setup_goal || "";
+  }
   el.configAutomationWorkspaceUrl.value =
     config?.integrations?.automations?.workspace_url || "";
   el.configAutomationNotes.value =
@@ -4535,10 +4569,12 @@ function renderConfig() {
     "email",
     effectiveEmailValidation
   );
+  renderEmailGuide(config);
   renderIntegrationValidation(
     "automations",
     config?.integrations?.automations?.validation || {}
   );
+  renderAutomationsGuide(config);
   renderIntegrationsOverview(config);
   renderExternalLeadIntegration(config);
 
@@ -4916,6 +4952,348 @@ function renderLeadFormsGuide(config = state.appConfig || {}) {
   }
   if (el.configLeadFormsInstructions) {
     el.configLeadFormsInstructions.value = guide.instructions;
+  }
+}
+
+function getEmailSetupOwnerLabel(owner = "") {
+  if (owner === "tmedia") return "TMedia";
+  if (owner === "developer") return "Mi desarrollador";
+  if (owner === "client_team") return "Mi equipo / cliente";
+  return "Aun no lo se";
+}
+
+function getEmailProviderFriendlyLabel(provider = "") {
+  const normalized = String(provider || "").trim().toLowerCase();
+  if (normalized === "google_oauth") return "Conectar Gmail o Google Workspace";
+  if (normalized === "gmail") return "Gmail con app password";
+  if (normalized === "smtp") return "SMTP propio";
+  if (normalized === "resend") return "Resend";
+  if (normalized === "sendgrid") return "SendGrid";
+  return "Aun no lo se";
+}
+
+function buildEmailGuide(config = state.appConfig || {}) {
+  const emailConfig = config?.integrations?.email || {};
+  const owner = String(
+    emailConfig?.setup_owner || el.configEmailSetupOwner?.value || "client_team"
+  ).trim() || "client_team";
+  const goal = String(
+    emailConfig?.setup_goal || el.configEmailSetupGoal?.value || ""
+  ).trim();
+  const provider = String(
+    emailConfig?.provider || el.configEmailProvider?.value || "smtp"
+  ).trim().toLowerCase();
+  const fromEmail = String(
+    emailConfig?.from_email || el.configEmailFromAddress?.value || ""
+  ).trim();
+  const replyTo = String(
+    emailConfig?.reply_to_email || el.configEmailReplyTo?.value || ""
+  ).trim();
+  const connectedEmail = String(emailConfig?.google_connected_email || "").trim();
+  const notificationsEmail = String(
+    config?.notifications?.email_to || el.configNotificationsEmailTo?.value || ""
+  ).trim();
+
+  const providerLabel = getEmailProviderFriendlyLabel(provider);
+  const ownerLabel = getEmailSetupOwnerLabel(owner);
+  const hint =
+    provider === "google_oauth"
+      ? "Si esta cuenta usa Gmail o Google Workspace, normalmente bastara con conectar la cuenta y probar."
+      : provider === "manual"
+        ? "Primero decide si prefieres conectar Gmail o usar un SMTP propio. Luego te diremos el siguiente paso."
+        : "Te diremos el siguiente paso segun como quieras enviar, quien lo conecte y el objetivo de esta cuenta.";
+
+  const cards =
+    owner === "developer"
+      ? [
+          {
+            title: "Que tienes que hacer tu",
+            copy:
+              "Pasa a tu desarrollador el modo de envio, el correo que queréis usar y si necesitáis también avisos internos del chat.",
+          },
+          {
+            title: "Que necesitara la parte tecnica",
+            copy:
+              provider === "google_oauth"
+                ? "Solo dejar preparado el correo de envio y autorizar la cuenta de Google."
+                : "Los datos del proveedor SMTP o de la plataforma elegida y una prueba de envio real.",
+          },
+        ]
+      : owner === "tmedia"
+        ? [
+            {
+              title: "Que tienes que hacer tu",
+              copy:
+                "Dinos qué correo quieres usar, para qué lo necesitas y si ese mismo correo debe recibir notificaciones internas.",
+            },
+            {
+              title: "Que haremos despues",
+              copy:
+                provider === "google_oauth"
+                  ? "Te pediremos que autorices la cuenta y validaremos el envio desde el CRM."
+                  : "Te diremos exactamente qué acceso o credencial falta y lo dejaremos probado contigo.",
+            },
+          ]
+        : owner === "unknown"
+          ? [
+              {
+                title: "Que necesitamos saber primero",
+                copy:
+                  "Si lo conectara el cliente, TMedia o un desarrollador, y si prefieres Gmail o un SMTP propio.",
+              },
+              {
+                title: "Que haremos despues",
+                copy:
+                  "Con esa decision ya podremos darte el camino mas corto sin meterte en configuraciones que no tocan.",
+              },
+            ]
+          : [
+              {
+                title: "Que tienes que hacer tu",
+                copy:
+                  provider === "google_oauth"
+                    ? "Rellena el correo de envio, pulsa conectar Gmail y luego prueba la conexion."
+                    : "Rellena el correo de envio y prepara los datos del proveedor para dejarlo validado.",
+              },
+              {
+                title: "Que deberia quedar claro hoy",
+                copy:
+                  "Que correo saldra al cliente, donde deben responder y a que correo interno quieres que lleguen los avisos del chat.",
+              },
+            ];
+
+  const actionSteps =
+    provider === "google_oauth"
+      ? [
+          fromEmail
+            ? `Deja como correo de salida ${fromEmail}.`
+            : "Define el correo desde el que quieres que salgan propuestas, analisis y respuestas.",
+          "Pulsa Conectar Gmail y autoriza la cuenta real que enviara los correos.",
+          notificationsEmail
+            ? `Comprueba que los avisos internos llegaran a ${notificationsEmail}.`
+            : "Si quieres avisos internos, rellena el email de notificaciones.",
+          "Pulsa Comprobar conexion y luego haz una prueba real de envio.",
+        ]
+      : provider === "manual"
+        ? [
+            "Decide si quieres conectar Gmail o usar un SMTP propio.",
+            "En cuanto lo sepas, rellena el modo de envio correcto arriba.",
+            "Despues te diremos exactamente que acceso o dato falta.",
+          ]
+        : [
+            fromEmail
+              ? `Define ${fromEmail} como correo principal de salida.`
+              : "Define el correo desde el que quieres enviar.",
+            "Rellena o pide los datos del proveedor tecnico debajo.",
+            notificationsEmail
+              ? `Deja los avisos internos entrando en ${notificationsEmail}.`
+              : "Si quieres avisos internos, rellena el email de notificaciones.",
+            "Pulsa Comprobar conexion y valida con un envio real.",
+          ];
+
+  const instructions = [
+    "Hola, necesitamos dejar el email operativo para esta cuenta del CRM.",
+    "",
+    `Modo de envio: ${providerLabel}.`,
+    `Responsable: ${ownerLabel}.`,
+    `Objetivo: ${goal || "enviar propuestas, analisis y avisos internos desde esta cuenta"}.`,
+    `Correo de salida: ${fromEmail || "pendiente de definir"}.`,
+    `Correo de respuesta: ${replyTo || fromEmail || "pendiente de definir"}.`,
+    notificationsEmail
+      ? `Email de notificaciones internas: ${notificationsEmail}.`
+      : "Email de notificaciones internas: pendiente de definir.",
+    connectedEmail ? `Cuenta ya conectada en Google: ${connectedEmail}.` : "",
+    "",
+    "Que necesitamos dejar listo:",
+    provider === "google_oauth"
+      ? "- Autorizar la cuenta real de Google que enviara los correos."
+      : "- Completar los datos del proveedor de envio si no usamos Google conectado.",
+    "- Validar que el CRM puede enviar correos desde esta cuenta.",
+    "- Hacer una prueba real de envio antes de darlo por cerrado.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return { hint, cards, actionSteps, instructions };
+}
+
+function renderEmailGuide(config = state.appConfig || {}) {
+  const guide = buildEmailGuide(config);
+  if (el.configEmailGuideHint) {
+    el.configEmailGuideHint.textContent = guide.hint;
+  }
+  if (el.configEmailGuide) {
+    el.configEmailGuide.innerHTML = guide.cards
+      .map(
+        (card) => `
+          <article class="config-external-guide-card">
+            <strong>${escapeHtml(card.title)}</strong>
+            <p>${escapeHtml(card.copy)}</p>
+          </article>
+        `
+      )
+      .join("");
+  }
+  if (el.configEmailActionPlan) {
+    el.configEmailActionPlan.innerHTML = guide.actionSteps
+      .map(
+        (step, index) => `
+          <div class="config-external-action-step">
+            <span>${index + 1}</span>
+            <p>${escapeHtml(step)}</p>
+          </div>
+        `
+      )
+      .join("");
+  }
+  if (el.configEmailInstructions) {
+    el.configEmailInstructions.value = guide.instructions;
+  }
+}
+
+function buildAutomationsGuide(config = state.appConfig || {}) {
+  const automationConfig = config?.integrations?.automations || {};
+  const owner = String(
+    automationConfig?.setup_owner || el.configAutomationSetupOwner?.value || "tmedia"
+  ).trim() || "tmedia";
+  const goal = String(
+    automationConfig?.setup_goal || el.configAutomationSetupGoal?.value || ""
+  ).trim();
+  const platform = String(
+    automationConfig?.platform || el.configAutomationPlatform?.value || "n8n"
+  ).trim();
+  const workspace = String(
+    automationConfig?.workspace_url || el.configAutomationWorkspaceUrl?.value || ""
+  ).trim();
+
+  const hint =
+    owner === "unknown"
+      ? "Primero necesitamos saber quien llevara la automatizacion y con que herramienta trabajareis."
+      : "Te diremos el siguiente paso segun quien lo lleve, la herramienta y el objetivo.";
+
+  const cards =
+    owner === "developer"
+      ? [
+          {
+            title: "Que tienes que hacer tu",
+            copy:
+              "Pasa a tu desarrollador la herramienta elegida, el objetivo y cualquier nota operativa importante.",
+          },
+          {
+            title: "Que necesitara la parte tecnica",
+            copy:
+              "La URL del workspace si ya existe, los eventos a disparar y una prueba clara del flujo esperado.",
+          },
+        ]
+      : owner === "client_team"
+        ? [
+            {
+              title: "Que tienes que hacer tu",
+              copy:
+                "Aclara que quieres automatizar primero y deja apuntado donde vive hoy ese flujo, si ya existe.",
+            },
+            {
+              title: "Que deberia quedar claro hoy",
+              copy:
+                "Que herramienta usareis, que evento dispara la automatizacion y quien revisara el resultado.",
+            },
+          ]
+        : owner === "unknown"
+          ? [
+              {
+                title: "Que necesitamos saber primero",
+                copy:
+                  "Si lo llevara TMedia, tu equipo o un desarrollador, y si vais a usar n8n, Make, Zapier u otra herramienta.",
+              },
+              {
+                title: "Que haremos despues",
+                copy:
+                  "Con esa decision ya podremos deciros el camino mas corto sin entrar todavia en detalles tecnicos.",
+              },
+            ]
+          : [
+              {
+                title: "Que tienes que hacer tu",
+                copy:
+                  "Dejanos claro el objetivo del flujo y, si ya existe un workspace, la URL o referencia del panel.",
+              },
+              {
+                title: "Que haremos despues",
+                copy:
+                  "Te pediremos solo el acceso o la informacion minima para dejar la automatizacion probada.",
+              },
+            ];
+
+  const actionSteps =
+    owner === "unknown"
+      ? [
+          "Decide quien va a encargarse de la automatizacion.",
+          "Elige si trabajareis con n8n, Make, Zapier u otra herramienta.",
+          "Con eso ya podremos darte el siguiente paso correcto.",
+        ]
+      : [
+          goal
+            ? `Deja claro este objetivo: ${goal}.`
+            : "Define primero que quieres automatizar: leads, propuestas, seguimientos o formularios.",
+          workspace
+            ? `Deja apuntado este workspace o panel: ${workspace}.`
+            : "Si ya existe un workspace o panel, pegalo aqui para no perder tiempo luego.",
+          owner === "developer"
+            ? "Copia el mensaje de abajo y pasaselo al desarrollador."
+            : owner === "client_team"
+              ? "Comparte el mensaje de abajo con la persona de tu equipo que lleve la automatizacion."
+              : "Guarda esto y luego ya te pediremos solo el acceso justo para conectarlo.",
+          "Haz una prueba real del flujo cuando quede listo.",
+        ];
+
+  const instructions = [
+    "Hola, necesitamos dejar las automatizaciones operativas para esta cuenta del CRM.",
+    "",
+    `Responsable: ${getEmailSetupOwnerLabel(owner)}.`,
+    `Herramienta prevista: ${platform || "pendiente de definir"}.`,
+    `Objetivo: ${goal || "automatizar seguimientos, formularios o avisos del CRM"}.`,
+    workspace ? `Workspace o panel: ${workspace}.` : "Workspace o panel: pendiente de definir.",
+    "",
+    "Que necesitamos dejar claro:",
+    "- Que flujo quieres automatizar primero.",
+    "- En que herramienta va a vivir.",
+    "- Quien revisara la prueba final cuando quede conectado.",
+  ].join("\n");
+
+  return { hint, cards, actionSteps, instructions };
+}
+
+function renderAutomationsGuide(config = state.appConfig || {}) {
+  const guide = buildAutomationsGuide(config);
+  if (el.configAutomationsGuideHint) {
+    el.configAutomationsGuideHint.textContent = guide.hint;
+  }
+  if (el.configAutomationsGuide) {
+    el.configAutomationsGuide.innerHTML = guide.cards
+      .map(
+        (card) => `
+          <article class="config-external-guide-card">
+            <strong>${escapeHtml(card.title)}</strong>
+            <p>${escapeHtml(card.copy)}</p>
+          </article>
+        `
+      )
+      .join("");
+  }
+  if (el.configAutomationsActionPlan) {
+    el.configAutomationsActionPlan.innerHTML = guide.actionSteps
+      .map(
+        (step, index) => `
+          <div class="config-external-action-step">
+            <span>${index + 1}</span>
+            <p>${escapeHtml(step)}</p>
+          </div>
+        `
+      )
+      .join("");
+  }
+  if (el.configAutomationsInstructions) {
+    el.configAutomationsInstructions.value = guide.instructions;
   }
 }
 
@@ -6322,11 +6700,55 @@ el.configGoogleLeadSource?.addEventListener("change", () => {
 el.configValidateEmailBtn?.addEventListener("click", () =>
   validateIntegration("email", el.configValidateEmailBtn)
 );
-el.configEmailProvider?.addEventListener("change", () => syncEmailProviderDefaults({ force: true }));
+el.configCopyEmailInstructionsBtn?.addEventListener("click", () => {
+  copyToClipboard(
+    el.configEmailInstructions?.value || "",
+    "Mensaje de Email copiado.",
+    el.configSaveStatus
+  );
+});
+el.configEmailProvider?.addEventListener("change", () => {
+  syncEmailProviderDefaults({ force: true });
+  renderEmailGuide(buildConfigPayload());
+});
+el.configEmailSetupOwner?.addEventListener("change", () => {
+  renderEmailGuide(buildConfigPayload());
+});
+el.configEmailSetupGoal?.addEventListener("input", () => {
+  renderEmailGuide(buildConfigPayload());
+});
+el.configEmailFromAddress?.addEventListener("input", () => {
+  renderEmailGuide(buildConfigPayload());
+});
+el.configEmailReplyTo?.addEventListener("input", () => {
+  renderEmailGuide(buildConfigPayload());
+});
+el.configNotificationsEmailTo?.addEventListener("input", () => {
+  renderEmailGuide(buildConfigPayload());
+});
 el.configConnectGoogleEmailBtn?.addEventListener("click", connectGoogleEmail);
 el.configValidateAutomationsBtn?.addEventListener("click", () =>
   validateIntegration("automations", el.configValidateAutomationsBtn)
 );
+el.configCopyAutomationsInstructionsBtn?.addEventListener("click", () => {
+  copyToClipboard(
+    el.configAutomationsInstructions?.value || "",
+    "Mensaje de Automatizaciones copiado.",
+    el.configSaveStatus
+  );
+});
+el.configAutomationSetupOwner?.addEventListener("change", () => {
+  renderAutomationsGuide(buildConfigPayload());
+});
+el.configAutomationSetupGoal?.addEventListener("input", () => {
+  renderAutomationsGuide(buildConfigPayload());
+});
+el.configAutomationPlatform?.addEventListener("change", () => {
+  renderAutomationsGuide(buildConfigPayload());
+});
+el.configAutomationWorkspaceUrl?.addEventListener("input", () => {
+  renderAutomationsGuide(buildConfigPayload());
+});
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
 el.configTabKnowledge?.addEventListener("click", () => setConfigTab("knowledge"));
 el.configTabMessages?.addEventListener("click", () => setConfigTab("messages"));

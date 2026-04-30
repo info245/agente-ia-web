@@ -1365,9 +1365,30 @@
                       </div>
                     </div>
 
+                    <div class="config-external-kicker">Si usas Gmail o Google Workspace, normalmente solo tendras que conectar la cuenta y probar.</div>
                     <div class="quote-grid">
                       <label>
-                        Proveedor
+                        Quien lo va a conectar
+                        <select id="configEmailSetupOwner">
+                          <option value="client_team">Mi equipo / cliente</option>
+                          <option value="tmedia">TMedia</option>
+                          <option value="developer">Mi desarrollador</option>
+                          <option value="unknown">Aun no lo se</option>
+                        </select>
+                      </label>
+                      <label class="quote-grid-full">
+                        Que quieres hacer con este email
+                        <input id="configEmailSetupGoal" type="text" placeholder="Ej. recibir notificaciones, enviar propuestas, usar solo email y no WhatsApp..." />
+                      </label>
+                    </div>
+                    <div id="configEmailGuideHint" class="config-inline-note">
+                      Te diremos el siguiente paso segun como quieras enviar, quien lo conecte y el objetivo de esta cuenta.
+                    </div>
+                    <div id="configEmailGuide" class="config-external-guide"></div>
+
+                    <div class="quote-grid">
+                      <label>
+                        Como quieres enviar correos
                         <select id="configEmailProvider">
                           <option value="smtp">SMTP</option>
                           <option value="gmail">Gmail</option>
@@ -1379,14 +1400,26 @@
                       </label>
 
                       <label>
-                        From email
+                        Email desde el que saldran los correos
                         <input id="configEmailFromAddress" type="email" placeholder="comercial@tuempresa.com" />
                       </label>
 
                         <label class="quote-grid-full">
-                          Reply-to
+                          Email de respuesta
                          <input id="configEmailReplyTo" type="email" placeholder="soporte@tuempresa.com" />
                         </label>
+
+                        <div class="config-external-actions-card quote-grid-full">
+                          <strong>Que hacer ahora</strong>
+                          <div id="configEmailActionPlan" class="config-external-action-plan"></div>
+                          <label class="quote-grid-full">
+                            Mensaje listo para copiar
+                            <textarea id="configEmailInstructions" rows="8" readonly></textarea>
+                          </label>
+                          <div class="config-inline-actions">
+                            <button id="configCopyEmailInstructionsBtn" type="button" class="crm-secondary-btn">Copiar mensaje</button>
+                          </div>
+                        </div>
 
                         <section class="quote-grid-full config-capture-card">
                           <div class="config-capture-head">
@@ -1461,6 +1494,27 @@
                       </div>
                     </div>
 
+                    <div class="config-external-kicker">Aqui solo decidimos quien lo lleva, para que lo quieres usar y donde vive la orquestacion.</div>
+                    <div class="quote-grid">
+                      <label>
+                        Quien lo va a conectar
+                        <select id="configAutomationSetupOwner">
+                          <option value="tmedia">TMedia</option>
+                          <option value="client_team">Mi equipo / cliente</option>
+                          <option value="developer">Mi desarrollador</option>
+                          <option value="unknown">Aun no lo se</option>
+                        </select>
+                      </label>
+                      <label class="quote-grid-full">
+                        Que quieres automatizar
+                        <input id="configAutomationSetupGoal" type="text" placeholder="Ej. recuperar leads, seguir propuestas, conectar formularios..." />
+                      </label>
+                    </div>
+                    <div id="configAutomationsGuideHint" class="config-inline-note">
+                      Te diremos el siguiente paso segun quien lo lleve, la herramienta y lo que quieras automatizar.
+                    </div>
+                    <div id="configAutomationsGuide" class="config-external-guide"></div>
+
                     <div class="quote-grid">
                       <label>
                         Plataforma
@@ -1481,6 +1535,18 @@
                         Notas operativas
                         <textarea id="configAutomationNotes" rows="5" placeholder="Aqui puedes documentar que flujos estan activos, donde se conectan los formularios o cualquier nota de implementacion."></textarea>
                       </label>
+
+                      <div class="config-external-actions-card quote-grid-full">
+                        <strong>Que hacer ahora</strong>
+                        <div id="configAutomationsActionPlan" class="config-external-action-plan"></div>
+                        <label class="quote-grid-full">
+                          Mensaje listo para copiar
+                          <textarea id="configAutomationsInstructions" rows="8" readonly></textarea>
+                        </label>
+                        <div class="config-inline-actions">
+                          <button id="configCopyAutomationsInstructionsBtn" type="button" class="crm-secondary-btn">Copiar mensaje</button>
+                        </div>
+                      </div>
                     </div>
                   </article>
 
@@ -1659,6 +1725,6 @@
     </nav>
   </main>
 
-  <script src="./app.js?v=20260428b"></script>
+  <script src="./app.js?v=20260430a"></script>
 </body>
 </html>

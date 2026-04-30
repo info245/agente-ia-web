@@ -82,6 +82,8 @@ export const DEFAULT_APP_CONFIG = {
     },
     email: {
       provider: "smtp",
+      setup_owner: "client_team",
+      setup_goal: "",
       from_email: "",
       reply_to_email: "",
       smtp_host: "",
@@ -103,6 +105,8 @@ export const DEFAULT_APP_CONFIG = {
       },
     },
     automations: {
+      setup_owner: "tmedia",
+      setup_goal: "",
       platform: "n8n",
       workspace_url: "",
       notes: "",
@@ -337,6 +341,8 @@ export const BLANK_APP_CONFIG = {
     },
     email: {
       provider: "smtp",
+      setup_owner: "client_team",
+      setup_goal: "",
       from_email: "",
       reply_to_email: "",
       smtp_host: "",
@@ -358,6 +364,8 @@ export const BLANK_APP_CONFIG = {
       },
     },
     automations: {
+      setup_owner: "tmedia",
+      setup_goal: "",
       platform: "n8n",
       workspace_url: "",
       notes: "",
