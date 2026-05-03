@@ -8,8 +8,14 @@
   const colorFromAttr = currentScript?.getAttribute("data-color");
   const accountIdFromAttr = currentScript?.getAttribute("data-account-id");
   const accountSlugFromAttr = currentScript?.getAttribute("data-account-slug");
-  const defaultAccountSlug =
-    currentScript?.getAttribute("data-default-account-slug") || "tmedia-global";
+  function inferDefaultAccountSlug() {
+    const explicitDefault = currentScript?.getAttribute("data-default-account-slug");
+    if (explicitDefault) return explicitDefault;
+    const host = String(window.location?.hostname || "").replace(/^www\./, "");
+    if (["t-mediaglobal.com", "heysancho.com"].includes(host)) return "tmedia-global";
+    return "";
+  }
+  const defaultAccountSlug = inferDefaultAccountSlug();
 
   const CONFIG = {
     backendBaseUrl:

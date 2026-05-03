@@ -1,11 +1,12 @@
 (() => {
   // ====== CONFIG (edita aquí si quieres) ======
   const CONFIG = {
-    backendBaseUrl: "https://agente-ia-web-backend.onrender.com",
+    backendBaseUrl: "https://tmedia-global-ai.onrender.com",
     channel: "web",
     brandName: "Agente IA",
     position: "right", // right | left
     primaryColor: "#111827",
+    accountSlug: "tmedia-global",
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
   };
@@ -42,6 +43,7 @@
       channel: CONFIG.channel,
     };
     if (conversationId) payload.conversation_id = conversationId;
+    if (CONFIG.accountSlug) payload.account_slug = CONFIG.accountSlug;
 
     const res = await fetch(`${CONFIG.backendBaseUrl}/messages`, {
       method: "POST",
