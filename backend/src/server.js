@@ -47,6 +47,7 @@ import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 import { getAppConfig, saveAppConfig } from "./lib/appConfigStore.js";
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
+import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
 import {
   getDefaultAccount,
   listAccounts,
@@ -79,6 +80,11 @@ import {
   buildMemoryPatch,
   buildLeadMemoryContext,
 } from "./lib/memoryUtils.js";
+import {
+  buildNextBestActionPromptBlock,
+  getNextBestAction,
+} from "./lib/nextBestAction.js";
+import { executeConfiguredAction } from "./lib/actionExecutor.js";
 import {
   renderQuotePreviewHtml,
   renderQuoteResponseHtml,
@@ -642,9 +648,29 @@ function getSafeLeadName(lead) {
 }
 
 function getConfiguredServiceNames(appConfig = null) {
-  return Object.keys(appConfig?.services || {})
+  const offers = Object.keys(appConfig?.offers || {}).length
+    ? appConfig.offers
+    : appConfig?.services || {};
+  return Object.keys(offers || {})
     .map((item) => String(item || "").trim())
     .filter(Boolean);
+}
+
+function getConfiguredConversionLabel(appConfig = null) {
+  const goal = normalizeText(appConfig?.business_profile?.primary_conversion_goal || "");
+  const labels = {
+    book_level_test: "prueba de nivel",
+    book_first_visit: "primera visita",
+    book_appointment: "cita",
+    schedule_visit: "visita",
+    book_demo: "demo",
+    request_quote: "propuesta",
+    send_catalog: "catalogo",
+    qualify_property_lead: "siguiente paso con el asesor",
+    create_qualified_opportunity: "siguiente paso",
+  };
+
+  return labels[goal] || "siguiente paso";
 }
 
 const DEFAULT_CAPTURE_FIELDS = {
@@ -810,18 +836,19 @@ function getNextCustomFieldStep(lead = {}, appConfig = null) {
 }
 
 function buildConfiguredServicesPrompt(appConfig = null, { fallback = "" } = {}) {
-  const services = getConfiguredServiceNames(appConfig);
-  if (!services.length) {
+  const offers = getConfiguredServiceNames(appConfig);
+  const businessGoal = norm(appConfig?.business_profile?.primary_conversion_goal);
+  if (!offers.length) {
     return (
       fallback ||
-      "Puedo ayudarte a revisar tu web, tu negocio o el objetivo que quieres conseguir. Si quieres, cuéntame qué te preocupa más y te doy una primera orientación."
+      "Puedo orientarte si me cuentas qué necesitas conseguir o qué duda quieres resolver. Con eso te digo el siguiente paso más útil."
     );
   }
-  if (services.length === 1) {
-    return `Puedo ayudarte con ${services[0]}. Si quieres, cuéntame tu caso o compárteme tu web y te doy una primera orientación.`;
+  if (offers.length === 1) {
+    return `Puedo ayudarte con ${offers[0]}. Si quieres, cuéntame tu caso y te oriento hacia${businessGoal ? ` ${businessGoal}` : " el siguiente paso"}.`;
   }
-  const readable = services.slice(0, 4).join(", ");
-  return `Puedo ayudarte con ${readable}. Si quieres, dime por dónde prefieres empezar o compárteme tu web para orientarte mejor.`;
+  const readable = offers.slice(0, 4).join(", ");
+  return `Puedo ayudarte con ${readable}. Si quieres, dime por dónde prefieres empezar y te oriento hacia${businessGoal ? ` ${businessGoal}` : " el siguiente paso"}.`;
 }
 
 function hasName(lead) {
@@ -1277,6 +1304,7 @@ function getCurrentStep(lead, appConfig = null) {
 function getQuestionForStep(step, lead, appConfig = null) {
   const safeName = getSafeLeadName(lead);
   const availableChannels = getPreferredConfiguredChannels(appConfig);
+  const conversionLabel = getConfiguredConversionLabel(appConfig);
   if (String(step || "").startsWith("ask_custom:")) {
     const key = normalizeCustomFieldKey(String(step || "").split(":")[1]);
     const field = getConfiguredCustomFields(appConfig).find((item) => item.key === key);
@@ -1305,18 +1333,18 @@ function getQuestionForStep(step, lead, appConfig = null) {
           : "Perfecto. ¿Prefieres que sigamos por WhatsApp?";
       }
       return safeName
-        ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
-        : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
+        ? `Perfecto, ${safeName}. ¿Cómo prefieres que gestionemos el ${conversionLabel}: por WhatsApp o por email?`
+        : `Perfecto. ¿Cómo prefieres que gestionemos el ${conversionLabel}: por WhatsApp o por email?`;
     case "ask_phone":
     case "close_ask_phone":
       if (availableChannels[0] === "email" && availableChannels.length === 1) {
         return safeName
-          ? `Perfecto, ${safeName}. Compárteme tu teléfono y te dejo el siguiente paso preparado por ahí.`
-          : "Perfecto. Compárteme tu teléfono y te dejo el siguiente paso preparado por ahí.";
+          ? `Perfecto, ${safeName}. Compárteme tu teléfono y te dejo el ${conversionLabel} preparado por ahí.`
+          : `Perfecto. Compárteme tu teléfono y te dejo el ${conversionLabel} preparado por ahí.`;
       }
       return safeName
-        ? `Perfecto, ${safeName}. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.`
-        : "Perfecto. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.";
+        ? `Perfecto, ${safeName}. Compárteme tu número de WhatsApp y te dejo el ${conversionLabel} preparado por ahí.`
+        : `Perfecto. Compárteme tu número de WhatsApp y te dejo el ${conversionLabel} preparado por ahí.`;
     case "ask_email":
     case "close_ask_email":
       return safeName
@@ -1339,7 +1367,7 @@ function getQuestionForStep(step, lead, appConfig = null) {
     case "ask_urgency":
       return "Perfecto. ¿Qué prioridad tiene para ti? ¿Te gustaría empezar cuanto antes o lo estás valorando a medio plazo?";
     case "ask_contact":
-      return "Genial. Para poder enviarte una propuesta orientativa o contactarte, ¿me dejas tu email o tu teléfono?";
+      return `Genial. Para poder gestionar el ${conversionLabel} o contactarte, ¿me dejas tu email o tu teléfono?`;
     default:
       return null;
   }
@@ -1593,8 +1621,8 @@ function cleanReplyForChannelChoice(reply, { channel = "web", lead = null } = {}
 
   const safeName = getSafeLeadName(lead);
   return safeName
-    ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
-    : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
+    ? `Perfecto, ${safeName}. ¿Cómo prefieres que gestionemos el siguiente paso: por WhatsApp o por email?`
+    : "Perfecto. ¿Cómo prefieres que gestionemos el siguiente paso: por WhatsApp o por email?";
 }
 
 function isPriceQuestionText(text = "") {
@@ -2114,6 +2142,7 @@ function buildStructuredCloseReply({
   if (isGreeting(text)) return null;
 
   const safeName = getSafeLeadName(lead);
+  const conversionLabel = getConfiguredConversionLabel(appConfig);
   const serviceFacts = getServiceFacts(lead?.interest_service, appConfig);
   if (isPriceQuestionText(text)) {
     return buildNoPublicPriceReply({
@@ -2142,8 +2171,8 @@ function buildStructuredCloseReply({
   if (closeStep === "close_ask_channel") {
     if (availableChannels.length >= 2) {
       return safeName
-        ? `Perfecto, ${safeName}. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?`
-        : "Perfecto. ¿Cómo prefieres que te mande la propuesta: por WhatsApp o por email?";
+        ? `Perfecto, ${safeName}. ¿Cómo prefieres que gestionemos el ${conversionLabel}: por WhatsApp o por email?`
+        : `Perfecto. ¿Cómo prefieres que gestionemos el ${conversionLabel}: por WhatsApp o por email?`;
     }
     if (availableChannels[0] === "email") {
       return safeName
@@ -2156,8 +2185,8 @@ function buildStructuredCloseReply({
         : "Perfecto. Compárteme tu número de WhatsApp y te dejo el siguiente paso preparado por ahí.";
     }
     return safeName
-      ? `Perfecto, ${safeName}. Compárteme el mejor canal para seguir contigo y te preparo el siguiente paso.`
-      : "Perfecto. Compárteme el mejor canal para seguir contigo y te preparo el siguiente paso.";
+      ? `Perfecto, ${safeName}. Compárteme el mejor canal para seguir contigo y te preparo el ${conversionLabel}.`
+      : `Perfecto. Compárteme el mejor canal para seguir contigo y te preparo el ${conversionLabel}.`;
   }
 
   if (closeStep === "close_ask_phone") {
@@ -2189,11 +2218,11 @@ function buildStructuredCloseReply({
   if (preferredChannel.includes("whatsapp") && handoff?.whatsapp_url) {
     return hasAnalysisSnapshot(analysisSnapshot)
       ? `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y te sigo por ahí con el contexto de este análisis.\n\nCuando me escribas por WhatsApp, continúo desde este punto sin empezar de cero.`
-      : `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y seguimos por ahí con tu propuesta y el siguiente paso ya preparado. Por aquí ya queda todo listo.`;
+      : `Perfecto${safeName ? `, ${safeName}` : ""}. Si te va bien, abre WhatsApp y seguimos por ahí con el ${conversionLabel} ya preparado. Por aquí ya queda todo listo.`;
   }
 
   if (preferredChannel.includes("whatsapp") && hasPhone(lead)) {
-    return `Perfecto, ${safeName}. Te sigo por WhatsApp con la propuesta y el siguiente paso ya preparado. Por aquí ya queda todo listo.`;
+    return `Perfecto, ${safeName}. Te sigo por WhatsApp con el ${conversionLabel} ya preparado. Por aquí ya queda todo listo.`;
   }
 
   if (preferredChannel.includes("email") && lead?.email) {
@@ -2463,7 +2492,7 @@ ${missingLeadQuestion ? `- Si necesitas pedir un dato, la mejor pregunta ahora e
 `,
     close: `
 FASE: cierre o transiciÃ³n
-- Orienta a siguiente paso claro: WhatsApp, email, llamada o propuesta.
+- Orienta a un siguiente paso claro segun el objetivo configurado: WhatsApp, email, llamada, cita, demo, prueba, inscripcion, propuesta o derivacion humana.
 - Si faltan datos mÃ­nimos para avanzar, pide solo uno.
 - En WhatsApp, cierra por ahÃ­ si el usuario ya viene con intenciÃ³n.
 - Antes de pedir contacto o proponer seguimiento, intenta tener al menos el nombre.
@@ -2779,6 +2808,115 @@ async function sendAutomationStep({
   }
 
   return { skipped: true, reason: "unsupported-channel" };
+}
+
+function resolvePreferredActionChannel({ lead = {}, actionConfig = {}, template = {} } = {}) {
+  const configured = normalizeText(actionConfig?.channel || template?.channel);
+  if (configured && configured !== "preferred") return configured;
+
+  const preferred = normalizeText(lead?.preferred_contact_channel);
+  if (preferred.includes("whatsapp")) return "whatsapp";
+  if (preferred.includes("email") || preferred.includes("correo")) return "email";
+  if (lead?.email) return "email";
+  if (normalizeLeadPhoneForWhatsApp(lead)) return "whatsapp";
+  return normalizeText(template?.channel) || "email";
+}
+
+async function sendConfiguredActionMessage({
+  lead,
+  nextBestAction,
+  actionConfig,
+  appConfig,
+  accountId,
+  conversationId,
+}) {
+  const templateKey = String(actionConfig?.template_key || "").trim();
+  if (!templateKey) return { skipped: true, reason: "missing-template-key" };
+
+  const template = appConfig?.message_templates?.[templateKey] || null;
+  if (!template?.body) {
+    return { skipped: true, reason: "missing-template" };
+  }
+
+  const channel = resolvePreferredActionChannel({ lead, actionConfig, template });
+  const vars = buildAutomationTemplateVars({
+    lead,
+    appConfig,
+    previewUrl: "",
+  });
+
+  const result = await sendAutomationStep({
+    lead,
+    step: {
+      channel,
+      template_key: templateKey,
+    },
+    template,
+    vars,
+    emailConfig: appConfig?.integrations?.email || null,
+    accountId,
+    conversationId,
+  });
+
+  return {
+    ...result,
+    template_key: templateKey,
+    action_key: nextBestAction?.next_best_action || "",
+  };
+}
+
+async function notifyConfiguredActionTask({
+  lead,
+  actionConfig,
+  plan,
+  task,
+  appConfig,
+  accountId,
+  conversationId,
+}) {
+  const type = normalizeText(plan?.action_type);
+  if (!["calendar_booking", "human_handoff", "quote", "internal_task"].includes(type)) {
+    return { skipped: true, reason: "unsupported-action-type" };
+  }
+  if (appConfig?.notifications?.notify_chat_summary === false) {
+    return { skipped: true, reason: "notifications-disabled" };
+  }
+
+  const recipients = getNotificationRecipients(appConfig);
+  if (!recipients.length) return { skipped: true, reason: "no-internal-recipients" };
+
+  const notificationLead = {
+    ...lead,
+    next_action: plan?.action_label || lead?.next_action || "",
+    crm_status: plan?.crm_patch?.crm_status || lead?.crm_status || "",
+    internal_notes: [
+      lead?.internal_notes,
+      `Accion lista: ${plan?.action_label || actionConfig?.label || plan?.action_key}`,
+      task?.instructions ? `Instrucciones: ${task.instructions}` : null,
+    ]
+      .filter(Boolean)
+      .join(" | "),
+  };
+  const conversationMessages = await getConversationMessages(conversationId, 30).catch(() => []);
+  const result = await sendLeadEmail({
+    lead: notificationLead,
+    conversation_id: conversationId,
+    type: "update",
+    changedFields: ["next_action", "crm_status"],
+    emailConfig: appConfig?.integrations?.email || null,
+    recipients,
+    conversationMessages,
+  });
+
+  return {
+    ok: true,
+    notification: {
+      via: "email",
+      recipients,
+      provider_message_id: result?.messageId || null,
+      account_id: accountId || null,
+    },
+  };
 }
 
 function buildQuoteFileName(lead, quote) {
@@ -4022,6 +4160,13 @@ async function processIncomingMessage({
     analysisSnapshot,
     text: userText,
   });
+  const nextBestAction = getNextBestAction({
+    lead: leadAfter || {},
+    text: userText,
+    appConfig,
+    channel: channel || "web",
+    phase: conversationPhase,
+  });
   const isWhatsAppWebContinuation =
     channel === "whatsapp" &&
     !!relatedWebLead &&
@@ -4123,6 +4268,7 @@ ${d.chunk}
     }
 
     const memoryContext = buildLeadMemoryContext(leadAfter);
+    const nextBestActionContext = buildNextBestActionPromptBlock(nextBestAction);
     const modeInstructions = buildModeInstructions({
       mode: conversationMode,
       phase: conversationPhase,
@@ -4161,6 +4307,8 @@ REGLAS IMPORTANTES
 21. SI TODAVÃA NO SE HA ELEGIDO CANAL DE CONTACTO, NO PIDAS EMAIL DIRECTAMENTE: PRIMERO PREGUNTA SI PREFIERE WHATSAPP O EMAIL PARA RECIBIR LA PROPUESTA
 
 ${modeInstructions}
+
+${nextBestActionContext}
 
 ${memoryContext}
 
@@ -4241,6 +4389,71 @@ ${ragContext}
       text: String(reply || "").slice(0, 500),
     },
   });
+
+  if (nextBestAction) {
+    await trackEventScoped({
+      conversation_id: currentConversationId,
+      event_type: "next_best_action",
+      channel: channel || "web",
+      external_user_id: external_user_id || null,
+      payload: nextBestAction,
+    });
+  }
+
+  let actionExecution = null;
+  if (nextBestAction?.action_ready && nextBestAction?.action_config) {
+    try {
+      const recentActionEvents = await listConversationEventsByType(
+        currentConversationId,
+        "action_executed",
+        20,
+        scopedAccountId
+      ).catch(() => []);
+
+      actionExecution = await executeConfiguredAction({
+        lead: leadAfter || {},
+        conversationId: currentConversationId,
+        channel: channel || "web",
+        externalUserId: external_user_id || null,
+        accountId: scopedAccountId,
+        nextBestAction,
+        recentActionEvents,
+        updateLeadCrmFields,
+        saveConversationEvent,
+        sendActionMessage: ({ lead, nextBestAction, actionConfig }) =>
+          sendConfiguredActionMessage({
+            lead,
+            nextBestAction,
+            actionConfig,
+            appConfig,
+            accountId: scopedAccountId,
+            conversationId: currentConversationId,
+          }),
+        executeActionTask: ({ lead, actionConfig, plan, task }) =>
+          notifyConfiguredActionTask({
+            lead,
+            actionConfig,
+            plan,
+            task,
+            appConfig,
+            accountId: scopedAccountId,
+            conversationId: currentConversationId,
+          }),
+      });
+    } catch (e) {
+      console.log("action execution error", e.message);
+      await trackEventScoped({
+        conversation_id: currentConversationId,
+        event_type: "action_execution_error",
+        channel: channel || "web",
+        external_user_id: external_user_id || null,
+        payload: {
+          action_key: nextBestAction?.next_best_action || null,
+          error: e.message,
+        },
+      });
+    }
+  }
 
     leadAfter = await loadLeadForConversation();
   const leadSignatureAfter = buildLeadSignature(leadAfter || {});
@@ -4391,6 +4604,8 @@ ${ragContext}
     chat_completed: chatCompleted,
     mode: conversationMode,
     phase: conversationPhase,
+    next_best_action: nextBestAction,
+    action_execution: actionExecution,
     handoff,
   };
 }
@@ -4839,6 +5054,339 @@ app.get("/api/crm/config", async (_req, res) => {
     const account = await resolveRequestAccount(_req);
     const config = await getAppConfig({ accountId: account.id });
     res.json({ ok: true, config, account });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/crm/config/industry-presets", async (_req, res) => {
+  try {
+    res.json({ ok: true, presets: listIndustryPresets() });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+function buildPublishReadiness(appConfig = {}, readinessInput = {}) {
+  const text = (value) => String(value || "").trim();
+  const offers = Object.values(appConfig?.offers || appConfig?.services || {}).filter(
+    (offer) =>
+      offer &&
+      typeof offer === "object" &&
+      (text(offer.description) || text(offer.url) || text(offer.min_monthly_fee) || text(offer.min_project_fee))
+  );
+  const businessProfile = appConfig?.business_profile || {};
+  const qualificationSchema = Array.isArray(appConfig?.qualification_schema)
+    ? appConfig.qualification_schema
+    : [];
+  const actionsCatalog = appConfig?.actions_catalog || {};
+  const enabledActions = Object.values(actionsCatalog).filter((action) => action?.enabled !== false);
+  const scoring = appConfig?.sales_scoring || {};
+  const personalizationRules = Array.isArray(appConfig?.personalization_rules)
+    ? appConfig.personalization_rules.filter((rule) => rule?.enabled !== false)
+    : [];
+  const knowledgeUrls = Array.isArray(appConfig?.knowledge_sources?.website_urls)
+    ? appConfig.knowledge_sources.website_urls.filter(Boolean)
+    : [];
+  const deliveryReady =
+    hasConfiguredWhatsApp(appConfig) ||
+    hasConfiguredEmail(appConfig) ||
+    text(appConfig?.integrations?.lead_forms?.webhook_url) ||
+    text(appConfig?.integrations?.lead_forms?.sheet_document);
+  const scenarioSummary =
+    readinessInput?.scenario_summary && typeof readinessInput.scenario_summary === "object"
+      ? readinessInput.scenario_summary
+      : null;
+
+  const checks = [
+    {
+      key: "brand",
+      label: "Marca",
+      severity: "blocker",
+      ready: Boolean(text(appConfig?.brand?.name) && text(appConfig?.agent?.tone)),
+      hint: "Nombre de marca y tono",
+    },
+    {
+      key: "offer",
+      label: "Oferta",
+      severity: "blocker",
+      ready: offers.length > 0,
+      hint: `${offers.length} ofertas configuradas`,
+    },
+    {
+      key: "business_profile",
+      label: "Perfil de negocio",
+      severity: "blocker",
+      ready: Boolean(
+        text(businessProfile.industry) &&
+          text(businessProfile.audience) &&
+          text(businessProfile.primary_conversion_goal)
+      ),
+      hint: "Industria, audiencia y objetivo",
+    },
+    {
+      key: "qualification",
+      label: "Cualificacion",
+      severity: "blocker",
+      ready: qualificationSchema.some((field) => field?.required),
+      hint: "Campos obligatorios definidos",
+    },
+    {
+      key: "actions",
+      label: "Acciones",
+      severity: "blocker",
+      ready: enabledActions.length > 0,
+      hint: `${enabledActions.length} acciones activas`,
+    },
+    {
+      key: "delivery",
+      label: "Entrega",
+      severity: "blocker",
+      ready: deliveryReady,
+      hint: "WhatsApp, email o intake conectado",
+    },
+    {
+      key: "scoring",
+      label: "Scoring",
+      severity: "blocker",
+      ready: Array.isArray(scoring.hot_intents) && scoring.hot_intents.length > 0,
+      hint: "Intenciones comerciales configuradas",
+    },
+    {
+      key: "scenarios",
+      label: "Pruebas",
+      severity: "blocker",
+      ready: Boolean(
+        scenarioSummary &&
+          Number(scenarioSummary.total || 0) > 0 &&
+          Number(scenarioSummary.failed || 0) === 0
+      ),
+      hint: scenarioSummary
+        ? `${Number(scenarioSummary.passed || 0)}/${Number(scenarioSummary.total || 0)} escenarios OK`
+        : "Ejecuta escenarios antes de publicar",
+    },
+    {
+      key: "context",
+      label: "Contexto",
+      severity: "warning",
+      ready: Boolean(knowledgeUrls.length || text(appConfig?.knowledge_sources?.freeform_context)),
+      hint: "Web o contexto operativo",
+    },
+    {
+      key: "personalization",
+      label: "Personalizacion",
+      severity: "warning",
+      ready: personalizationRules.length > 0,
+      hint: `${personalizationRules.length} reglas activas`,
+    },
+  ];
+
+  const blockers = checks.filter((check) => check.severity === "blocker" && !check.ready);
+  const warnings = checks.filter((check) => check.severity !== "blocker" && !check.ready);
+  return {
+    status: blockers.length ? "blocked" : warnings.length ? "publishable_with_warnings" : "ready",
+    ready_count: checks.filter((check) => check.ready).length,
+    total_count: checks.length,
+    blockers,
+    warnings,
+    scenario_summary: scenarioSummary,
+  };
+}
+
+app.post("/api/crm/config/apply-industry-preset", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const presetKey = String(req.body?.preset_key || req.body?.industry || "").trim();
+    const preset = getIndustryPreset(presetKey);
+    if (!preset) {
+      return res.status(400).json({ ok: false, error: "Preset de industria no encontrado" });
+    }
+
+    const currentConfig = await getAppConfig({ accountId: account.id });
+    const nextConfig = {
+      ...currentConfig,
+      business_profile: {
+        ...(currentConfig?.business_profile || {}),
+        ...(preset.business_profile || {}),
+      },
+      offers: preset.offers || {},
+      qualification_schema: preset.qualification_schema || [],
+      personalization_rules: preset.personalization_rules || [],
+      sales_scoring: preset.sales_scoring || currentConfig?.sales_scoring || {},
+      actions_catalog: preset.actions_catalog || {},
+      message_templates: {
+        ...(currentConfig?.message_templates || {}),
+        ...(preset.message_templates || {}),
+      },
+    };
+
+    const config = await saveAppConfig(nextConfig, { accountId: account.id });
+    res.json({ ok: true, config, account, preset_key: presetKey });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/config/simulate-next-best-action", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const currentConfig = await getAppConfig({ accountId: account.id });
+    const candidateConfig = sanitizeAppConfig({
+      ...currentConfig,
+      ...(req.body?.config || {}),
+    });
+    const lead = req.body?.lead && typeof req.body.lead === "object" ? req.body.lead : {};
+    const text = String(req.body?.text || "").trim();
+    const channel = String(req.body?.channel || "web").trim() || "web";
+    const phase = String(req.body?.phase || "capture").trim() || "capture";
+    const nextBestAction = getNextBestAction({
+      lead,
+      text,
+      appConfig: candidateConfig,
+      channel,
+      phase,
+    });
+
+    res.json({
+      ok: true,
+      account,
+      next_best_action: nextBestAction,
+      prompt_block: buildNextBestActionPromptBlock(nextBestAction),
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/config/run-test-scenarios", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const currentConfig = await getAppConfig({ accountId: account.id });
+    const candidateConfig = sanitizeAppConfig({
+      ...currentConfig,
+      ...(req.body?.config || {}),
+    });
+    const scenarios = Array.isArray(req.body?.scenarios) ? req.body.scenarios.slice(0, 25) : [];
+    const results = scenarios.map((scenario, index) => {
+      const lead = scenario?.lead && typeof scenario.lead === "object" ? scenario.lead : {};
+      const text = String(scenario?.text || "").trim();
+      const channel = String(scenario?.channel || "web").trim() || "web";
+      const phase = String(scenario?.phase || "capture").trim() || "capture";
+      const expected = scenario?.expected && typeof scenario.expected === "object"
+        ? scenario.expected
+        : {};
+      const nextBestAction = getNextBestAction({
+        lead,
+        text,
+        appConfig: candidateConfig,
+        channel,
+        phase,
+      });
+      const checks = [
+        expected.next_best_action
+          ? {
+              key: "next_best_action",
+              expected: String(expected.next_best_action),
+              actual: nextBestAction.next_best_action,
+              passed: String(expected.next_best_action) === String(nextBestAction.next_best_action),
+            }
+          : null,
+        expected.lead_temperature
+          ? {
+              key: "lead_temperature",
+              expected: String(expected.lead_temperature),
+              actual: nextBestAction.lead_temperature,
+              passed: String(expected.lead_temperature) === String(nextBestAction.lead_temperature),
+            }
+          : null,
+        expected.stage
+          ? {
+              key: "stage",
+              expected: String(expected.stage),
+              actual: nextBestAction.stage,
+              passed: String(expected.stage) === String(nextBestAction.stage),
+            }
+          : null,
+        expected.personalization_key
+          ? {
+              key: "personalization_key",
+              expected: String(expected.personalization_key),
+              actual: nextBestAction.personalization?.active?.key || "",
+              passed:
+                String(expected.personalization_key) ===
+                String(nextBestAction.personalization?.active?.key || ""),
+            }
+          : null,
+      ].filter(Boolean);
+      const passed = checks.length ? checks.every((check) => check.passed) : true;
+
+      return {
+        id: scenario?.id || `scenario_${index + 1}`,
+        label: scenario?.label || `Escenario ${index + 1}`,
+        passed,
+        checks,
+        next_best_action: nextBestAction,
+      };
+    });
+
+    res.json({
+      ok: true,
+      account,
+      summary: {
+        total: results.length,
+        passed: results.filter((result) => result.passed).length,
+        failed: results.filter((result) => !result.passed).length,
+      },
+      results,
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/config/publish-agent", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const currentConfig = await getAppConfig({ accountId: account.id });
+    const candidateConfig = sanitizeAppConfig({
+      ...currentConfig,
+      ...(req.body?.config || {}),
+    });
+    const readiness = buildPublishReadiness(candidateConfig, req.body?.readiness || {});
+
+    if (readiness.blockers.length) {
+      return res.status(400).json({
+        ok: false,
+        error: "El agente todavia tiene bloqueos antes de publicar",
+        readiness,
+      });
+    }
+
+    const publishedAt = new Date().toISOString();
+    const config = await saveAppConfig(
+      {
+        ...candidateConfig,
+        deployment: {
+          status: "published",
+          published_at: publishedAt,
+          readiness_snapshot: {
+            ...readiness,
+            published_at: publishedAt,
+            account_id: account.id,
+            published_by: req.crmUser?.id || "",
+          },
+        },
+      },
+      { accountId: account.id }
+    );
+
+    res.json({
+      ok: true,
+      account,
+      config,
+      deployment: config.deployment || {},
+      readiness,
+    });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }

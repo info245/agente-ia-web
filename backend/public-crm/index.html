@@ -715,7 +715,11 @@
                   <strong id="configSetupHealthTitle">Por empezar</strong>
                   <p id="configSetupHealthCopy">Completa marca, oferta, contexto y entrega para dejar el agente listo para publicar.</p>
                 </div>
-                <span id="configSetupHealthBadge" class="status-pill" data-tone="pending">0/4</span>
+                <div class="config-setup-health-actions">
+                  <span id="configSetupHealthBadge" class="status-pill" data-tone="pending">0/4</span>
+                  <button id="configPublishAgentBtn" type="button" class="crm-secondary-btn" disabled>Publicar agente</button>
+                  <span id="configPublishAgentStatus" class="save-status" aria-live="polite"></span>
+                </div>
               </div>
               <div id="configSetupHealthGrid" class="config-setup-health-grid"></div>
               <p id="configSetupHealthNext" class="config-setup-health-next">
@@ -724,9 +728,23 @@
               </p>
             </section>
 
+            <section id="configDeploymentCard" class="crm-card config-deployment-card">
+              <div class="config-deployment-head">
+                <div>
+                  <span>Publicacion y canales</span>
+                  <strong id="configDeploymentTitle">Agente en borrador</strong>
+                  <p id="configDeploymentCopy">Publica el agente cuando el setup este completo y revisa en que canales puede operar.</p>
+                </div>
+                <span id="configDeploymentBadge" class="status-pill" data-tone="pending">Borrador</span>
+              </div>
+              <div id="configDeploymentMeta" class="config-deployment-meta"></div>
+              <div id="configDeploymentChannels" class="config-deployment-channels"></div>
+            </section>
+
             <form id="configForm" class="config-form">
                 <div class="config-tabs">
                   <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">Configurar tono</button>
+                  <button id="configTabSalesSystem" type="button" class="config-tab" data-config-tab="sales_system">Sistema de ventas IA</button>
                   <button id="configTabKnowledge" type="button" class="config-tab" data-config-tab="knowledge">Configurar conocimiento</button>
                   <button id="configTabMessages" type="button" class="config-tab" data-config-tab="messages">Configurar respuestas</button>
                 <button id="configTabAutomations" type="button" class="config-tab" data-config-tab="automations">Automatizaciones</button>
@@ -925,6 +943,194 @@
                     <div id="configServicesList" class="services-editor-list"></div>
                   </div>
                 </div>
+              </section>
+
+              <section id="configPanelSalesSystem" class="config-panel" data-config-panel="sales_system">
+                <div class="config-section-intro">
+                  <strong>Sistema de ventas IA</strong>
+                  <p>Define el tipo de cliente, el objetivo de conversión y la lógica que guía al agente. Esta capa hace que el mismo sistema pueda adaptarse a una academia, clínica, inmobiliaria o cualquier negocio sin tocar código.</p>
+                </div>
+
+                <section class="config-sales-system-card">
+                  <div class="config-sales-system-head">
+                    <div>
+                      <span>Scoring comercial</span>
+                      <strong>Define cuándo un lead está frío, templado o caliente</strong>
+                      <p>Ajusta la temperatura según intención, datos pendientes y contacto disponible para que cada cliente tenga su propio criterio de prioridad.</p>
+                    </div>
+                  </div>
+                  <div class="quote-grid">
+                    <label>
+                      Intenciones calientes
+                      <input id="configScoringHotIntents" type="text" placeholder="booking, human_request" />
+                    </label>
+                    <label>
+                      Intenciones templadas
+                      <input id="configScoringWarmIntents" type="text" placeholder="pricing, contact, information" />
+                    </label>
+                    <label>
+                      Máx. campos faltantes para caliente
+                      <input id="configScoringHotMissing" type="number" min="0" max="20" />
+                    </label>
+                    <label>
+                      Máx. campos faltantes si pregunta precio
+                      <input id="configScoringPricingHotMissing" type="number" min="0" max="20" />
+                    </label>
+                    <label>
+                      Máx. campos faltantes con contacto
+                      <input id="configScoringWarmContactMissing" type="number" min="0" max="20" />
+                    </label>
+                    <label class="config-builder-check">
+                      <input id="configScoringContactMakesWarm" type="checkbox" />
+                      <span>El contacto convierte el lead en templado</span>
+                    </label>
+                  </div>
+                </section>
+
+                <section class="config-sales-system-card">
+                  <div class="config-sales-system-head">
+                    <div>
+                      <span>Personalización</span>
+                      <strong>Adapta el pitch según los datos del lead</strong>
+                      <p>Define reglas para cambiar ángulo, beneficios, objeciones y CTA cuando un campo de cualificación tenga un valor concreto.</p>
+                    </div>
+                    <button id="configAddPersonalizationRuleBtn" type="button" class="crm-secondary-btn">Añadir regla</button>
+                  </div>
+                  <div id="configPersonalizationBuilder" class="config-builder-list"></div>
+                  <textarea id="configPersonalizationRules" class="config-json-editor" rows="16" placeholder='[{"key":"empresa","label":"Alumno empresa","field":"custom.student_type","operator":"contains","values":["empresa"],"pitch_angle":"...", "value_points":["..."], "objections":["..."], "cta":"...", "priority":80, "enabled":true}]'></textarea>
+                </section>
+
+                <section class="config-sales-system-card">
+                  <div class="config-sales-system-head">
+                    <div>
+                      <span>Preset operativo</span>
+                      <strong>Arranca desde un sector y ajusta después</strong>
+                      <p>Aplicar un preset carga perfil, oferta, campos de cualificación, acciones y plantillas base para ese negocio.</p>
+                    </div>
+                    <div class="config-sales-system-actions">
+                      <select id="configIndustryPresetSelect">
+                        <option value="">Elegir preset</option>
+                      </select>
+                      <button id="configApplyIndustryPresetBtn" type="button" class="crm-secondary-btn">Aplicar preset</button>
+                    </div>
+                  </div>
+                  <div id="configIndustryPresetStatus" class="save-status" aria-live="polite"></div>
+                </section>
+
+                <div class="quote-grid">
+                  <label>
+                    Sector / industria
+                    <input id="configBusinessIndustry" type="text" placeholder="language_academy, clinic, real_estate..." />
+                  </label>
+                  <label>
+                    Modelo de negocio
+                    <input id="configBusinessModel" type="text" placeholder="appointments, courses, ecommerce, services..." />
+                  </label>
+                  <label class="quote-grid-full">
+                    Audiencia
+                    <input id="configBusinessAudience" type="text" placeholder="A quién atiende o vende este cliente" />
+                  </label>
+                  <label>
+                    Objetivo principal de conversión
+                    <input id="configPrimaryConversionGoal" type="text" placeholder="book_level_test, book_first_visit, request_quote..." />
+                  </label>
+                  <label>
+                    Ciclo de venta
+                    <input id="configSalesCycle" type="text" placeholder="short_consultative, medium_consultative..." />
+                  </label>
+                  <label>
+                    Equipo humano
+                    <input id="configHumanTeamLabel" type="text" placeholder="equipo de admisiones, recepción, asesor..." />
+                  </label>
+                  <label>
+                    Objetivos secundarios
+                    <input id="configSecondaryGoals" type="text" placeholder="send_course_info, handoff_human..." />
+                  </label>
+                  <label class="quote-grid-full">
+                    Propuesta de valor
+                    <textarea id="configValueProposition" rows="4" placeholder="Qué debe conseguir el agente para este negocio"></textarea>
+                  </label>
+                </div>
+
+                <section class="config-sales-system-card">
+                  <div class="config-sales-system-head">
+                    <div>
+                      <span>Cualificación</span>
+                      <strong>Campos que el agente debe recoger antes de cerrar</strong>
+                      <p>JSON editable para definir preguntas, obligatoriedad y uso en personalización. Se sincroniza con campos personalizados del lead al guardar.</p>
+                    </div>
+                    <button id="configAddQualificationFieldBtn" type="button" class="crm-secondary-btn">AÃ±adir campo</button>
+                  </div>
+                  <div id="configQualificationBuilder" class="config-builder-list"></div>
+                  <textarea id="configQualificationSchema" class="config-json-editor" rows="14"></textarea>
+                </section>
+
+                <section class="config-sales-system-card">
+                  <div class="config-sales-system-head">
+                    <div>
+                      <span>Acciones</span>
+                      <strong>Qué puede ejecutar el agente cuando detecta oportunidad</strong>
+                      <p>Define handoff humano, reserva de cita, envío de información, propuesta o tareas CRM. Cada acción puede exigir campos concretos y usar una plantilla.</p>
+                    </div>
+                    <button id="configAddActionBtn" type="button" class="crm-secondary-btn">AÃ±adir accion</button>
+                  </div>
+                  <div id="configActionsBuilder" class="config-builder-list"></div>
+                  <textarea id="configActionsCatalog" class="config-json-editor" rows="16"></textarea>
+                </section>
+
+                <section class="config-sales-system-card">
+                  <div class="config-sales-system-head">
+                    <div>
+                      <span>Simulador</span>
+                      <strong>Prueba la lógica antes de publicarla</strong>
+                      <p>Envía un mensaje de ejemplo con datos de lead y revisa intención, temperatura, campos faltantes y siguiente acción sin ejecutar automatizaciones reales.</p>
+                    </div>
+                    <button id="configRunSimulationBtn" type="button" class="crm-secondary-btn">Simular decisión</button>
+                  </div>
+                  <div class="quote-grid">
+                    <label class="quote-grid-full">
+                      Mensaje del lead
+                      <textarea id="configSimulationMessage" rows="4" placeholder="Ej: Quiero empezar clases de inglés este mes, ¿tenéis prueba de nivel?"></textarea>
+                    </label>
+                    <label>
+                      Canal
+                      <select id="configSimulationChannel">
+                        <option value="web">Web</option>
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="funnel">Funnel</option>
+                      </select>
+                    </label>
+                    <label>
+                      Fase
+                      <select id="configSimulationPhase">
+                        <option value="capture">Captación</option>
+                        <option value="qualification">Cualificación</option>
+                        <option value="close">Cierre</option>
+                      </select>
+                    </label>
+                    <label class="quote-grid-full">
+                      Lead de prueba (JSON)
+                      <textarea id="configSimulationLead" class="config-json-editor" rows="10"></textarea>
+                    </label>
+                  </div>
+                  <div id="configSimulationResult" class="config-simulation-result" aria-live="polite"></div>
+                  <div class="config-scenario-runner">
+                    <div class="config-sales-system-head">
+                      <div>
+                        <span>Escenarios de prueba</span>
+                        <strong>Valida varias conversaciones de golpe</strong>
+                        <p>Define casos con mensaje, lead y expectativas. El runner compara acción, temperatura, etapa y personalización esperadas.</p>
+                      </div>
+                      <div class="config-sales-system-actions">
+                        <button id="configAddScenarioBtn" type="button" class="crm-secondary-btn">Añadir escenario</button>
+                        <button id="configRunScenariosBtn" type="button" class="crm-secondary-btn">Ejecutar escenarios</button>
+                      </div>
+                    </div>
+                    <div id="configScenarioBuilder" class="config-builder-list"></div>
+                    <textarea id="configScenarioTests" class="config-json-editor" rows="16"></textarea>
+                    <div id="configScenarioResults" class="config-scenario-results" aria-live="polite"></div>
+                  </div>
+                </section>
               </section>
 
               <section id="configPanelKnowledge" class="config-panel" data-config-panel="knowledge">
@@ -1769,6 +1975,6 @@
     </nav>
   </main>
 
-  <script src="./app.js?v=20260430a"></script>
+  <script src="./app.js?v=20260502-sales-system-simulator"></script>
 </body>
 </html>

@@ -14,6 +14,9 @@ const state = {
   quoteItems: [],
   analytics: null,
   appConfig: null,
+  industryPresets: [],
+  lastScenarioRunSummary: null,
+  configTouchedAfterPublish: false,
   suggestedSectorPresetKey: "",
 };
 
@@ -471,6 +474,14 @@ const el = {
   configSetupHealthBadge: document.getElementById("configSetupHealthBadge"),
   configSetupHealthGrid: document.getElementById("configSetupHealthGrid"),
   configSetupHealthNext: document.getElementById("configSetupHealthNext"),
+  configPublishAgentBtn: document.getElementById("configPublishAgentBtn"),
+  configPublishAgentStatus: document.getElementById("configPublishAgentStatus"),
+  configDeploymentCard: document.getElementById("configDeploymentCard"),
+  configDeploymentTitle: document.getElementById("configDeploymentTitle"),
+  configDeploymentCopy: document.getElementById("configDeploymentCopy"),
+  configDeploymentBadge: document.getElementById("configDeploymentBadge"),
+  configDeploymentMeta: document.getElementById("configDeploymentMeta"),
+  configDeploymentChannels: document.getElementById("configDeploymentChannels"),
   configForm: document.getElementById("configForm"),
   configBackBtn: document.getElementById("configBackBtn"),
   configSaveBtn: document.getElementById("configSaveBtn"),
@@ -487,12 +498,14 @@ const el = {
   configCopyWidgetSnippetBtn: document.getElementById("configCopyWidgetSnippetBtn"),
   configWidgetPreviewBtn: document.getElementById("configWidgetPreviewBtn"),
   configTabGeneral: document.getElementById("configTabGeneral"),
+  configTabSalesSystem: document.getElementById("configTabSalesSystem"),
   configTabKnowledge: document.getElementById("configTabKnowledge"),
   configTabMessages: document.getElementById("configTabMessages"),
   configTabAutomations: document.getElementById("configTabAutomations"),
   configTabIntegrations: document.getElementById("configTabIntegrations"),
   configTabWebsite: document.getElementById("configTabWebsite"),
   configPanelGeneral: document.getElementById("configPanelGeneral"),
+  configPanelSalesSystem: document.getElementById("configPanelSalesSystem"),
   configPanelKnowledge: document.getElementById("configPanelKnowledge"),
   configPanelMessages: document.getElementById("configPanelMessages"),
   configPanelAutomations: document.getElementById("configPanelAutomations"),
@@ -530,6 +543,43 @@ const el = {
   configPrimaryColor: document.getElementById("configPrimaryColor"),
   configAccentColor: document.getElementById("configAccentColor"),
   configPromptAdditions: document.getElementById("configPromptAdditions"),
+  configIndustryPresetSelect: document.getElementById("configIndustryPresetSelect"),
+  configApplyIndustryPresetBtn: document.getElementById("configApplyIndustryPresetBtn"),
+  configIndustryPresetStatus: document.getElementById("configIndustryPresetStatus"),
+  configBusinessIndustry: document.getElementById("configBusinessIndustry"),
+  configBusinessModel: document.getElementById("configBusinessModel"),
+  configBusinessAudience: document.getElementById("configBusinessAudience"),
+  configPrimaryConversionGoal: document.getElementById("configPrimaryConversionGoal"),
+  configSalesCycle: document.getElementById("configSalesCycle"),
+  configHumanTeamLabel: document.getElementById("configHumanTeamLabel"),
+  configSecondaryGoals: document.getElementById("configSecondaryGoals"),
+  configValueProposition: document.getElementById("configValueProposition"),
+  configScoringHotIntents: document.getElementById("configScoringHotIntents"),
+  configScoringWarmIntents: document.getElementById("configScoringWarmIntents"),
+  configScoringHotMissing: document.getElementById("configScoringHotMissing"),
+  configScoringPricingHotMissing: document.getElementById("configScoringPricingHotMissing"),
+  configScoringWarmContactMissing: document.getElementById("configScoringWarmContactMissing"),
+  configScoringContactMakesWarm: document.getElementById("configScoringContactMakesWarm"),
+  configAddPersonalizationRuleBtn: document.getElementById("configAddPersonalizationRuleBtn"),
+  configPersonalizationBuilder: document.getElementById("configPersonalizationBuilder"),
+  configPersonalizationRules: document.getElementById("configPersonalizationRules"),
+  configAddQualificationFieldBtn: document.getElementById("configAddQualificationFieldBtn"),
+  configQualificationBuilder: document.getElementById("configQualificationBuilder"),
+  configQualificationSchema: document.getElementById("configQualificationSchema"),
+  configAddActionBtn: document.getElementById("configAddActionBtn"),
+  configActionsBuilder: document.getElementById("configActionsBuilder"),
+  configActionsCatalog: document.getElementById("configActionsCatalog"),
+  configSimulationMessage: document.getElementById("configSimulationMessage"),
+  configSimulationChannel: document.getElementById("configSimulationChannel"),
+  configSimulationPhase: document.getElementById("configSimulationPhase"),
+  configSimulationLead: document.getElementById("configSimulationLead"),
+  configRunSimulationBtn: document.getElementById("configRunSimulationBtn"),
+  configSimulationResult: document.getElementById("configSimulationResult"),
+  configAddScenarioBtn: document.getElementById("configAddScenarioBtn"),
+  configScenarioBuilder: document.getElementById("configScenarioBuilder"),
+  configScenarioTests: document.getElementById("configScenarioTests"),
+  configRunScenariosBtn: document.getElementById("configRunScenariosBtn"),
+  configScenarioResults: document.getElementById("configScenarioResults"),
   configWhatsappProvider: document.getElementById("configWhatsappProvider"),
   configWhatsappSetupOwner: document.getElementById("configWhatsappSetupOwner"),
   configWhatsappSetupGoal: document.getElementById("configWhatsappSetupGoal"),
@@ -959,7 +1009,33 @@ function getProductModeLabel(mode = "") {
 }
 
 function computeSetupHealth(config = {}) {
-  const servicesCount = Object.keys(config?.services || {}).length;
+  const offers = Object.keys(config?.offers || {}).length ? config.offers : config?.services || {};
+  const servicesCount = Object.keys(offers || {}).length;
+  const qualificationCount = Array.isArray(config?.qualification_schema)
+    ? config.qualification_schema.length
+    : 0;
+  const requiredQualificationCount = Array.isArray(config?.qualification_schema)
+    ? config.qualification_schema.filter((field) => field?.required).length
+    : 0;
+  const enabledActions = Object.values(config?.actions_catalog || {}).filter(
+    (action) => action && action.enabled !== false
+  );
+  const personalizationCount = Array.isArray(config?.personalization_rules)
+    ? config.personalization_rules.filter((rule) => rule?.enabled !== false).length
+    : 0;
+  const hasSalesScoring =
+    Array.isArray(config?.sales_scoring?.hot_intents) &&
+    config.sales_scoring.hot_intents.length > 0 &&
+    Array.isArray(config?.sales_scoring?.warm_intents) &&
+    config.sales_scoring.warm_intents.length > 0;
+  const scenarioCount = (() => {
+    if (el.configScenarioTests?.value) {
+      const parsed = parseJsonField(el.configScenarioTests.value, []);
+      if (Array.isArray(parsed)) return parsed.length;
+    }
+    return collectScenarioBuilder().length;
+  })();
+  const scenarioSummary = state.lastScenarioRunSummary || null;
   const websiteUrlsCount = Array.isArray(config?.knowledge_sources?.website_urls)
     ? config.knowledge_sources.website_urls.filter(Boolean).length
     : 0;
@@ -985,18 +1061,51 @@ function computeSetupHealth(config = {}) {
     {
       key: "brand",
       label: "Marca",
+      severity: "blocker",
       ready: hasBrandIdentity,
       hint: hasBrandIdentity ? "Lista" : "Falta identidad base",
     },
     {
       key: "offer",
       label: "Oferta",
+      severity: "blocker",
       ready: servicesCount > 0,
-      hint: servicesCount > 0 ? `${servicesCount} servicios` : "Sin servicios",
+      hint: servicesCount > 0 ? `${servicesCount} ofertas` : "Sin oferta",
+    },
+    {
+      key: "business_profile",
+      label: "Perfil",
+      severity: "blocker",
+      ready:
+        Boolean(String(config?.business_profile?.industry || "").trim()) &&
+        Boolean(String(config?.business_profile?.primary_conversion_goal || "").trim()),
+      hint:
+        String(config?.business_profile?.industry || "").trim() &&
+        String(config?.business_profile?.primary_conversion_goal || "").trim()
+          ? "Objetivo definido"
+          : "Falta sector u objetivo",
+    },
+    {
+      key: "qualification",
+      label: "Cualificacion",
+      severity: "blocker",
+      ready: requiredQualificationCount > 0,
+      hint:
+        requiredQualificationCount > 0
+          ? `${requiredQualificationCount} campos obligatorios`
+          : "Sin campos obligatorios",
+    },
+    {
+      key: "actions",
+      label: "Acciones",
+      severity: "blocker",
+      ready: enabledActions.length > 0,
+      hint: enabledActions.length > 0 ? `${enabledActions.length} acciones activas` : "Sin acciones",
     },
     {
       key: "context",
       label: "Contexto",
+      severity: "warning",
       ready: websiteUrlsCount > 0 || hasSpreadsheetSource || hasInternalNotes,
       hint:
         websiteUrlsCount > 0 || hasSpreadsheetSource || hasInternalNotes
@@ -1006,21 +1115,66 @@ function computeSetupHealth(config = {}) {
     {
       key: "delivery",
       label: "Entrega",
+      severity: "blocker",
       ready: hasDeliveryChannels,
       hint: hasDeliveryChannels ? "Canales listos" : "Falta canal",
+    },
+    {
+      key: "scoring",
+      label: "Scoring",
+      severity: "blocker",
+      ready: hasSalesScoring,
+      hint: hasSalesScoring ? "Temperaturas definidas" : "Sin scoring",
+    },
+    {
+      key: "personalization",
+      label: "Personalizacion",
+      severity: "warning",
+      ready: personalizationCount > 0,
+      hint:
+        personalizationCount > 0 ? `${personalizationCount} reglas activas` : "Sin reglas",
+    },
+    {
+      key: "scenarios",
+      label: "Pruebas",
+      severity: "blocker",
+      ready:
+        scenarioSummary && scenarioSummary.total > 0
+          ? scenarioSummary.failed === 0
+          : false,
+      hint:
+        scenarioSummary && scenarioSummary.total > 0
+          ? `${scenarioSummary.passed}/${scenarioSummary.total} escenarios OK`
+          : scenarioCount > 0
+            ? `${scenarioCount} escenarios sin ejecutar`
+            : "Sin escenarios",
     },
   ];
 
   const readyCount = checks.filter((item) => item.ready).length;
   const totalCount = checks.length;
-  const nextStep = checks.find((item) => !item.ready)?.label || "Listo para publicar";
+  const blockerChecks = checks.filter((item) => item.severity === "blocker");
+  const blockerIssues = blockerChecks.filter((item) => !item.ready);
+  const warningIssues = checks.filter((item) => item.severity !== "blocker" && !item.ready);
+  const nextStep =
+    blockerIssues[0]?.label ||
+    warningIssues[0]?.label ||
+    "Listo para publicar";
   const status =
-    readyCount === totalCount ? "ready" : readyCount >= 2 ? "in_progress" : "starting";
+    blockerIssues.length === 0
+      ? warningIssues.length === 0
+        ? "ready"
+        : "ready_with_warnings"
+      : readyCount >= Math.ceil(totalCount / 2)
+        ? "in_progress"
+        : "starting";
 
   return {
     checks,
     readyCount,
     totalCount,
+    blockerIssues,
+    warningIssues,
     nextStep,
     status,
   };
@@ -1031,17 +1185,25 @@ function renderSetupHealth(config = state.appConfig) {
 
   const health = computeSetupHealth(config || {});
   const tone =
-    health.status === "ready" ? "ok" : health.status === "in_progress" ? "progress" : "pending";
+    health.status === "ready"
+      ? "ok"
+      : health.status === "ready_with_warnings" || health.status === "in_progress"
+        ? "progress"
+        : "pending";
   const title =
     health.status === "ready"
       ? "Listo para publicar"
-      : health.status === "in_progress"
+      : health.status === "ready_with_warnings"
+        ? "Publicable con avisos"
+        : health.status === "in_progress"
         ? "Setup en progreso"
         : "Setup por empezar";
   const copy =
     health.status === "ready"
       ? "La cuenta ya tiene marca, oferta, contexto y canales mínimos para salir a producción."
-      : health.status === "in_progress"
+      : health.status === "ready_with_warnings"
+        ? "No hay bloqueos criticos, pero conviene mejorar los avisos antes de escalar el agente."
+        : health.status === "in_progress"
         ? "Ya hay una base útil. Remata los bloques pendientes para dejar el agente consistente y publicable."
         : "Todavía falta aterrizar la base comercial y técnica del agente antes de ponerlo a trabajar.";
 
@@ -1056,12 +1218,22 @@ function renderSetupHealth(config = state.appConfig) {
     el.configSetupHealthBadge.textContent = `${health.readyCount}/${health.totalCount}`;
     el.configSetupHealthBadge.dataset.tone = tone;
   }
+  if (el.configPublishAgentBtn) {
+    const canPublish = health.blockerIssues.length === 0;
+    const isPublished = String(config?.deployment?.status || "").toLowerCase() === "published";
+    el.configPublishAgentBtn.disabled = !canPublish;
+    el.configPublishAgentBtn.textContent = isPublished ? "Republicar agente" : "Publicar agente";
+    el.configPublishAgentBtn.title = canPublish
+      ? "Publicar esta configuracion del agente"
+      : "Resuelve los bloqueos y ejecuta las pruebas antes de publicar";
+  }
   el.configSetupHealthGrid.innerHTML = health.checks
     .map(
       (check) => `
         <div class="config-setup-health-item ${check.ready ? "is-ready" : ""}">
           <strong>${escapeHtml(check.label)}</strong>
           <span>${escapeHtml(check.hint)}</span>
+          <em>${check.severity === "blocker" ? "Bloqueo" : "Aviso"}</em>
         </div>
       `
     )
@@ -1071,8 +1243,35 @@ function renderSetupHealth(config = state.appConfig) {
     el.configSetupHealthNext.innerHTML = `
       <span>Siguiente paso</span>
       <strong>${escapeHtml(health.nextStep)}</strong>
+      <p>${escapeHtml(
+        health.blockerIssues.length
+          ? `${health.blockerIssues.length} bloqueos antes de publicar`
+          : health.warningIssues.length
+            ? `${health.warningIssues.length} avisos recomendados`
+            : "Sin bloqueos ni avisos pendientes"
+      )}</p>
     `;
   }
+}
+
+function buildReadinessPayload(config = buildConfigPayload()) {
+  const health = computeSetupHealth(config || {});
+  return {
+    status: health.status,
+    ready_count: health.readyCount,
+    total_count: health.totalCount,
+    blockers: health.blockerIssues.map((item) => ({
+      key: item.key,
+      label: item.label,
+      hint: item.hint,
+    })),
+    warnings: health.warningIssues.map((item) => ({
+      key: item.key,
+      label: item.label,
+      hint: item.hint,
+    })),
+    scenario_summary: state.lastScenarioRunSummary || null,
+  };
 }
 
 function updateProductModeUi(config = state.appConfig) {
@@ -2787,6 +2986,14 @@ function createServiceEditorItem(name = "", facts = {}) {
         <input type="url" data-field="url" value="${escapeHtml(facts?.url || "")}" />
       </label>
       <label class="service-item-field">
+        Categoria
+        <input type="text" data-field="category" value="${escapeHtml(facts?.category || "")}" />
+      </label>
+      <label class="service-item-field">
+        Objetivo de conversion
+        <input type="text" data-field="conversion_goal" value="${escapeHtml(facts?.conversion_goal || "")}" />
+      </label>
+      <label class="service-item-field">
         Tarifa mensual orientativa
         <input type="text" data-field="min_monthly_fee" value="${escapeHtml(facts?.min_monthly_fee || "")}" />
       </label>
@@ -2838,11 +3045,13 @@ function collectServiceConfig() {
     if (!name) continue;
 
     services[name] = {
+      category: getValue("category"),
       url: getValue("url"),
       min_monthly_fee: getValue("min_monthly_fee"),
       min_project_fee: getValue("min_project_fee"),
       description: getValue("description"),
       notes: getValue("notes"),
+      conversion_goal: getValue("conversion_goal"),
     };
   }
 
@@ -2974,6 +3183,150 @@ function hasConfiguredWhatsApp(config = state.appConfig || {}) {
   return Boolean(
     String(config?.contact?.public_whatsapp_number || "").replace(/\D/g, "")
   );
+}
+
+function hasConfiguredEmail(config = state.appConfig || {}) {
+  return Boolean(
+    String(config?.contact?.support_email || "").trim() ||
+      String(config?.integrations?.email?.from_email || "").trim() ||
+      String(config?.integrations?.email?.google_connected_email || "").trim() ||
+      String(config?.integrations?.email?.smtp_host || "").trim()
+  );
+}
+
+function getDeploymentChannels(config = state.appConfig || {}) {
+  const widgetInstall = buildWidgetInstallData(config);
+  const leadForms = config?.integrations?.lead_forms || {};
+  const automationFlows = Object.values(config?.automation_flows || {}).filter(
+    (flow) => flow && flow.enabled !== false
+  );
+  const hasLeadForms =
+    Boolean(String(leadForms.webhook_url || "").trim()) ||
+    Boolean(String(leadForms.sheet_document || "").trim());
+  const hasAutomation =
+    Boolean(String(config?.integrations?.automations?.workspace_url || "").trim()) ||
+    automationFlows.some((flow) => Array.isArray(flow.steps) && flow.steps.length > 0);
+
+  return [
+    {
+      key: "web",
+      label: "Web",
+      active: Boolean(widgetInstall.widgetUrl || config?.brand?.website_url),
+      hint: config?.brand?.website_url
+        ? `Widget listo para ${config.brand.website_url}`
+        : "Widget disponible para instalar",
+    },
+    {
+      key: "whatsapp",
+      label: "WhatsApp",
+      active: hasConfiguredWhatsApp(config),
+      hint: hasConfiguredWhatsApp(config)
+        ? "Numero publico configurado"
+        : "Falta numero publico o conexion Meta",
+    },
+    {
+      key: "lead_forms",
+      label: "Formularios",
+      active: hasLeadForms,
+      hint: hasLeadForms
+        ? leadForms.webhook_url
+          ? "Entrada por webhook configurada"
+          : "Entrada por hoja configurada"
+        : "Falta webhook, hoja o intake",
+    },
+    {
+      key: "email",
+      label: "Email",
+      active: hasConfiguredEmail(config),
+      hint: hasConfiguredEmail(config)
+        ? "Email de respuesta configurado"
+        : "Falta remitente o email de soporte",
+    },
+    {
+      key: "automations",
+      label: "Seguimiento",
+      active: hasAutomation,
+      hint: hasAutomation
+        ? `${automationFlows.length} flujos disponibles`
+        : "Sin seguimiento automatico",
+    },
+  ];
+}
+
+function renderDeploymentStatus(config = state.appConfig || {}) {
+  if (!el.configDeploymentCard) return;
+
+  const deployment = config?.deployment || {};
+  const isPublished = String(deployment.status || "").toLowerCase() === "published";
+  const needsRepublish = isPublished && state.configTouchedAfterPublish;
+  const tone = needsRepublish ? "warning" : isPublished ? "ok" : "pending";
+  const title = needsRepublish
+    ? "Necesita republicar"
+    : isPublished
+      ? "Agente publicado"
+      : "Agente en borrador";
+  const copy = needsRepublish
+    ? "Hay cambios en la configuracion que todavia no estan sellados como version publicada."
+    : isPublished
+      ? "La version actual esta publicada y lista para operar en los canales configurados."
+      : "Completa el setup, ejecuta escenarios y publica el agente para activar una version validada.";
+  const publishedAt = deployment.published_at ? formatDateTime(deployment.published_at) : "";
+  const readiness = deployment.readiness_snapshot || null;
+  const channels = getDeploymentChannels(config);
+
+  el.configDeploymentCard.dataset.tone = tone;
+  if (el.configDeploymentTitle) el.configDeploymentTitle.textContent = title;
+  if (el.configDeploymentCopy) el.configDeploymentCopy.textContent = copy;
+  if (el.configDeploymentBadge) {
+    el.configDeploymentBadge.dataset.tone = tone === "warning" ? "progress" : tone;
+    el.configDeploymentBadge.textContent = needsRepublish
+      ? "Republicar"
+      : isPublished
+        ? "Publicado"
+        : "Borrador";
+  }
+  if (el.configDeploymentMeta) {
+    el.configDeploymentMeta.innerHTML = [
+      {
+        label: "Ultima publicacion",
+        value: publishedAt || "Sin publicar",
+      },
+      {
+        label: "Readiness publicado",
+        value: readiness
+          ? `${Number(readiness.ready_count || 0)}/${Number(readiness.total_count || 0)} checks`
+          : "Sin snapshot",
+      },
+      {
+        label: "Canales activos",
+        value: `${channels.filter((channel) => channel.active).length}/${channels.length}`,
+      },
+    ]
+      .map(
+        (item) => `
+          <div>
+            <span>${escapeHtml(item.label)}</span>
+            <strong>${escapeHtml(item.value)}</strong>
+          </div>
+        `
+      )
+      .join("");
+  }
+  if (el.configDeploymentChannels) {
+    el.configDeploymentChannels.innerHTML = channels
+      .map(
+        (channel) => `
+          <article class="config-deployment-channel ${channel.active ? "is-active" : ""}">
+            <div>
+              <strong>${escapeHtml(channel.label)}</strong>
+              <span>${escapeHtml(channel.hint)}</span>
+            </div>
+            <em>${channel.active ? "Activo" : "Pendiente"}</em>
+          </article>
+        `
+      )
+      .join("");
+  }
 }
 
 function splitSpreadsheetLine(raw = "") {
@@ -3556,8 +3909,737 @@ function suggestSectorPreset() {
   scrollToKnowledgeTarget("configKnowledgeStepServices");
 }
 
+function renderIndustryPresetOptions() {
+  if (!el.configIndustryPresetSelect) return;
+  const presets = Array.isArray(state.industryPresets) ? state.industryPresets : [];
+  el.configIndustryPresetSelect.innerHTML = [
+    '<option value="">Elegir preset</option>',
+    ...presets.map(
+      (preset) =>
+        `<option value="${escapeHtml(preset.key || "")}">${escapeHtml(preset.label || preset.key || "")}</option>`
+    ),
+  ].join("");
+}
+
+async function loadIndustryPresets() {
+  try {
+    const data = await fetchJson(`${API_BASE}/config/industry-presets`);
+    state.industryPresets = data.presets || [];
+    renderIndustryPresetOptions();
+  } catch (error) {
+    console.warn("No se pudieron cargar presets de industria", error);
+  }
+}
+
+async function applyIndustryPreset() {
+  const presetKey = String(el.configIndustryPresetSelect?.value || "").trim();
+  if (!presetKey) {
+    setStatus(el.configIndustryPresetStatus, "Elige un preset antes de aplicarlo.", "error");
+    return;
+  }
+
+  el.configApplyIndustryPresetBtn.disabled = true;
+  el.configApplyIndustryPresetBtn.classList.add("is-busy");
+  setStatus(el.configIndustryPresetStatus, "Aplicando preset...");
+
+  try {
+    const data = await fetchJson(`${API_BASE}/config/apply-industry-preset`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preset_key: presetKey }),
+    });
+    state.appConfig = data.config || state.appConfig;
+    state.configTouchedAfterPublish = false;
+    renderConfig();
+    setConfigTab("sales_system");
+    setStatus(el.configIndustryPresetStatus, "Preset aplicado. Revisa campos, acciones y plantillas antes de publicar.", "ok");
+  } catch (error) {
+    setStatus(el.configIndustryPresetStatus, `No se pudo aplicar: ${error.message}`, "error");
+  } finally {
+    el.configApplyIndustryPresetBtn.disabled = false;
+    el.configApplyIndustryPresetBtn.classList.remove("is-busy");
+  }
+}
+
+function collectBusinessProfile() {
+  return {
+    industry: String(el.configBusinessIndustry?.value || "").trim(),
+    business_model: String(el.configBusinessModel?.value || "").trim(),
+    audience: String(el.configBusinessAudience?.value || "").trim(),
+    primary_conversion_goal: String(el.configPrimaryConversionGoal?.value || "").trim(),
+    secondary_goals: String(el.configSecondaryGoals?.value || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+    sales_cycle: String(el.configSalesCycle?.value || "").trim(),
+    human_team_label: String(el.configHumanTeamLabel?.value || "").trim(),
+    value_proposition: String(el.configValueProposition?.value || "").trim(),
+  };
+}
+
+function csvToList(value = "") {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function collectSalesScoring() {
+  const toNumber = (input, fallback) => {
+    const value = Number(input?.value);
+    return Number.isFinite(value) ? Math.max(0, Math.round(value)) : fallback;
+  };
+  return {
+    hot_intents: csvToList(el.configScoringHotIntents?.value || "booking, human_request"),
+    warm_intents: csvToList(el.configScoringWarmIntents?.value || "pricing, contact"),
+    hot_max_missing_required_fields: toNumber(el.configScoringHotMissing, 0),
+    pricing_hot_max_missing_required_fields: toNumber(el.configScoringPricingHotMissing, 1),
+    warm_max_missing_required_fields_with_contact: toNumber(el.configScoringWarmContactMissing, 1),
+    contact_makes_warm: el.configScoringContactMakesWarm?.checked !== false,
+  };
+}
+
+function linesToList(value = "") {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function createPersonalizationRuleItem(rule = {}) {
+  const item = document.createElement("article");
+  item.className = "config-builder-item";
+  const operator = rule.operator || "contains";
+  item.innerHTML = `
+    <div class="config-builder-item-head">
+      <strong>${escapeHtml(rule.label || rule.key || "Regla de personalizacion")}</strong>
+      <button type="button" class="service-remove-btn config-builder-remove">Quitar</button>
+    </div>
+    <div class="config-builder-grid">
+      <label>Clave <input type="text" data-field="key" value="${escapeHtml(rule.key || "")}" placeholder="empresa" /></label>
+      <label>Etiqueta <input type="text" data-field="label" value="${escapeHtml(rule.label || "")}" placeholder="Alumno empresa" /></label>
+      <label>Campo
+        <input type="text" data-field="field" value="${escapeHtml(rule.field || "")}" placeholder="custom.student_type" />
+      </label>
+      <label>Condición
+        <select data-field="operator">
+          ${["contains", "equals", "in", "exists"].map(
+            (option) => `<option value="${option}"${operator === option ? " selected" : ""}>${option}</option>`
+          ).join("")}
+        </select>
+      </label>
+      <label>Valores <input type="text" data-field="values" value="${escapeHtml(Array.isArray(rule.values) ? rule.values.join(", ") : "")}" placeholder="empresa, b2b" /></label>
+      <label>Prioridad <input type="number" data-field="priority" min="0" max="100" value="${escapeHtml(rule.priority ?? 50)}" /></label>
+      <label class="config-builder-check"><input type="checkbox" data-field="enabled"${rule.enabled !== false ? " checked" : ""} /> <span>Regla activa</span></label>
+      <label class="quote-grid-full">Ángulo de pitch <textarea rows="3" data-field="pitch_angle">${escapeHtml(rule.pitch_angle || "")}</textarea></label>
+      <label class="quote-grid-full">Puntos de valor <textarea rows="4" data-field="value_points" placeholder="Uno por línea">${escapeHtml(Array.isArray(rule.value_points) ? rule.value_points.join("\n") : "")}</textarea></label>
+      <label class="quote-grid-full">Objeciones <textarea rows="4" data-field="objections" placeholder="Una por línea">${escapeHtml(Array.isArray(rule.objections) ? rule.objections.join("\n") : "")}</textarea></label>
+      <label class="quote-grid-full">CTA <textarea rows="3" data-field="cta">${escapeHtml(rule.cta || "")}</textarea></label>
+    </div>
+  `;
+  item.querySelector(".config-builder-remove")?.addEventListener("click", () => {
+    item.remove();
+    syncPersonalizationJsonFromBuilder();
+  });
+  item.addEventListener("input", syncPersonalizationJsonFromBuilder);
+  item.addEventListener("change", syncPersonalizationJsonFromBuilder);
+  return item;
+}
+
+function collectPersonalizationBuilder() {
+  const items = [...(el.configPersonalizationBuilder?.querySelectorAll(".config-builder-item") || [])];
+  return items
+    .map((item) => {
+      const getValue = (field) =>
+        String(item.querySelector(`[data-field="${field}"]`)?.value || "").trim();
+      const key = getValue("key")
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      const label = getValue("label");
+      const field = getValue("field")
+        .toLowerCase()
+        .replace(/[^a-z0-9_.]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      if (!key || !label || !field) return null;
+      return {
+        key,
+        label,
+        field,
+        operator: getValue("operator") || "contains",
+        values: csvToList(getValue("values")),
+        pitch_angle: getValue("pitch_angle"),
+        value_points: linesToList(getValue("value_points")),
+        objections: linesToList(getValue("objections")),
+        cta: getValue("cta"),
+        priority: Number(getValue("priority")) || 50,
+        enabled: Boolean(item.querySelector('[data-field="enabled"]')?.checked),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.priority - a.priority);
+}
+
+function renderPersonalizationBuilder(rules = []) {
+  if (!el.configPersonalizationBuilder) return;
+  el.configPersonalizationBuilder.innerHTML = "";
+  const items = Array.isArray(rules) ? rules : [];
+  items.forEach((rule) => {
+    el.configPersonalizationBuilder.appendChild(createPersonalizationRuleItem(rule));
+  });
+}
+
+function syncPersonalizationJsonFromBuilder() {
+  if (!el.configPersonalizationRules) return;
+  el.configPersonalizationRules.value = stringifyJsonField(collectPersonalizationBuilder(), "[]");
+}
+
+function createQualificationFieldItem(field = {}) {
+  const item = document.createElement("article");
+  item.className = "config-builder-item";
+  const type = field.type || "text";
+  item.innerHTML = `
+    <div class="config-builder-item-head">
+      <strong>${escapeHtml(field.label || field.key || "Campo de cualificacion")}</strong>
+      <button type="button" class="service-remove-btn config-builder-remove">Quitar</button>
+    </div>
+    <div class="config-builder-grid">
+      <label>Clave <input type="text" data-field="key" value="${escapeHtml(field.key || "")}" placeholder="language" /></label>
+      <label>Etiqueta <input type="text" data-field="label" value="${escapeHtml(field.label || "")}" placeholder="Idioma de interes" /></label>
+      <label>Tipo
+        <select data-field="type">
+          ${["text", "number", "date", "time", "datetime", "select", "boolean"].map(
+            (option) => `<option value="${option}"${type === option ? " selected" : ""}>${option}</option>`
+          ).join("")}
+        </select>
+      </label>
+      <label>Opciones <input type="text" data-field="options" value="${escapeHtml(Array.isArray(field.options) ? field.options.join(", ") : "")}" placeholder="adulto, empresa, estudiante" /></label>
+      <label class="config-builder-check"><input type="checkbox" data-field="required"${field.required ? " checked" : ""} /> <span>Obligatorio</span></label>
+      <label class="config-builder-check"><input type="checkbox" data-field="use_for_personalization"${field.use_for_personalization !== false ? " checked" : ""} /> <span>Usar para personalizar</span></label>
+      <label class="quote-grid-full">Cuándo preguntar <input type="text" data-field="ask_when" value="${escapeHtml(field.ask_when || "")}" placeholder="antes de ofrecer cita o propuesta" /></label>
+      <label class="quote-grid-full">Pregunta del agente <textarea rows="3" data-field="prompt">${escapeHtml(field.prompt || "")}</textarea></label>
+    </div>
+  `;
+  item.querySelector(".config-builder-remove")?.addEventListener("click", () => {
+    item.remove();
+    syncQualificationJsonFromBuilder();
+  });
+  item.addEventListener("input", syncQualificationJsonFromBuilder);
+  item.addEventListener("change", syncQualificationJsonFromBuilder);
+  return item;
+}
+
+function collectQualificationBuilder() {
+  const items = [...(el.configQualificationBuilder?.querySelectorAll(".config-builder-item") || [])];
+  return items
+    .map((item) => {
+      const getValue = (field) =>
+        String(item.querySelector(`[data-field="${field}"]`)?.value || "").trim();
+      const key = getValue("key")
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      const label = getValue("label");
+      if (!key || !label) return null;
+      return {
+        key,
+        label,
+        type: getValue("type") || "text",
+        required: Boolean(item.querySelector('[data-field="required"]')?.checked),
+        ask_when: getValue("ask_when"),
+        prompt: getValue("prompt"),
+        use_for_personalization:
+          item.querySelector('[data-field="use_for_personalization"]')?.checked !== false,
+        options: getValue("options")
+          .split(",")
+          .map((option) => option.trim())
+          .filter(Boolean),
+      };
+    })
+    .filter(Boolean);
+}
+
+function renderQualificationBuilder(schema = []) {
+  if (!el.configQualificationBuilder) return;
+  el.configQualificationBuilder.innerHTML = "";
+  const fields = Array.isArray(schema) && schema.length ? schema : [];
+  fields.forEach((field) => el.configQualificationBuilder.appendChild(createQualificationFieldItem(field)));
+}
+
+function syncQualificationJsonFromBuilder() {
+  if (!el.configQualificationSchema) return;
+  el.configQualificationSchema.value = stringifyJsonField(collectQualificationBuilder(), "[]");
+}
+
+function getActionTemplateOptionsMarkup(selected = "") {
+  const templates = state.appConfig?.message_templates || {};
+  return [
+    `<option value="">Sin plantilla</option>`,
+    ...getOrderedTemplateKeys(templates).map((key) => {
+      const template = templates[key] || {};
+      return `<option value="${escapeHtml(key)}"${selected === key ? " selected" : ""}>${escapeHtml(template.label || key)}</option>`;
+    }),
+  ].join("");
+}
+
+function createActionItem(actionKey = "", action = {}) {
+  const item = document.createElement("article");
+  item.className = "config-builder-item";
+  item.innerHTML = `
+    <div class="config-builder-item-head">
+      <strong>${escapeHtml(action.label || actionKey || "Accion del agente")}</strong>
+      <button type="button" class="service-remove-btn config-builder-remove">Quitar</button>
+    </div>
+    <div class="config-builder-grid">
+      <label>Clave <input type="text" data-field="key" value="${escapeHtml(actionKey)}" placeholder="book_first_visit" /></label>
+      <label>Etiqueta <input type="text" data-field="label" value="${escapeHtml(action.label || "")}" placeholder="Reservar primera visita" /></label>
+      <label>Tipo
+        <select data-field="type">
+          ${["calendar_booking", "human_handoff", "send_information", "quote", "internal_task"].map(
+            (option) => `<option value="${option}"${(action.type || "internal_task") === option ? " selected" : ""}>${option}</option>`
+          ).join("")}
+        </select>
+      </label>
+      <label>Canal
+        <select data-field="channel">
+          ${["preferred", "whatsapp", "email", "crm"].map(
+            (option) => `<option value="${option}"${(action.channel || "preferred") === option ? " selected" : ""}>${option}</option>`
+          ).join("")}
+        </select>
+      </label>
+      <label>Plantilla <select data-field="template_key">${getActionTemplateOptionsMarkup(action.template_key || "")}</select></label>
+      <label>Campos requeridos <input type="text" data-field="required_fields" value="${escapeHtml(Array.isArray(action.required_fields) ? action.required_fields.join(", ") : "")}" placeholder="name, phone_or_email, custom.language" /></label>
+      <label class="config-builder-check"><input type="checkbox" data-field="enabled"${action.enabled !== false ? " checked" : ""} /> <span>Accion activa</span></label>
+      <label>Responsable <input type="text" data-field="owner_label" value="${escapeHtml(action.metadata?.owner_label || "")}" placeholder="equipo de admisiones" /></label>
+      <label class="quote-grid-full">Descripcion <textarea rows="3" data-field="description">${escapeHtml(action.description || "")}</textarea></label>
+      <label class="quote-grid-full">Instrucciones internas <textarea rows="3" data-field="instructions">${escapeHtml(action.metadata?.instructions || "")}</textarea></label>
+    </div>
+  `;
+  item.querySelector(".config-builder-remove")?.addEventListener("click", () => {
+    item.remove();
+    syncActionsJsonFromBuilder();
+  });
+  item.addEventListener("input", syncActionsJsonFromBuilder);
+  item.addEventListener("change", syncActionsJsonFromBuilder);
+  return item;
+}
+
+function collectActionsBuilder() {
+  const items = [...(el.configActionsBuilder?.querySelectorAll(".config-builder-item") || [])];
+  const actions = {};
+  for (const item of items) {
+    const getValue = (field) =>
+      String(item.querySelector(`[data-field="${field}"]`)?.value || "").trim();
+    const key = getValue("key")
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (!key) continue;
+    actions[key] = {
+      type: getValue("type") || "internal_task",
+      label: getValue("label") || key,
+      description: getValue("description"),
+      required_fields: getValue("required_fields")
+        .split(",")
+        .map((field) => field.trim())
+        .filter(Boolean),
+      channel: getValue("channel") || "preferred",
+      template_key: getValue("template_key"),
+      enabled: Boolean(item.querySelector('[data-field="enabled"]')?.checked),
+      metadata: {
+        owner_label: getValue("owner_label"),
+        instructions: getValue("instructions"),
+      },
+    };
+  }
+  return actions;
+}
+
+function renderActionsBuilder(actions = {}) {
+  if (!el.configActionsBuilder) return;
+  el.configActionsBuilder.innerHTML = "";
+  Object.entries(actions || {}).forEach(([key, action]) => {
+    el.configActionsBuilder.appendChild(createActionItem(key, action));
+  });
+}
+
+function syncActionsJsonFromBuilder() {
+  if (!el.configActionsCatalog) return;
+  el.configActionsCatalog.value = stringifyJsonField(collectActionsBuilder(), "{}");
+}
+
+function buildSimulationLeadTemplate(config = {}) {
+  const customFields = {};
+  (config?.qualification_schema || []).forEach((field) => {
+    const key = String(field?.key || "").trim();
+    if (key) customFields[key] = "";
+  });
+  return {
+    name: "",
+    email: "",
+    phone: "",
+    preferred_contact_channel: "",
+    custom_fields: customFields,
+  };
+}
+
+function buildDefaultScenarioTests(config = {}) {
+  const qualificationFields = Array.isArray(config?.qualification_schema)
+    ? config.qualification_schema
+    : [];
+  const customFields = {};
+  qualificationFields.forEach((field) => {
+    if (field?.key) {
+      customFields[field.key] =
+        Array.isArray(field.options) && field.options.length ? field.options[0] : "test";
+    }
+  });
+  const primaryAction = Object.keys(config?.actions_catalog || {})[0] || "prepare_next_step";
+  const personalizationKey = Array.isArray(config?.personalization_rules) && config.personalization_rules[0]?.key
+    ? config.personalization_rules[0].key
+    : "";
+  const personalizationFields = { ...customFields };
+  const firstPersonalizationRule = Array.isArray(config?.personalization_rules)
+    ? config.personalization_rules[0]
+    : null;
+  if (firstPersonalizationRule?.field?.startsWith("custom.")) {
+    const key = firstPersonalizationRule.field.slice("custom.".length);
+    personalizationFields[key] =
+      Array.isArray(firstPersonalizationRule.values) && firstPersonalizationRule.values.length
+        ? firstPersonalizationRule.values[0]
+        : "test";
+  }
+
+  return [
+    {
+      id: "missing_qualification",
+      label: "Lead pide información y faltan datos",
+      text: "Quiero información para saber si encaja conmigo",
+      channel: "web",
+      phase: "capture",
+      lead: { custom_fields: {} },
+      expected: {
+        next_best_action: qualificationFields.length ? "ask_qualification_field" : "answer_question",
+        stage: qualificationFields.length ? "qualify" : "discover",
+      },
+    },
+    {
+      id: "ready_to_convert",
+      label: "Lead cualificado listo para avanzar",
+      text: "Quiero reservar el siguiente paso",
+      channel: "whatsapp",
+      phase: "close",
+      lead: {
+        name: "Cliente prueba",
+        phone: "600111222",
+        preferred_contact_channel: "whatsapp",
+        custom_fields: customFields,
+      },
+      expected: {
+        next_best_action: primaryAction,
+        lead_temperature: "hot",
+        stage: "convert",
+      },
+    },
+    {
+      id: "personalized_pitch",
+      label: "Lead activa regla de personalización",
+      text: "Quiero una recomendación adaptada a mi caso",
+      channel: "web",
+      phase: "qualification",
+      lead: {
+        name: "Cliente prueba",
+        email: "cliente@example.com",
+        custom_fields: personalizationFields,
+      },
+      expected: personalizationKey ? { personalization_key: personalizationKey } : {},
+    },
+  ];
+}
+
+function createScenarioItem(scenario = {}) {
+  const item = document.createElement("article");
+  item.className = "config-builder-item";
+  const expected = scenario.expected || {};
+  item.innerHTML = `
+    <div class="config-builder-item-head">
+      <strong>${escapeHtml(scenario.label || scenario.id || "Escenario de prueba")}</strong>
+      <button type="button" class="service-remove-btn config-builder-remove">Quitar</button>
+    </div>
+    <div class="config-builder-grid">
+      <label>ID <input type="text" data-field="id" value="${escapeHtml(scenario.id || "")}" placeholder="lead_caliente" /></label>
+      <label>Etiqueta <input type="text" data-field="label" value="${escapeHtml(scenario.label || "")}" placeholder="Lead listo para cierre" /></label>
+      <label>Canal
+        <select data-field="channel">
+          ${["web", "whatsapp", "funnel"].map(
+            (option) => `<option value="${option}"${(scenario.channel || "web") === option ? " selected" : ""}>${option}</option>`
+          ).join("")}
+        </select>
+      </label>
+      <label>Fase
+        <select data-field="phase">
+          ${["capture", "qualification", "close"].map(
+            (option) => `<option value="${option}"${(scenario.phase || "capture") === option ? " selected" : ""}>${option}</option>`
+          ).join("")}
+        </select>
+      </label>
+      <label class="quote-grid-full">Mensaje <textarea rows="3" data-field="text">${escapeHtml(scenario.text || "")}</textarea></label>
+      <label class="quote-grid-full">Lead JSON <textarea rows="7" data-field="lead">${escapeHtml(stringifyJsonField(scenario.lead || {}, "{}"))}</textarea></label>
+      <label>Acción esperada <input type="text" data-field="expected_next_best_action" value="${escapeHtml(expected.next_best_action || "")}" placeholder="ask_qualification_field" /></label>
+      <label>Temperatura esperada <input type="text" data-field="expected_lead_temperature" value="${escapeHtml(expected.lead_temperature || "")}" placeholder="hot, warm, cold" /></label>
+      <label>Etapa esperada <input type="text" data-field="expected_stage" value="${escapeHtml(expected.stage || "")}" placeholder="qualify, convert" /></label>
+      <label>Personalización esperada <input type="text" data-field="expected_personalization_key" value="${escapeHtml(expected.personalization_key || "")}" placeholder="academy_company_student" /></label>
+    </div>
+  `;
+  item.querySelector(".config-builder-remove")?.addEventListener("click", () => {
+    item.remove();
+    syncScenarioJsonFromBuilder();
+  });
+  item.addEventListener("input", syncScenarioJsonFromBuilder);
+  item.addEventListener("change", syncScenarioJsonFromBuilder);
+  return item;
+}
+
+function collectScenarioBuilder() {
+  const items = [...(el.configScenarioBuilder?.querySelectorAll(".config-builder-item") || [])];
+  return items
+    .map((item, index) => {
+      const getValue = (field) =>
+        String(item.querySelector(`[data-field="${field}"]`)?.value || "").trim();
+      const lead = parseJsonField(getValue("lead"), {});
+      const expected = {
+        next_best_action: getValue("expected_next_best_action"),
+        lead_temperature: getValue("expected_lead_temperature"),
+        stage: getValue("expected_stage"),
+        personalization_key: getValue("expected_personalization_key"),
+      };
+      Object.keys(expected).forEach((key) => {
+        if (!expected[key]) delete expected[key];
+      });
+      return {
+        id: getValue("id") || `scenario_${index + 1}`,
+        label: getValue("label") || `Escenario ${index + 1}`,
+        text: getValue("text"),
+        channel: getValue("channel") || "web",
+        phase: getValue("phase") || "capture",
+        lead,
+        expected,
+      };
+    })
+    .filter((scenario) => scenario.text || Object.keys(scenario.lead || {}).length);
+}
+
+function renderScenarioBuilder(scenarios = []) {
+  if (!el.configScenarioBuilder) return;
+  el.configScenarioBuilder.innerHTML = "";
+  const items = Array.isArray(scenarios) ? scenarios : [];
+  items.forEach((scenario) => el.configScenarioBuilder.appendChild(createScenarioItem(scenario)));
+}
+
+function syncScenarioJsonFromBuilder() {
+  if (!el.configScenarioTests) return;
+  state.lastScenarioRunSummary = null;
+  el.configScenarioTests.value = stringifyJsonField(collectScenarioBuilder(), "[]");
+}
+
+function ensureSimulationDefaults(config = {}) {
+  if (el.configSimulationMessage && !el.configSimulationMessage.value.trim()) {
+    el.configSimulationMessage.value =
+      "Quiero información y me gustaría saber cuál sería el siguiente paso.";
+  }
+  if (el.configSimulationChannel && !el.configSimulationChannel.value) {
+    el.configSimulationChannel.value = "web";
+  }
+  if (el.configSimulationPhase && !el.configSimulationPhase.value) {
+    el.configSimulationPhase.value = "capture";
+  }
+  if (el.configSimulationLead && !el.configSimulationLead.value.trim()) {
+    el.configSimulationLead.value = stringifyJsonField(buildSimulationLeadTemplate(config), "{}");
+  }
+  if (el.configScenarioTests && !el.configScenarioTests.value.trim()) {
+    const scenarios = buildDefaultScenarioTests(config);
+    el.configScenarioTests.value = stringifyJsonField(scenarios, "[]");
+    renderScenarioBuilder(scenarios);
+  }
+}
+
+function renderSimulationResult(payload = {}) {
+  if (!el.configSimulationResult) return;
+  const nba = payload?.next_best_action || {};
+  if (!nba || !Object.keys(nba).length) {
+    el.configSimulationResult.innerHTML = "";
+    return;
+  }
+  const missingFields = Array.isArray(nba.missing_fields) ? nba.missing_fields : [];
+  const missingFieldLabels = missingFields.map((field) => field?.label || field?.key || field);
+  const missingActionFields = Array.isArray(nba.missing_action_fields)
+    ? nba.missing_action_fields
+    : [];
+  const scoringSignals = nba.scoring?.signals || {};
+  const personalization = nba.personalization?.active || null;
+  el.configSimulationResult.innerHTML = `
+    <div class="config-simulation-grid">
+      <div><span>Acción</span><strong>${escapeHtml(nba.action_label || nba.next_best_action || "Sin acción")}</strong></div>
+      <div><span>Intención</span><strong>${escapeHtml(nba.intent || "unknown")}</strong></div>
+      <div><span>Temperatura</span><strong>${escapeHtml(nba.lead_temperature || "cold")}</strong></div>
+      <div><span>Etapa</span><strong>${escapeHtml(nba.stage || "capture")}</strong></div>
+    </div>
+    <div class="config-simulation-flags">
+      <span class="${nba.action_ready ? "is-ready" : ""}">${nba.action_ready ? "Acción lista" : "Faltan datos"}</span>
+      <span>${escapeHtml(nba.channel || "canal no definido")}</span>
+      <span>${escapeHtml(nba.primary_conversion_goal || nba.conversion_goal || "objetivo no definido")}</span>
+    </div>
+    <p>${escapeHtml(nba.reason || "Sin explicación del motor.")}</p>
+    <dl>
+      <dt>Motivo scoring</dt>
+      <dd>${escapeHtml(nba.scoring?.reason || "Sin motivo disponible")}</dd>
+      <dt>Señales usadas</dt>
+      <dd>${escapeHtml(
+        `intención=${scoringSignals.intent || nba.intent || "unknown"}, contacto=${scoringSignals.has_contact ? "si" : "no"}, faltantes=${scoringSignals.missing_required_fields ?? missingFields.length}`
+      )}</dd>
+      <dt>Personalización activa</dt>
+      <dd>${escapeHtml(
+        personalization
+          ? `${personalization.label}: ${personalization.pitch_angle || "sin angulo definido"}`
+          : "Ninguna regla ha encajado"
+      )}</dd>
+      <dt>Campos de cualificación faltantes</dt>
+      <dd>${escapeHtml(missingFieldLabels.length ? missingFieldLabels.join(", ") : "Ninguno")}</dd>
+      <dt>Campos necesarios para ejecutar acción</dt>
+      <dd>${escapeHtml(missingActionFields.length ? missingActionFields.join(", ") : "Ninguno")}</dd>
+    </dl>
+    <pre>${escapeHtml(payload?.prompt_block || "")}</pre>
+  `;
+}
+
+async function runSalesSystemSimulation() {
+  if (!el.configSimulationResult) return;
+  const lead = parseJsonField(el.configSimulationLead?.value, null);
+  if (!lead || typeof lead !== "object" || Array.isArray(lead)) {
+    el.configSimulationResult.innerHTML =
+      '<div class="config-simulation-error">El lead de prueba debe ser un objeto JSON válido.</div>';
+    return;
+  }
+  el.configSimulationResult.innerHTML = '<div class="config-simulation-loading">Simulando decisión...</div>';
+  try {
+    const data = await fetchJson("/api/crm/config/simulate-next-best-action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        config: buildConfigPayload(),
+        lead,
+        text: el.configSimulationMessage?.value || "",
+        channel: el.configSimulationChannel?.value || "web",
+        phase: el.configSimulationPhase?.value || "capture",
+      }),
+    });
+    renderSimulationResult(data);
+  } catch (error) {
+    el.configSimulationResult.innerHTML = `<div class="config-simulation-error">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderScenarioResults(payload = {}) {
+  if (!el.configScenarioResults) return;
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  const summary = payload?.summary || {};
+  state.lastScenarioRunSummary = {
+    total: Number(summary.total || results.length || 0),
+    passed: Number(summary.passed || 0),
+    failed: Number(summary.failed || 0),
+  };
+  renderSetupHealth(buildConfigPayload());
+  if (!results.length) {
+    el.configScenarioResults.innerHTML = '<div class="config-simulation-loading">No hay escenarios para ejecutar.</div>';
+    return;
+  }
+
+  el.configScenarioResults.innerHTML = `
+    <div class="config-scenario-summary">
+      <strong>${escapeHtml(String(summary.passed ?? 0))}/${escapeHtml(String(summary.total ?? results.length))} escenarios OK</strong>
+      <span>${escapeHtml(String(summary.failed ?? 0))} con revisión</span>
+    </div>
+    <div class="config-scenario-list">
+      ${results
+        .map((result) => {
+          const nba = result.next_best_action || {};
+          const checks = Array.isArray(result.checks) ? result.checks : [];
+          return `
+            <article class="config-scenario-item ${result.passed ? "is-passed" : "is-failed"}">
+              <div>
+                <span>${result.passed ? "OK" : "Revisar"}</span>
+                <strong>${escapeHtml(result.label || result.id)}</strong>
+                <p>${escapeHtml(nba.reason || "")}</p>
+              </div>
+              <dl>
+                <dt>Acción</dt><dd>${escapeHtml(nba.action_label || nba.next_best_action || "")}</dd>
+                <dt>Temperatura</dt><dd>${escapeHtml(nba.lead_temperature || "")}</dd>
+                <dt>Etapa</dt><dd>${escapeHtml(nba.stage || "")}</dd>
+                <dt>Personalización</dt><dd>${escapeHtml(nba.personalization?.active?.label || "Ninguna")}</dd>
+              </dl>
+              ${
+                checks.length
+                  ? `<ul>${checks
+                      .map(
+                        (check) =>
+                          `<li class="${check.passed ? "is-passed" : "is-failed"}">${escapeHtml(check.key)}: esperado ${escapeHtml(check.expected)}, real ${escapeHtml(check.actual)}</li>`
+                      )
+                      .join("")}</ul>`
+                  : '<ul><li class="is-passed">Sin expectativas configuradas</li></ul>'
+              }
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+async function runSalesSystemScenarios() {
+  if (!el.configScenarioResults) return;
+  const scenariosFromBuilder = collectScenarioBuilder();
+  const scenarios = scenariosFromBuilder.length
+    ? scenariosFromBuilder
+    : parseJsonField(el.configScenarioTests?.value, null);
+  if (!Array.isArray(scenarios)) {
+    el.configScenarioResults.innerHTML =
+      '<div class="config-simulation-error">Los escenarios deben ser un array JSON válido.</div>';
+    return;
+  }
+  el.configScenarioResults.innerHTML = '<div class="config-simulation-loading">Ejecutando escenarios...</div>';
+  try {
+    const data = await fetchJson("/api/crm/config/run-test-scenarios", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        config: buildConfigPayload(),
+        scenarios,
+      }),
+    });
+    renderScenarioResults(data);
+  } catch (error) {
+    el.configScenarioResults.innerHTML = `<div class="config-simulation-error">${escapeHtml(error.message)}</div>`;
+  }
+}
+
 function buildConfigPayload() {
   const services = collectServiceConfig();
+  const qualificationFromBuilder = collectQualificationBuilder();
+  const qualification_schema = qualificationFromBuilder.length
+    ? qualificationFromBuilder
+    : Array.isArray(parseJsonField(el.configQualificationSchema?.value, []))
+      ? parseJsonField(el.configQualificationSchema?.value, [])
+      : [];
+  const actionsFromBuilder = collectActionsBuilder();
+  const actions_catalog = Object.keys(actionsFromBuilder).length
+    ? actionsFromBuilder
+    : parseJsonField(el.configActionsCatalog?.value, {});
+  const personalizationFromBuilder = collectPersonalizationBuilder();
+  const personalization_rules = personalizationFromBuilder.length
+    ? personalizationFromBuilder
+    : Array.isArray(parseJsonField(el.configPersonalizationRules?.value, []))
+      ? parseJsonField(el.configPersonalizationRules?.value, [])
+      : [];
   const knowledge_sources = collectKnowledgeSources();
   const message_templates = collectMessageTemplates();
   const deliverables = {
@@ -3622,6 +4704,7 @@ function buildConfigPayload() {
       human_agent_whatsapp_number: el.configHumanWhatsappNumber.value,
       support_email: el.configSupportEmail.value,
     },
+    business_profile: collectBusinessProfile(),
         agent: {
           tone: el.configAgentTone.value,
           initial_message: el.configInitialMessage.value,
@@ -3634,6 +4717,10 @@ function buildConfigPayload() {
         allowed_domains: widgetAllowedDomains,
       },
       lead_capture,
+      qualification_schema,
+      personalization_rules,
+      sales_scoring: collectSalesScoring(),
+      actions_catalog,
       notifications,
       knowledge_sources,
       integrations: {
@@ -3682,11 +4769,65 @@ function buildConfigPayload() {
         validation: state.appConfig?.integrations?.automations?.validation || {},
       },
     },
-    message_templates,
-    deliverables,
-    automation_flows,
+      message_templates,
+      deliverables,
+      automation_flows,
+      deployment: {
+        status: "draft",
+        published_at: "",
+        readiness_snapshot: null,
+      },
+    offers: services,
     services,
   };
+}
+
+async function publishAgentConfig() {
+  if (!el.configPublishAgentBtn) return;
+
+  const payload = buildConfigPayload();
+  const readiness = buildReadinessPayload(payload);
+  renderSetupHealth(payload);
+
+  if (readiness.blockers.length) {
+    setStatus(
+      el.configPublishAgentStatus,
+      `Faltan ${readiness.blockers.length} bloqueos antes de publicar.`,
+      "error"
+    );
+    return;
+  }
+
+  el.configPublishAgentBtn.disabled = true;
+  el.configPublishAgentBtn.classList.add("is-busy");
+  setStatus(el.configPublishAgentStatus, "Publicando agente...");
+
+  try {
+    const data = await fetchJson(`${API_BASE}/config/publish-agent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: payload, readiness }),
+    });
+
+    state.appConfig = data.config || null;
+    state.configTouchedAfterPublish = false;
+    renderConfig();
+    renderAccounts();
+    const publishedAt = data.deployment?.published_at
+      ? formatDateTime(data.deployment.published_at)
+      : "";
+    setStatus(
+      el.configPublishAgentStatus,
+      publishedAt ? `Agente publicado. ${publishedAt}` : "Agente publicado.",
+      "ok"
+    );
+  } catch (error) {
+    setStatus(el.configPublishAgentStatus, `No se pudo publicar: ${error.message}`, "error");
+    renderSetupHealth(payload);
+  } finally {
+    el.configPublishAgentBtn.classList.remove("is-busy");
+    renderSetupHealth(state.appConfig || payload);
+  }
 }
 
 async function importKnowledgeSpreadsheetFile(file) {
@@ -3755,11 +4896,19 @@ function suggestServicesFromSpreadsheet() {
 
 function getTemplateOptionsMarkup(selected = "") {
   const templates = state.appConfig?.message_templates || {};
-  return MESSAGE_TEMPLATE_ORDER.map((key) => {
+  const keys = getOrderedTemplateKeys(templates);
+  return keys.map((key) => {
     const template = templates[key] || {};
     const label = template.label || key;
     return `<option value="${escapeHtml(key)}"${selected === key ? " selected" : ""}>${escapeHtml(label)}</option>`;
   }).join("");
+}
+
+function getOrderedTemplateKeys(templates = {}) {
+  return [
+    ...MESSAGE_TEMPLATE_ORDER,
+    ...Object.keys(templates || {}).filter((key) => !MESSAGE_TEMPLATE_ORDER.includes(key)).sort(),
+  ];
 }
 
 function createMessageTemplateCard(key, template = {}) {
@@ -3818,7 +4967,7 @@ function renderMessageTemplates(templates = {}) {
   if (!el.configMessageTemplatesList) return;
   el.configMessageTemplatesList.innerHTML = "";
 
-  for (const key of MESSAGE_TEMPLATE_ORDER) {
+  for (const key of getOrderedTemplateKeys(templates)) {
     el.configMessageTemplatesList.appendChild(
       createMessageTemplateCard(key, templates?.[key] || {})
     );
@@ -4427,6 +5576,65 @@ function renderConfig() {
   el.configHandoffTargetChannel.value =
     config?.agent?.handoff_target_channel || "whatsapp";
   el.configPromptAdditions.value = config?.agent?.prompt_additions || "";
+  const businessProfile = config?.business_profile || {};
+  if (el.configBusinessIndustry) el.configBusinessIndustry.value = businessProfile.industry || "";
+  if (el.configBusinessModel) el.configBusinessModel.value = businessProfile.business_model || "";
+  if (el.configBusinessAudience) el.configBusinessAudience.value = businessProfile.audience || "";
+  if (el.configPrimaryConversionGoal) {
+    el.configPrimaryConversionGoal.value = businessProfile.primary_conversion_goal || "";
+  }
+  if (el.configSecondaryGoals) {
+    el.configSecondaryGoals.value = Array.isArray(businessProfile.secondary_goals)
+      ? businessProfile.secondary_goals.join(", ")
+      : "";
+  }
+  if (el.configSalesCycle) el.configSalesCycle.value = businessProfile.sales_cycle || "";
+  if (el.configHumanTeamLabel) {
+    el.configHumanTeamLabel.value = businessProfile.human_team_label || "";
+  }
+  if (el.configValueProposition) {
+    el.configValueProposition.value = businessProfile.value_proposition || "";
+  }
+  const scoring = config?.sales_scoring || {};
+  if (el.configScoringHotIntents) {
+    el.configScoringHotIntents.value = Array.isArray(scoring.hot_intents)
+      ? scoring.hot_intents.join(", ")
+      : "booking, human_request";
+  }
+  if (el.configScoringWarmIntents) {
+    el.configScoringWarmIntents.value = Array.isArray(scoring.warm_intents)
+      ? scoring.warm_intents.join(", ")
+      : "pricing, contact";
+  }
+  if (el.configScoringHotMissing) {
+    el.configScoringHotMissing.value = scoring.hot_max_missing_required_fields ?? 0;
+  }
+  if (el.configScoringPricingHotMissing) {
+    el.configScoringPricingHotMissing.value = scoring.pricing_hot_max_missing_required_fields ?? 1;
+  }
+  if (el.configScoringWarmContactMissing) {
+    el.configScoringWarmContactMissing.value =
+      scoring.warm_max_missing_required_fields_with_contact ?? 1;
+  }
+  if (el.configScoringContactMakesWarm) {
+    el.configScoringContactMakesWarm.checked = scoring.contact_makes_warm !== false;
+  }
+  if (el.configPersonalizationRules) {
+    el.configPersonalizationRules.value = stringifyJsonField(
+      config?.personalization_rules || [],
+      "[]"
+    );
+  }
+  renderPersonalizationBuilder(config?.personalization_rules || []);
+  if (el.configQualificationSchema) {
+    el.configQualificationSchema.value = stringifyJsonField(config?.qualification_schema || [], "[]");
+  }
+  renderQualificationBuilder(config?.qualification_schema || []);
+  if (el.configActionsCatalog) {
+    el.configActionsCatalog.value = stringifyJsonField(config?.actions_catalog || {}, "{}");
+  }
+  renderActionsBuilder(config?.actions_catalog || {});
+  ensureSimulationDefaults(config);
   const leadCaptureFields = config?.lead_capture?.fields || {};
   if (el.configLeadCaptureName) el.configLeadCaptureName.checked = leadCaptureFields.name !== false;
   if (el.configLeadCaptureCompanyName) el.configLeadCaptureCompanyName.checked = Boolean(leadCaptureFields.company_name);
@@ -4447,8 +5655,10 @@ function renderConfig() {
   }
   renderKnowledgeSources(config?.knowledge_sources || {});
   normalizeKnowledgeCopy();
+  renderIndustryPresetOptions();
   renderSectorPresets();
   renderSetupHealth(config);
+  renderDeploymentStatus(config);
   updateProductModeUi(config);
   const widgetInstall = buildWidgetInstallData(config);
   if (el.configWidgetInstallUrl) {
@@ -4658,7 +5868,7 @@ function renderConfig() {
       analysisDeliverables.human_button_label || "Hablar con una persona";
   }
   renderAutomationFlows(config?.automation_flows || {});
-  renderServiceEditor(config?.services || {});
+  renderServiceEditor(config?.offers || config?.services || {});
   if (!canAccessSalesWorkspace()) {
     setMainView("config");
   }
@@ -4670,18 +5880,21 @@ function renderConfig() {
 
 function setConfigTab(tabName) {
   const isGeneral = tabName === "general";
+  const isSalesSystem = tabName === "sales_system";
   const isKnowledge = tabName === "knowledge";
   const isMessages = tabName === "messages";
   const isAutomations = tabName === "automations";
   const isIntegrations = tabName === "integrations";
   const isWebsite = tabName === "website";
   el.configTabGeneral.classList.toggle("is-active", isGeneral);
+  el.configTabSalesSystem?.classList.toggle("is-active", isSalesSystem);
   el.configTabKnowledge?.classList.toggle("is-active", isKnowledge);
   el.configTabMessages.classList.toggle("is-active", isMessages);
   el.configTabAutomations.classList.toggle("is-active", isAutomations);
   el.configTabIntegrations.classList.toggle("is-active", isIntegrations);
   el.configTabWebsite.classList.toggle("is-active", isWebsite);
   el.configPanelGeneral.classList.toggle("is-active", isGeneral);
+  el.configPanelSalesSystem?.classList.toggle("is-active", isSalesSystem);
   el.configPanelKnowledge?.classList.toggle("is-active", isKnowledge);
   el.configPanelMessages.classList.toggle("is-active", isMessages);
   el.configPanelAutomations.classList.toggle("is-active", isAutomations);
@@ -5564,6 +6777,7 @@ async function loadLeads() {
 async function loadConfig() {
   const data = await fetchJson(`${API_BASE}/config`);
   state.appConfig = data.config || null;
+  state.configTouchedAfterPublish = false;
   if (data.account?.id) {
     state.activeAccountId = data.account.id;
   }
@@ -5632,6 +6846,7 @@ async function saveConfig() {
     });
 
     state.appConfig = data.config || null;
+    state.configTouchedAfterPublish = false;
     renderConfig();
     highlightSuggestedKnowledgeFlow();
     highlightSuggestedKnowledgeFlow();
@@ -6848,6 +8063,7 @@ el.configAutomationWorkspaceUrl?.addEventListener("input", () => {
   renderAutomationsGuide(buildConfigPayload());
 });
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
+el.configTabSalesSystem?.addEventListener("click", () => setConfigTab("sales_system"));
 el.configTabKnowledge?.addEventListener("click", () => setConfigTab("knowledge"));
 el.configTabMessages?.addEventListener("click", () => setConfigTab("messages"));
 el.configTabAutomations?.addEventListener("click", () => setConfigTab("automations"));
@@ -6868,8 +8084,105 @@ el.configProductMode?.addEventListener("change", () => {
       : "Esta cuenta vera captacion, pipeline, presupuestos, analitica y configuracion.";
   renderSetupHealth(buildConfigPayload());
 });
-el.configForm?.addEventListener("input", () => renderSetupHealth(buildConfigPayload()));
-el.configForm?.addEventListener("change", () => renderSetupHealth(buildConfigPayload()));
+el.configApplyIndustryPresetBtn?.addEventListener("click", applyIndustryPreset);
+el.configAddQualificationFieldBtn?.addEventListener("click", () => {
+  el.configQualificationBuilder?.appendChild(
+    createQualificationFieldItem({
+      key: "",
+      label: "",
+      type: "text",
+      required: true,
+      use_for_personalization: true,
+    })
+  );
+  syncQualificationJsonFromBuilder();
+});
+el.configAddActionBtn?.addEventListener("click", () => {
+  el.configActionsBuilder?.appendChild(
+    createActionItem("", {
+      type: "internal_task",
+      channel: "preferred",
+      enabled: true,
+      required_fields: ["name", "phone_or_email"],
+    })
+  );
+  syncActionsJsonFromBuilder();
+});
+el.configAddPersonalizationRuleBtn?.addEventListener("click", () => {
+  el.configPersonalizationBuilder?.appendChild(
+    createPersonalizationRuleItem({
+      key: "",
+      label: "",
+      field: "custom.",
+      operator: "contains",
+      values: [],
+      pitch_angle: "",
+      value_points: [],
+      objections: [],
+      cta: "",
+      priority: 50,
+      enabled: true,
+    })
+  );
+  syncPersonalizationJsonFromBuilder();
+});
+el.configPersonalizationRules?.addEventListener("change", () => {
+  const parsed = parseJsonField(el.configPersonalizationRules.value, []);
+  if (Array.isArray(parsed)) renderPersonalizationBuilder(parsed);
+});
+el.configQualificationSchema?.addEventListener("change", () => {
+  const parsed = parseJsonField(el.configQualificationSchema.value, []);
+  if (Array.isArray(parsed)) renderQualificationBuilder(parsed);
+});
+el.configActionsCatalog?.addEventListener("change", () => {
+  const parsed = parseJsonField(el.configActionsCatalog.value, {});
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    renderActionsBuilder(parsed);
+  }
+});
+el.configRunSimulationBtn?.addEventListener("click", runSalesSystemSimulation);
+el.configAddScenarioBtn?.addEventListener("click", () => {
+  el.configScenarioBuilder?.appendChild(
+    createScenarioItem({
+      id: "",
+      label: "",
+      text: "",
+      channel: "web",
+      phase: "capture",
+      lead: { custom_fields: {} },
+      expected: {},
+    })
+  );
+  syncScenarioJsonFromBuilder();
+});
+el.configScenarioTests?.addEventListener("change", () => {
+  const parsed = parseJsonField(el.configScenarioTests.value, []);
+  if (Array.isArray(parsed)) renderScenarioBuilder(parsed);
+});
+el.configRunScenariosBtn?.addEventListener("click", runSalesSystemScenarios);
+el.configPublishAgentBtn?.addEventListener("click", publishAgentConfig);
+el.configForm?.addEventListener("input", () => {
+  state.lastScenarioRunSummary = null;
+  state.configTouchedAfterPublish =
+    String(state.appConfig?.deployment?.status || "").toLowerCase() === "published";
+  const payload = buildConfigPayload();
+  renderSetupHealth(payload);
+  renderDeploymentStatus({
+    ...payload,
+    deployment: state.appConfig?.deployment || payload.deployment || {},
+  });
+});
+el.configForm?.addEventListener("change", () => {
+  state.lastScenarioRunSummary = null;
+  state.configTouchedAfterPublish =
+    String(state.appConfig?.deployment?.status || "").toLowerCase() === "published";
+  const payload = buildConfigPayload();
+  renderSetupHealth(payload);
+  renderDeploymentStatus({
+    ...payload,
+    deployment: state.appConfig?.deployment || payload.deployment || {},
+  });
+});
 el.configWidgetEmbedMode?.addEventListener("change", refreshWidgetInstallPreview);
 el.configWidgetAllowedDomains?.addEventListener("input", refreshWidgetInstallPreview);
 el.configWebsiteUrl?.addEventListener("input", refreshWidgetInstallPreview);
@@ -7025,7 +8338,7 @@ window.addEventListener("resize", syncMobileAdaptiveUi);
 
 async function bootstrapCrm() {
   await loadAccounts();
-  await Promise.all([loadLeads(), loadConfig(), loadAdminOverview()]);
+  await Promise.all([loadLeads(), loadConfig(), loadAdminOverview(), loadIndustryPresets()]);
   consumeEmailOauthRedirectStatus();
 }
 

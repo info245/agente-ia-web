@@ -9,6 +9,17 @@ export const DEFAULT_APP_CONFIG = {
     primary_color: "#6d41f3",
     accent_color: "#8d58ff",
   },
+  business_profile: {
+    industry: "marketing_agency",
+    business_model: "professional_services",
+    audience: "empresas que quieren mejorar captacion, ventas o presencia digital",
+    primary_conversion_goal: "create_qualified_opportunity",
+    secondary_goals: ["send_analysis", "send_quote", "handoff_human"],
+    sales_cycle: "consultative",
+    human_team_label: "equipo comercial",
+    value_proposition:
+      "Ayudar a diagnosticar necesidades comerciales y orientar el siguiente paso con claridad.",
+  },
   contact: {
     public_whatsapp_number: "",
     human_agent_whatsapp_number: "34614149270",
@@ -39,6 +50,42 @@ export const DEFAULT_APP_CONFIG = {
     },
     custom_fields: [],
   },
+  qualification_schema: [],
+  personalization_rules: [],
+  sales_scoring: {
+    hot_intents: ["booking", "human_request"],
+    warm_intents: ["pricing", "contact"],
+    hot_max_missing_required_fields: 0,
+    pricing_hot_max_missing_required_fields: 1,
+    warm_max_missing_required_fields_with_contact: 1,
+    contact_makes_warm: true,
+  },
+  actions_catalog: {
+    prepare_next_step: {
+      type: "internal_task",
+      label: "Preparar siguiente paso",
+      description: "Crear una oportunidad cualificada y dejar preparado el seguimiento.",
+      required_fields: ["name"],
+      channel: "crm",
+      enabled: true,
+    },
+    handoff_human: {
+      type: "human_handoff",
+      label: "Hablar con una persona",
+      description: "Derivar la conversacion al equipo humano configurado.",
+      required_fields: ["name", "phone_or_email"],
+      channel: "preferred",
+      enabled: true,
+    },
+    prepare_quote: {
+      type: "quote",
+      label: "Preparar propuesta",
+      description: "Preparar una propuesta o presupuesto comercial.",
+      required_fields: ["name", "phone_or_email"],
+      channel: "preferred",
+      enabled: true,
+    },
+  },
   notifications: {
     email_to: "",
     notify_new_lead: true,
@@ -47,6 +94,11 @@ export const DEFAULT_APP_CONFIG = {
   widget: {
     install_mode: "slug",
     allowed_domains: [],
+  },
+  deployment: {
+    status: "draft",
+    published_at: "",
+    readiness_snapshot: null,
   },
   integrations: {
     whatsapp: {
@@ -240,6 +292,58 @@ export const DEFAULT_APP_CONFIG = {
     spreadsheet_mapping: "",
     internal_notes: "",
   },
+  offers: {
+    "Google Ads": {
+      category: "marketing",
+      min_monthly_fee: "250 â‚¬ + IVA",
+      url: "https://t-mediaglobal.com/agencia-google-ads/",
+      description:
+        "GestiÃ³n profesional de campaÃ±as en Google Ads enfocadas a captaciÃ³n de leads, ventas y crecimiento digital. Incluye estrategia, optimizaciÃ³n continua, seguimiento de conversiones y anÃ¡lisis de resultados.",
+      notes:
+        "La cuota mÃ­nima de gestiÃ³n mensual para Google Ads es de 250 â‚¬ + IVA. La inversiÃ³n publicitaria en Google es independiente de esta cuota.",
+      conversion_goal: "request_quote",
+    },
+    SEO: {
+      category: "marketing",
+      min_monthly_fee: "200 â‚¬ + IVA",
+      url: "https://t-mediaglobal.com/agencia-seo/",
+      description:
+        "Servicios de posicionamiento SEO orientados a mejorar la visibilidad orgÃ¡nica en Google mediante optimizaciÃ³n tÃ©cnica, estrategia de contenidos y autoridad digital.",
+      notes:
+        "Las estrategias SEO se adaptan al sector, competencia y objetivos del cliente. El presupuesto puede variar segÃºn el alcance del proyecto.",
+      conversion_goal: "request_quote",
+    },
+    "Redes Sociales": {
+      category: "marketing",
+      min_monthly_fee: "250 â‚¬ + IVA",
+      url: "https://t-mediaglobal.com/publicidad-en-redes-sociales/",
+      description:
+        "GestiÃ³n y optimizaciÃ³n de campaÃ±as publicitarias en redes sociales como Facebook, Instagram o LinkedIn para generar leads y ventas.",
+      notes:
+        "El coste mÃ­nimo de gestiÃ³n de campaÃ±as en redes sociales parte desde 250 â‚¬ + IVA al mes. La inversiÃ³n publicitaria se establece segÃºn los objetivos del cliente.",
+      conversion_goal: "request_quote",
+    },
+    "DiseÃ±o Web": {
+      category: "web",
+      min_project_fee: "700 â‚¬ + IVA",
+      url: "https://t-mediaglobal.com/diseno-web/",
+      description:
+        "DiseÃ±o y desarrollo de pÃ¡ginas web corporativas optimizadas para SEO, conversiÃ³n y experiencia de usuario.",
+      notes:
+        "El presupuesto mÃ­nimo para un proyecto de diseÃ±o web corporativo es de 700 â‚¬ + IVA. El precio puede aumentar dependiendo de funcionalidades, nÃºmero de pÃ¡ginas o integraciÃ³n de sistemas.",
+      conversion_goal: "request_quote",
+    },
+    "ConsultorÃ­a Digital": {
+      category: "consulting",
+      min_project_fee: "500 â‚¬ + IVA",
+      url: "https://t-mediaglobal.com/consultora-de-marketing-digital/",
+      description:
+        "Servicio de consultorÃ­a estratÃ©gica para empresas que buscan mejorar su marketing digital, optimizar campaÃ±as o diseÃ±ar una estrategia de crecimiento.",
+      notes:
+        "El servicio de consultorÃ­a digital parte desde 500 â‚¬ + IVA dependiendo del alcance del anÃ¡lisis y acompaÃ±amiento estratÃ©gico.",
+      conversion_goal: "request_quote",
+    },
+  },
   services: {
     "Google Ads": {
       min_monthly_fee: "250 € + IVA",
@@ -295,6 +399,16 @@ export const BLANK_APP_CONFIG = {
     primary_color: "",
     accent_color: "",
   },
+  business_profile: {
+    industry: "",
+    business_model: "",
+    audience: "",
+    primary_conversion_goal: "",
+    secondary_goals: [],
+    sales_cycle: "",
+    human_team_label: "",
+    value_proposition: "",
+  },
   contact: {
     public_whatsapp_number: "",
     human_agent_whatsapp_number: "",
@@ -323,6 +437,17 @@ export const BLANK_APP_CONFIG = {
     },
     custom_fields: [],
   },
+  qualification_schema: [],
+  personalization_rules: [],
+  sales_scoring: {
+    hot_intents: ["booking", "human_request"],
+    warm_intents: ["pricing", "contact"],
+    hot_max_missing_required_fields: 0,
+    pricing_hot_max_missing_required_fields: 1,
+    warm_max_missing_required_fields_with_contact: 1,
+    contact_makes_warm: true,
+  },
+  actions_catalog: {},
   notifications: {
     email_to: "",
     notify_new_lead: true,
@@ -331,6 +456,11 @@ export const BLANK_APP_CONFIG = {
   widget: {
     install_mode: "slug",
     allowed_domains: [],
+  },
+  deployment: {
+    status: "draft",
+    published_at: "",
+    readiness_snapshot: null,
   },
   integrations: {
     whatsapp: {
@@ -461,6 +591,7 @@ export const BLANK_APP_CONFIG = {
     spreadsheet_mapping: "",
     internal_notes: "",
   },
+  offers: {},
   services: {},
 };
 
@@ -475,7 +606,7 @@ function mergeDeep(base, patch, parentKey = "") {
 
   if (
     Object.keys(patch).length === 0 &&
-    ["services", "knowledge_sources", "message_templates", "automation_flows", "widget"].includes(parentKey)
+    ["services", "offers", "knowledge_sources", "message_templates", "automation_flows", "widget"].includes(parentKey)
   ) {
     return {};
   }
@@ -483,7 +614,7 @@ function mergeDeep(base, patch, parentKey = "") {
   const output = Array.isArray(base) ? [...base] : { ...base };
 
   for (const [key, value] of Object.entries(patch)) {
-    if (["services", "knowledge_sources", "message_templates", "automation_flows", "widget"].includes(key)) {
+    if (["services", "offers", "knowledge_sources", "message_templates", "automation_flows", "widget"].includes(key)) {
       output[key] = clone(value);
       continue;
     }
@@ -539,15 +670,42 @@ function sanitizeServices(services = {}) {
     if (!cleanName) continue;
 
     result[cleanName] = {
+      category: cleanString(facts?.category),
       min_monthly_fee: cleanString(facts?.min_monthly_fee),
       min_project_fee: cleanString(facts?.min_project_fee),
       url: cleanString(facts?.url),
       description: cleanString(facts?.description),
       notes: cleanString(facts?.notes),
+      conversion_goal: cleanString(facts?.conversion_goal),
     };
   }
 
   return result;
+}
+
+function sanitizeBusinessProfile(value = {}, defaults = {}) {
+  const secondaryGoals = Array.isArray(value?.secondary_goals)
+    ? value.secondary_goals
+    : Array.isArray(defaults?.secondary_goals)
+      ? defaults.secondary_goals
+      : [];
+
+  return {
+    industry: resolveString(value?.industry, defaults?.industry),
+    business_model: resolveString(value?.business_model, defaults?.business_model),
+    audience: resolveString(value?.audience, defaults?.audience),
+    primary_conversion_goal: resolveString(
+      value?.primary_conversion_goal,
+      defaults?.primary_conversion_goal
+    ),
+    secondary_goals: secondaryGoals.map(cleanString).filter(Boolean).slice(0, 12),
+    sales_cycle: resolveString(value?.sales_cycle, defaults?.sales_cycle),
+    human_team_label: resolveString(value?.human_team_label, defaults?.human_team_label),
+    value_proposition: resolveString(
+      value?.value_proposition,
+      defaults?.value_proposition
+    ),
+  };
 }
 
 function sanitizeKnowledgeSources(value = {}) {
@@ -626,6 +784,224 @@ function sanitizeLeadCaptureConfig(value = {}, defaults = {}) {
   return { fields, custom_fields };
 }
 
+function sanitizeQualificationSchema(value = [], defaults = []) {
+  const rawItems = Array.isArray(value)
+    ? value
+    : Array.isArray(defaults)
+      ? defaults
+      : [];
+  const seenKeys = new Set();
+
+  return rawItems
+    .map((field) => {
+      const key = cleanString(field?.key)
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 60);
+      const label = cleanString(field?.label).slice(0, 80);
+      if (!key || !label || seenKeys.has(key)) return null;
+      seenKeys.add(key);
+
+      const type = ["text", "number", "date", "time", "datetime", "select", "boolean"].includes(
+        cleanString(field?.type)
+      )
+        ? cleanString(field?.type)
+        : "text";
+
+      const options = Array.isArray(field?.options)
+        ? field.options.map(cleanString).filter(Boolean).slice(0, 40)
+        : [];
+
+      return {
+        key,
+        label,
+        type,
+        required: field?.required === true,
+        ask_when: cleanString(field?.ask_when),
+        prompt: cleanString(field?.prompt).slice(0, 240),
+        use_for_personalization: field?.use_for_personalization !== false,
+        options,
+      };
+    })
+    .filter(Boolean);
+}
+
+function sanitizePersonalizationRules(value = [], defaults = []) {
+  const rawItems = Array.isArray(value)
+    ? value
+    : Array.isArray(defaults)
+      ? defaults
+      : [];
+  const seenKeys = new Set();
+
+  return rawItems
+    .map((rule) => {
+      const key = cleanString(rule?.key)
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 80);
+      const label = cleanString(rule?.label).slice(0, 120);
+      const field = cleanString(rule?.field)
+        .toLowerCase()
+        .replace(/[^a-z0-9_.]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 80);
+      if (!key || !label || !field || seenKeys.has(key)) return null;
+      seenKeys.add(key);
+
+      const operator = ["equals", "contains", "in", "exists"].includes(cleanString(rule?.operator))
+        ? cleanString(rule.operator)
+        : "contains";
+      const values = Array.isArray(rule?.values)
+        ? rule.values.map(cleanString).filter(Boolean).slice(0, 30)
+        : cleanString(rule?.value)
+          ? [cleanString(rule.value)]
+          : [];
+
+      return {
+        key,
+        label,
+        field,
+        operator,
+        values,
+        pitch_angle: cleanString(rule?.pitch_angle).slice(0, 420),
+        value_points: Array.isArray(rule?.value_points)
+          ? rule.value_points.map(cleanString).filter(Boolean).slice(0, 8)
+          : [],
+        objections: Array.isArray(rule?.objections)
+          ? rule.objections.map(cleanString).filter(Boolean).slice(0, 8)
+          : [],
+        cta: cleanString(rule?.cta).slice(0, 220),
+        priority: clampNumber(rule?.priority, 50, 0, 100),
+        enabled: rule?.enabled !== false,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 40);
+}
+
+function clampNumber(value, fallback, min = 0, max = 20) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(number)));
+}
+
+function sanitizeIntentList(value, fallback = []) {
+  const raw = Array.isArray(value) ? value : fallback;
+  const seen = new Set();
+  return raw
+    .map((item) =>
+      cleanString(item)
+        .toLowerCase()
+        .replace(/[^a-z0-9_]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+    )
+    .filter((item) => {
+      if (!item || seen.has(item)) return false;
+      seen.add(item);
+      return true;
+    })
+    .slice(0, 12);
+}
+
+function sanitizeSalesScoring(value = {}, defaults = {}) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    hot_intents: sanitizeIntentList(source.hot_intents, defaults.hot_intents || []),
+    warm_intents: sanitizeIntentList(source.warm_intents, defaults.warm_intents || []),
+    hot_max_missing_required_fields: clampNumber(
+      source.hot_max_missing_required_fields,
+      Number(defaults.hot_max_missing_required_fields) || 0
+    ),
+    pricing_hot_max_missing_required_fields: clampNumber(
+      source.pricing_hot_max_missing_required_fields,
+      Number(defaults.pricing_hot_max_missing_required_fields) || 1
+    ),
+    warm_max_missing_required_fields_with_contact: clampNumber(
+      source.warm_max_missing_required_fields_with_contact,
+      Number(defaults.warm_max_missing_required_fields_with_contact) || 1
+    ),
+    contact_makes_warm:
+      typeof source.contact_makes_warm === "boolean"
+        ? source.contact_makes_warm
+        : defaults.contact_makes_warm !== false,
+  };
+}
+
+function sanitizeActionsCatalog(value = {}, defaults = {}) {
+  const source =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value
+      : defaults || {};
+  const result = {};
+
+  for (const [rawKey, action] of Object.entries(source || {})) {
+    const key = cleanString(rawKey)
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80);
+    if (!key || !action || typeof action !== "object" || Array.isArray(action)) continue;
+
+    const requiredFields = Array.isArray(action.required_fields)
+      ? action.required_fields
+      : [];
+    const metadata =
+      action.metadata && typeof action.metadata === "object" && !Array.isArray(action.metadata)
+        ? action.metadata
+        : {};
+
+    result[key] = {
+      type:
+        cleanString(action.type) ||
+        cleanString(defaults?.[key]?.type) ||
+        "internal_task",
+      label:
+        cleanString(action.label) ||
+        cleanString(defaults?.[key]?.label) ||
+        key,
+      description: cleanString(action.description || defaults?.[key]?.description),
+      required_fields: requiredFields.map(cleanString).filter(Boolean).slice(0, 30),
+      channel: cleanString(action.channel || defaults?.[key]?.channel),
+      template_key: cleanString(action.template_key || defaults?.[key]?.template_key),
+      enabled:
+        typeof action.enabled === "boolean"
+          ? action.enabled
+          : defaults?.[key]?.enabled !== false,
+      metadata,
+    };
+  }
+
+  return result;
+}
+
+function mergeQualificationIntoLeadCapture(leadCapture = {}, qualificationSchema = []) {
+  const currentFields = Array.isArray(leadCapture?.custom_fields)
+    ? leadCapture.custom_fields
+    : [];
+  const byKey = new Map(currentFields.map((field) => [field.key, field]));
+
+  for (const field of qualificationSchema || []) {
+    if (!field?.key || byKey.has(field.key)) continue;
+    byKey.set(field.key, {
+      key: field.key,
+      label: field.label,
+      type: field.type || "text",
+      required: field.required === true,
+      prompt: field.prompt || "",
+      options: Array.isArray(field.options) ? field.options : [],
+    });
+  }
+
+  return {
+    ...leadCapture,
+    custom_fields: Array.from(byKey.values()),
+  };
+}
+
 function sanitizeNotificationsConfig(value = {}, defaults = {}) {
   return {
     email_to: cleanString(value?.email_to),
@@ -654,6 +1030,20 @@ function sanitizeWidgetConfig(value = {}) {
   };
 }
 
+function sanitizeDeploymentConfig(value = {}, defaults = {}) {
+  const status = cleanString(value?.status).toLowerCase();
+  return {
+    status: status === "published" ? "published" : "draft",
+    published_at: cleanString(value?.published_at) || cleanString(defaults?.published_at),
+    readiness_snapshot:
+      value?.readiness_snapshot &&
+      typeof value.readiness_snapshot === "object" &&
+      !Array.isArray(value.readiness_snapshot)
+        ? value.readiness_snapshot
+        : defaults?.readiness_snapshot || null,
+  };
+}
+
 function sanitizeValidation(value = {}, defaults = {}) {
   return {
     status: cleanString(value?.status) || cleanString(defaults?.status) || "pending",
@@ -667,9 +1057,17 @@ function sanitizeValidation(value = {}, defaults = {}) {
 function sanitizeMessageTemplates(value = {}) {
   const defaults = DEFAULT_APP_CONFIG.message_templates || {};
   const result = {};
+  const incomingTemplates =
+    value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const keys = new Set([
+    ...Object.keys(defaults),
+    ...Object.keys(incomingTemplates),
+  ]);
 
-  for (const [key, templateDefaults] of Object.entries(defaults)) {
-    const incoming = value?.[key] || {};
+  for (const key of keys) {
+    const templateDefaults = defaults?.[key] || {};
+    const incoming = incomingTemplates?.[key] || {};
+    if (!templateDefaults.body && !incoming.body && !defaults?.[key]) continue;
     result[key] = {
       channel:
         cleanString(incoming?.channel) ||
@@ -786,6 +1184,10 @@ function sanitizeAutomationFlows(value = {}) {
 
 export function sanitizeAppConfig(input = {}, options = {}) {
   const services = sanitizeServices(input?.services);
+  const offersInput = Object.prototype.hasOwnProperty.call(input || {}, "offers")
+    ? input?.offers
+    : input?.services;
+  const offers = sanitizeServices(offersInput);
   const message_templates = sanitizeMessageTemplates(input?.message_templates);
   const automation_flows = sanitizeAutomationFlows(input?.automation_flows);
   const deliverables = sanitizeDeliverablesConfig(
@@ -802,13 +1204,34 @@ export function sanitizeAppConfig(input = {}, options = {}) {
       options?.useBlankDefaults || requestedMode === "chat_only"
         ? getBlankAppConfig({ productMode: requestedMode })
         : getDefaultAppConfig();
-  const lead_capture = sanitizeLeadCaptureConfig(
+  const qualification_schema = sanitizeQualificationSchema(
+    input?.qualification_schema,
+    defaults?.qualification_schema || []
+  );
+  const personalization_rules = sanitizePersonalizationRules(
+    input?.personalization_rules,
+    defaults?.personalization_rules || []
+  );
+  const sales_scoring = sanitizeSalesScoring(input?.sales_scoring, defaults?.sales_scoring || {});
+  const actions_catalog = sanitizeActionsCatalog(
+    input?.actions_catalog,
+    defaults?.actions_catalog || {}
+  );
+  const lead_capture = mergeQualificationIntoLeadCapture(sanitizeLeadCaptureConfig(
     input?.lead_capture,
     defaults?.lead_capture || {}
-  );
+  ), qualification_schema);
   const notifications = sanitizeNotificationsConfig(
     input?.notifications,
     defaults?.notifications || {}
+  );
+  const business_profile = sanitizeBusinessProfile(
+    input?.business_profile,
+    defaults?.business_profile || {}
+  );
+  const deployment = sanitizeDeploymentConfig(
+    input?.deployment,
+    defaults?.deployment || {}
   );
 
   return {
@@ -822,6 +1245,7 @@ export function sanitizeAppConfig(input = {}, options = {}) {
       primary_color: resolveString(input?.brand?.primary_color, defaults.brand.primary_color),
       accent_color: resolveString(input?.brand?.accent_color, defaults.brand.accent_color),
     },
+    business_profile,
     contact: {
       public_whatsapp_number: resolveString(input?.contact?.public_whatsapp_number),
       human_agent_whatsapp_number: resolveString(
@@ -847,8 +1271,13 @@ export function sanitizeAppConfig(input = {}, options = {}) {
         prompt_additions: resolveString(input?.agent?.prompt_additions),
       },
       lead_capture,
+      qualification_schema,
+      personalization_rules,
+      sales_scoring,
+      actions_catalog,
       notifications,
       widget,
+      deployment,
       integrations: {
       whatsapp: {
         provider:
@@ -972,6 +1401,12 @@ export function sanitizeAppConfig(input = {}, options = {}) {
       deliverables,
       automation_flows,
       knowledge_sources,
+      offers:
+        Object.prototype.hasOwnProperty.call(input || {}, "offers")
+          ? offers
+          : Object.prototype.hasOwnProperty.call(input || {}, "services")
+            ? services
+            : defaults.offers || defaults.services || {},
       services:
         Object.prototype.hasOwnProperty.call(input || {}, "services")
           ? services

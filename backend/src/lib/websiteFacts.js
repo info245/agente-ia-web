@@ -1,6 +1,6 @@
 import { sanitizeAppConfig } from "./appConfig.js";
 
-function normalizeServiceName(value) {
+function normalizeOfferName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
@@ -27,7 +27,7 @@ function parseSpreadsheetRows(raw = "") {
   if (lines.length < 2) return [];
 
   const headers = splitSpreadsheetLine(lines[0]).map((header) =>
-    normalizeServiceName(header)
+    normalizeOfferName(header)
   );
 
   return lines.slice(1).map((line) => {
@@ -51,7 +51,7 @@ function findColumnValue(row = {}, candidates = []) {
   return "";
 }
 
-function mapRowToServiceFacts(row = {}) {
+function mapRowToOfferFacts(row = {}) {
   const name = findColumnValue(row, [
     "servicio",
     "service",
@@ -64,6 +64,7 @@ function mapRowToServiceFacts(row = {}) {
   return {
     name,
     facts: {
+      category: findColumnValue(row, ["categoria", "categorÃ­a", "category"]),
       min_monthly_fee: findColumnValue(row, [
         "precio mensual",
         "tarifa mensual",
@@ -91,46 +92,56 @@ function mapRowToServiceFacts(row = {}) {
         "observaciones",
         "condiciones",
       ]),
+      conversion_goal: findColumnValue(row, [
+        "objetivo conversion",
+        "objetivo de conversion",
+        "conversion goal",
+        "cta",
+      ]),
     },
   };
 }
 
-function mergeServiceFacts(base = {}, incoming = {}) {
+function mergeOfferFacts(base = {}, incoming = {}) {
   return {
+    category: incoming.category || base.category || "",
     min_monthly_fee: incoming.min_monthly_fee || base.min_monthly_fee || "",
     min_project_fee: incoming.min_project_fee || base.min_project_fee || "",
     url: incoming.url || base.url || "",
     description: incoming.description || base.description || "",
     notes: incoming.notes || base.notes || "",
+    conversion_goal: incoming.conversion_goal || base.conversion_goal || "",
   };
 }
 
-function getSpreadsheetServices(appConfig = null) {
+function getSpreadsheetOffers(appConfig = null) {
   const merged = sanitizeAppConfig(appConfig || {});
   const rows = parseSpreadsheetRows(
     merged?.knowledge_sources?.spreadsheet_data || ""
   );
 
   return rows.reduce((acc, row) => {
-    const mapped = mapRowToServiceFacts(row);
+    const mapped = mapRowToOfferFacts(row);
     if (!mapped?.name) return acc;
 
     const existing = acc[mapped.name] || {};
-    acc[mapped.name] = mergeServiceFacts(existing, mapped.facts);
+    acc[mapped.name] = mergeOfferFacts(existing, mapped.facts);
     return acc;
   }, {});
 }
 
-function summariseServices(services = {}) {
-  return Object.entries(services)
+function summariseOffers(offers = {}) {
+  return Object.entries(offers)
     .slice(0, 8)
     .map(([name, facts]) => {
       const parts = [];
+      if (facts?.category) parts.push(`categoria: ${facts.category}`);
       if (facts?.min_monthly_fee) parts.push(`mensual: ${facts.min_monthly_fee}`);
       if (facts?.min_project_fee) parts.push(`proyecto: ${facts.min_project_fee}`);
       if (facts?.url) parts.push(`url: ${facts.url}`);
       if (facts?.description) parts.push(`descripcion: ${facts.description}`);
       if (facts?.notes) parts.push(`notas: ${facts.notes}`);
+      if (facts?.conversion_goal) parts.push(`objetivo: ${facts.conversion_goal}`);
       return `- ${name}${parts.length ? ` | ${parts.join(" | ")}` : ""}`;
     })
     .join("\n");
@@ -138,16 +149,20 @@ function summariseServices(services = {}) {
 
 export function getWebsiteFacts(appConfig = null) {
   const merged = sanitizeAppConfig(appConfig || {});
-  const manualServices = merged.services || {};
-  const spreadsheetServices = getSpreadsheetServices(merged);
-  const services = { ...spreadsheetServices };
+  const manualOffers = Object.keys(merged.offers || {}).length
+    ? merged.offers
+    : merged.services || {};
+  const legacyServices = merged.services || {};
+  const spreadsheetOffers = getSpreadsheetOffers(merged);
+  const offers = { ...spreadsheetOffers };
 
-  for (const [serviceName, facts] of Object.entries(manualServices || {})) {
-    services[serviceName] = mergeServiceFacts(services[serviceName], facts);
+  for (const [offerName, facts] of Object.entries(manualOffers || {})) {
+    offers[offerName] = mergeOfferFacts(offers[offerName], facts);
   }
 
   return {
-    services,
+    offers,
+    services: Object.keys(offers).length ? offers : legacyServices,
     knowledge_sources: merged.knowledge_sources || {},
   };
 }
@@ -155,26 +170,26 @@ export function getWebsiteFacts(appConfig = null) {
 export function getServiceFacts(serviceName, appConfig = null) {
   if (!serviceName) return null;
 
-  const services = getWebsiteFacts(appConfig).services || {};
-  const matchKey = Object.keys(services).find(
-    (key) => normalizeServiceName(key) === normalizeServiceName(serviceName)
+  const offers = getWebsiteFacts(appConfig).offers || {};
+  const matchKey = Object.keys(offers).find(
+    (key) => normalizeOfferName(key) === normalizeOfferName(serviceName)
   );
 
-  return matchKey ? services[matchKey] : null;
+  return matchKey ? offers[matchKey] : null;
 }
 
 export function buildKnowledgeContext(appConfig = null) {
   const websiteFacts = getWebsiteFacts(appConfig);
   const knowledge = websiteFacts.knowledge_sources || {};
-  const servicesBlock = summariseServices(websiteFacts.services || {});
+  const offersBlock = summariseOffers(websiteFacts.offers || websiteFacts.services || {});
   const websiteUrls = Array.isArray(knowledge.website_urls)
     ? knowledge.website_urls.filter(Boolean)
     : [];
 
   const sections = [];
 
-  if (servicesBlock) {
-    sections.push(`SERVICIOS Y OFERTA VERIFICADA\n${servicesBlock}`);
+  if (offersBlock) {
+    sections.push(`OFERTAS, PRODUCTOS O SERVICIOS VERIFICADOS\n${offersBlock}`);
   }
 
   if (websiteUrls.length) {
