@@ -46,6 +46,10 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   return `${salt}:${digest}`;
 }
 
+function hashToken(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
 function verifyPassword(password, storedHash) {
   const [salt, digest] = String(storedHash || "").split(":");
   if (!salt || !digest) return false;
@@ -78,11 +82,12 @@ export async function createCrmUser(input = {}) {
 
   const email = clean(input.email).toLowerCase();
   const password = String(input.password || "");
+  const requirePassword = input.require_password !== false;
   const role = clean(input.role) || "client_admin";
   const accountId = clean(input.account_id) || null;
 
   if (!email) throw new Error("El email es obligatorio.");
-  if (!password || password.length < 8) {
+  if (requirePassword && (!password || password.length < 8)) {
     throw new Error("La contraseña debe tener al menos 8 caracteres.");
   }
   if (!["super_admin", "client_admin"].includes(role)) {
@@ -94,11 +99,11 @@ export async function createCrmUser(input = {}) {
 
   const payload = {
     email,
-    password_hash: hashPassword(password),
+    password_hash: hashPassword(password || crypto.randomBytes(32).toString("hex")),
     role,
     account_id: role === "super_admin" ? null : accountId,
     display_name: clean(input.display_name) || email,
-    status: clean(input.status) || "active",
+    status: clean(input.status) || (requirePassword ? "active" : "invited"),
   };
 
   const { data, error } = await supabase
@@ -109,6 +114,83 @@ export async function createCrmUser(input = {}) {
 
   if (error) throw error;
   return normalizeUser(data);
+}
+
+export async function createPasswordSetupToken(userId, ttlMs = 1000 * 60 * 60 * 24 * 7) {
+  const available = await hasCrmUsersTable();
+  if (!available) {
+    throw new Error(
+      "Falta la tabla crm_users en Supabase. Ejecuta sql/007_crm_auth.sql antes de invitar usuarios."
+    );
+  }
+
+  const safeUserId = clean(userId);
+  if (!safeUserId) throw new Error("Usuario no valido.");
+
+  const token = crypto.randomBytes(32).toString("base64url");
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+
+  const { error } = await supabase
+    .from("crm_users")
+    .update({
+      password_setup_token_hash: hashToken(token),
+      password_setup_expires_at: expiresAt,
+    })
+    .eq("id", safeUserId);
+
+  if (error) throw error;
+
+  return {
+    token,
+    expires_at: expiresAt,
+  };
+}
+
+export async function setCrmUserPasswordFromToken(token, password) {
+  const available = await hasCrmUsersTable();
+  if (!available) {
+    throw new Error(
+      "Falta la tabla crm_users en Supabase. Ejecuta sql/007_crm_auth.sql antes de establecer contraseÃ±as."
+    );
+  }
+
+  const safeToken = clean(token);
+  const nextPassword = String(password || "");
+  if (!safeToken) throw new Error("El enlace no es valido.");
+  if (!nextPassword || nextPassword.length < 8) {
+    throw new Error("La contraseÃ±a debe tener al menos 8 caracteres.");
+  }
+
+  const { data, error } = await supabase
+    .from("crm_users")
+    .select("id, email, role, account_id, display_name, status, password_setup_expires_at")
+    .eq("password_setup_token_hash", hashToken(safeToken))
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("El enlace no es valido o ya se ha usado.");
+
+  const expiresAt = data.password_setup_expires_at
+    ? new Date(data.password_setup_expires_at).getTime()
+    : 0;
+  if (!expiresAt || Date.now() > expiresAt) {
+    throw new Error("El enlace ha caducado. Pide una nueva invitacion.");
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("crm_users")
+    .update({
+      password_hash: hashPassword(nextPassword),
+      password_setup_token_hash: null,
+      password_setup_expires_at: null,
+      status: "active",
+    })
+    .eq("id", data.id)
+    .select("id, email, role, account_id, display_name, status")
+    .single();
+
+  if (updateError) throw updateError;
+  return normalizeUser(updated);
 }
 
 export async function getCrmUserById(userId) {

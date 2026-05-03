@@ -14,6 +14,13 @@ create table if not exists crm_users (
 
 create index if not exists idx_crm_users_account_id on crm_users(account_id);
 
+alter table crm_users
+  add column if not exists password_setup_token_hash text,
+  add column if not exists password_setup_expires_at timestamptz;
+
+create index if not exists idx_crm_users_password_setup_token_hash
+on crm_users(password_setup_token_hash);
+
 create or replace function set_updated_at_crm_users()
 returns trigger as $$
 begin
