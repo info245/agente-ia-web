@@ -7,6 +7,8 @@
   const colorFromAttr = currentScript?.getAttribute("data-color");
   const accountIdFromAttr = currentScript?.getAttribute("data-account-id");
   const accountSlugFromAttr = currentScript?.getAttribute("data-account-slug");
+  const defaultAccountSlug =
+    currentScript?.getAttribute("data-default-account-slug") || "tmedia-global";
 
   const CONFIG = {
       backendBaseUrl: backendFromAttr || "https://tmedia-global-ai.onrender.com",
@@ -17,7 +19,7 @@
       accentColor: colorFromAttr || "#1f2937",
     logoUrl: "",
     accountId: accountIdFromAttr || "",
-    accountSlug: accountSlugFromAttr || "",
+    accountSlug: accountSlugFromAttr || defaultAccountSlug,
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
     chatStartedStorageKey: "agente_ia_chat_started",

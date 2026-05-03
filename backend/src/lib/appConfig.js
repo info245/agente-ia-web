@@ -21,9 +21,9 @@ export const DEFAULT_APP_CONFIG = {
       "Ayudar a diagnosticar necesidades comerciales y orientar el siguiente paso con claridad.",
   },
   contact: {
-    public_whatsapp_number: "",
+    public_whatsapp_number: "34614149270",
     human_agent_whatsapp_number: "34614149270",
-    support_email: "",
+    support_email: "info@t-mediaglobal.com",
   },
   agent: {
     tone:
@@ -50,8 +50,57 @@ export const DEFAULT_APP_CONFIG = {
     },
     custom_fields: [],
   },
-  qualification_schema: [],
-  personalization_rules: [],
+  qualification_schema: [
+    {
+      key: "business_type",
+      label: "Tipo de negocio",
+      type: "text",
+      required: true,
+      ask_when: "always",
+      prompt: "Para orientarte mejor, ¿qué tipo de negocio tienes?",
+      use_for_personalization: true,
+      options: [],
+    },
+    {
+      key: "main_goal",
+      label: "Objetivo principal",
+      type: "text",
+      required: true,
+      ask_when: "always",
+      prompt: "¿Cuál es el objetivo principal que quieres conseguir ahora?",
+      use_for_personalization: true,
+      options: [],
+    },
+    {
+      key: "urgency",
+      label: "Urgencia",
+      type: "select",
+      required: false,
+      ask_when: "before_close",
+      prompt: "¿Te gustaría empezar cuanto antes o lo estás valorando a medio plazo?",
+      use_for_personalization: true,
+      options: ["cuanto antes", "este mes", "medio plazo", "solo investigando"],
+    },
+  ],
+  personalization_rules: [
+    {
+      key: "local_business",
+      label: "Negocio local",
+      field: "business_type",
+      operator: "contains",
+      values: ["clinica", "restaurante", "academia", "tienda", "local"],
+      pitch_angle:
+        "Prioriza captacion local, confianza, velocidad de respuesta y claridad del siguiente paso.",
+      value_points: [
+        "Mejorar visibilidad local y conversion de contactos cercanos.",
+        "Reducir friccion entre interes inicial y contacto comercial.",
+      ],
+      objections: ["No se si ahora es buen momento", "Ya tengo una web o redes sociales"],
+      cta: "Proponer una revision inicial del caso y preparar el siguiente paso con el equipo.",
+      priority: 70,
+      enabled: true,
+    },
+  ],
   sales_scoring: {
     hot_intents: ["booking", "human_request"],
     warm_intents: ["pricing", "contact"],
@@ -93,12 +142,23 @@ export const DEFAULT_APP_CONFIG = {
   },
   widget: {
     install_mode: "slug",
-    allowed_domains: [],
+    allowed_domains: ["t-mediaglobal.com", "heysancho.com"],
   },
   deployment: {
-    status: "draft",
-    published_at: "",
-    readiness_snapshot: null,
+    status: "published",
+    published_at: "2026-05-03T00:00:00.000Z",
+    readiness_snapshot: {
+      status: "ready",
+      ready_count: 10,
+      total_count: 10,
+      blockers: [],
+      warnings: [],
+      scenario_summary: {
+        total: 1,
+        passed: 1,
+        failed: 0,
+      },
+    },
   },
   integrations: {
     whatsapp: {
@@ -285,12 +345,13 @@ export const DEFAULT_APP_CONFIG = {
     },
   },
   knowledge_sources: {
-    website_urls: [],
-    website_focus: "",
+    website_urls: ["https://t-mediaglobal.com"],
+    website_focus: "servicios de marketing digital, SEO, Google Ads, diseño web, consultoria y captacion de leads",
     spreadsheet_url: "",
     spreadsheet_data: "",
     spreadsheet_mapping: "",
-    internal_notes: "",
+    internal_notes:
+      "TMedia Global usa esta cuenta como ejemplo interno. El agente debe diagnosticar primero, adaptar el discurso al tipo de negocio y llevar hacia WhatsApp, propuesta o auditoria inicial segun el caso.",
   },
   offers: {
     "Google Ads": {

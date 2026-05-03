@@ -8,6 +8,8 @@
   const colorFromAttr = currentScript?.getAttribute("data-color");
   const accountIdFromAttr = currentScript?.getAttribute("data-account-id");
   const accountSlugFromAttr = currentScript?.getAttribute("data-account-slug");
+  const defaultAccountSlug =
+    currentScript?.getAttribute("data-default-account-slug") || "tmedia-global";
 
   const CONFIG = {
     backendBaseUrl:
@@ -17,7 +19,7 @@
     position: posFromAttr === "left" ? "left" : "right",
     primaryColor: colorFromAttr || "#111827",
     accountId: accountIdFromAttr || "",
-    accountSlug: accountSlugFromAttr || "",
+    accountSlug: accountSlugFromAttr || defaultAccountSlug,
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
     requestTimeoutMs: 25000,

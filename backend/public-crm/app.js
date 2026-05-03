@@ -4016,25 +4016,25 @@ function createPersonalizationRuleItem(rule = {}) {
       <button type="button" class="service-remove-btn config-builder-remove">Quitar</button>
     </div>
     <div class="config-builder-grid">
-      <label>Clave <input type="text" data-field="key" value="${escapeHtml(rule.key || "")}" placeholder="empresa" /></label>
-      <label>Etiqueta <input type="text" data-field="label" value="${escapeHtml(rule.label || "")}" placeholder="Alumno empresa" /></label>
-      <label>Campo
+      <label title="Identificador interno sin espacios. Sirve para reconocer la regla en pruebas y eventos.">Clave <input type="text" data-field="key" value="${escapeHtml(rule.key || "")}" placeholder="empresa" /></label>
+      <label title="Nombre visible para entender la regla dentro del CRM.">Etiqueta <input type="text" data-field="label" value="${escapeHtml(rule.label || "")}" placeholder="Alumno empresa" /></label>
+      <label title="Campo del lead que activa la regla. Usa custom.nombre_campo para campos personalizados.">Campo
         <input type="text" data-field="field" value="${escapeHtml(rule.field || "")}" placeholder="custom.student_type" />
       </label>
-      <label>Condición
+      <label title="Como se compara el campo con los valores: contiene, igual, dentro de lista o existe.">Condición
         <select data-field="operator">
           ${["contains", "equals", "in", "exists"].map(
             (option) => `<option value="${option}"${operator === option ? " selected" : ""}>${option}</option>`
           ).join("")}
         </select>
       </label>
-      <label>Valores <input type="text" data-field="values" value="${escapeHtml(Array.isArray(rule.values) ? rule.values.join(", ") : "")}" placeholder="empresa, b2b" /></label>
-      <label>Prioridad <input type="number" data-field="priority" min="0" max="100" value="${escapeHtml(rule.priority ?? 50)}" /></label>
+      <label title="Valores que activan la regla, separados por comas.">Valores <input type="text" data-field="values" value="${escapeHtml(Array.isArray(rule.values) ? rule.values.join(", ") : "")}" placeholder="empresa, b2b" /></label>
+      <label title="Si varias reglas encajan, gana la de mayor prioridad.">Prioridad <input type="number" data-field="priority" min="0" max="100" value="${escapeHtml(rule.priority ?? 50)}" /></label>
       <label class="config-builder-check"><input type="checkbox" data-field="enabled"${rule.enabled !== false ? " checked" : ""} /> <span>Regla activa</span></label>
-      <label class="quote-grid-full">Ángulo de pitch <textarea rows="3" data-field="pitch_angle">${escapeHtml(rule.pitch_angle || "")}</textarea></label>
-      <label class="quote-grid-full">Puntos de valor <textarea rows="4" data-field="value_points" placeholder="Uno por línea">${escapeHtml(Array.isArray(rule.value_points) ? rule.value_points.join("\n") : "")}</textarea></label>
-      <label class="quote-grid-full">Objeciones <textarea rows="4" data-field="objections" placeholder="Una por línea">${escapeHtml(Array.isArray(rule.objections) ? rule.objections.join("\n") : "")}</textarea></label>
-      <label class="quote-grid-full">CTA <textarea rows="3" data-field="cta">${escapeHtml(rule.cta || "")}</textarea></label>
+      <label class="quote-grid-full" title="Enfoque que debe usar el agente cuando esta regla se activa.">Ángulo de pitch <textarea rows="3" data-field="pitch_angle">${escapeHtml(rule.pitch_angle || "")}</textarea></label>
+      <label class="quote-grid-full" title="Beneficios concretos, uno por linea, que el agente puede usar para ese perfil.">Puntos de valor <textarea rows="4" data-field="value_points" placeholder="Uno por línea">${escapeHtml(Array.isArray(rule.value_points) ? rule.value_points.join("\n") : "")}</textarea></label>
+      <label class="quote-grid-full" title="Objeciones probables de ese perfil, una por linea.">Objeciones <textarea rows="4" data-field="objections" placeholder="Una por línea">${escapeHtml(Array.isArray(rule.objections) ? rule.objections.join("\n") : "")}</textarea></label>
+      <label class="quote-grid-full" title="Siguiente paso recomendado para ese perfil.">CTA <textarea rows="3" data-field="cta">${escapeHtml(rule.cta || "")}</textarea></label>
     </div>
   `;
   item.querySelector(".config-builder-remove")?.addEventListener("click", () => {
@@ -4104,16 +4104,16 @@ function createQualificationFieldItem(field = {}) {
       <button type="button" class="service-remove-btn config-builder-remove">Quitar</button>
     </div>
     <div class="config-builder-grid">
-      <label>Clave <input type="text" data-field="key" value="${escapeHtml(field.key || "")}" placeholder="language" /></label>
-      <label>Etiqueta <input type="text" data-field="label" value="${escapeHtml(field.label || "")}" placeholder="Idioma de interes" /></label>
-      <label>Tipo
+      <label title="Identificador interno del dato. Usa nombres cortos sin espacios, por ejemplo budget_range o custom_language.">Clave <input type="text" data-field="key" value="${escapeHtml(field.key || "")}" placeholder="language" /></label>
+      <label title="Nombre visible del dato que quieres recoger.">Etiqueta <input type="text" data-field="label" value="${escapeHtml(field.label || "")}" placeholder="Idioma de interes" /></label>
+      <label title="Formato del dato: texto, numero, fecha, selector o booleano.">Tipo
         <select data-field="type">
           ${["text", "number", "date", "time", "datetime", "select", "boolean"].map(
             (option) => `<option value="${option}"${type === option ? " selected" : ""}>${option}</option>`
           ).join("")}
         </select>
       </label>
-      <label>Opciones <input type="text" data-field="options" value="${escapeHtml(Array.isArray(field.options) ? field.options.join(", ") : "")}" placeholder="adulto, empresa, estudiante" /></label>
+      <label title="Solo para campos tipo select. Escribe opciones separadas por comas.">Opciones <input type="text" data-field="options" value="${escapeHtml(Array.isArray(field.options) ? field.options.join(", ") : "")}" placeholder="adulto, empresa, estudiante" /></label>
       <label class="config-builder-check"><input type="checkbox" data-field="required"${field.required ? " checked" : ""} /> <span>Obligatorio</span></label>
       <label class="config-builder-check"><input type="checkbox" data-field="use_for_personalization"${field.use_for_personalization !== false ? " checked" : ""} /> <span>Usar para personalizar</span></label>
       <label class="quote-grid-full">Cuándo preguntar <input type="text" data-field="ask_when" value="${escapeHtml(field.ask_when || "")}" placeholder="antes de ofrecer cita o propuesta" /></label>
@@ -4191,24 +4191,24 @@ function createActionItem(actionKey = "", action = {}) {
       <button type="button" class="service-remove-btn config-builder-remove">Quitar</button>
     </div>
     <div class="config-builder-grid">
-      <label>Clave <input type="text" data-field="key" value="${escapeHtml(actionKey)}" placeholder="book_first_visit" /></label>
-      <label>Etiqueta <input type="text" data-field="label" value="${escapeHtml(action.label || "")}" placeholder="Reservar primera visita" /></label>
-      <label>Tipo
+      <label title="Identificador interno de la accion. Ejemplo: book_first_visit, prepare_quote.">Clave <input type="text" data-field="key" value="${escapeHtml(actionKey)}" placeholder="book_first_visit" /></label>
+      <label title="Nombre claro de la accion para el CRM.">Etiqueta <input type="text" data-field="label" value="${escapeHtml(action.label || "")}" placeholder="Reservar primera visita" /></label>
+      <label title="Que debe hacer el sistema cuando esta accion este lista.">Tipo
         <select data-field="type">
           ${["calendar_booking", "human_handoff", "send_information", "quote", "internal_task"].map(
             (option) => `<option value="${option}"${(action.type || "internal_task") === option ? " selected" : ""}>${option}</option>`
           ).join("")}
         </select>
       </label>
-      <label>Canal
+      <label title="Canal preferido para ejecutar o preparar la accion. preferred usa lo que haya indicado el lead.">Canal
         <select data-field="channel">
           ${["preferred", "whatsapp", "email", "crm"].map(
             (option) => `<option value="${option}"${(action.channel || "preferred") === option ? " selected" : ""}>${option}</option>`
           ).join("")}
         </select>
       </label>
-      <label>Plantilla <select data-field="template_key">${getActionTemplateOptionsMarkup(action.template_key || "")}</select></label>
-      <label>Campos requeridos <input type="text" data-field="required_fields" value="${escapeHtml(Array.isArray(action.required_fields) ? action.required_fields.join(", ") : "")}" placeholder="name, phone_or_email, custom.language" /></label>
+      <label title="Plantilla de mensaje que se enviara si la accion requiere comunicacion.">Plantilla <select data-field="template_key">${getActionTemplateOptionsMarkup(action.template_key || "")}</select></label>
+      <label title="Datos que deben existir antes de ejecutar la accion. Ejemplo: name, phone_or_email, custom.language.">Campos requeridos <input type="text" data-field="required_fields" value="${escapeHtml(Array.isArray(action.required_fields) ? action.required_fields.join(", ") : "")}" placeholder="name, phone_or_email, custom.language" /></label>
       <label class="config-builder-check"><input type="checkbox" data-field="enabled"${action.enabled !== false ? " checked" : ""} /> <span>Accion activa</span></label>
       <label>Responsable <input type="text" data-field="owner_label" value="${escapeHtml(action.metadata?.owner_label || "")}" placeholder="equipo de admisiones" /></label>
       <label class="quote-grid-full">Descripcion <textarea rows="3" data-field="description">${escapeHtml(action.description || "")}</textarea></label>
