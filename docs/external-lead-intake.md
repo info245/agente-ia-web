@@ -18,10 +18,17 @@ Header requerido:
 
 `x-integrations-secret: TU_INTEGRATIONS_SECRET`
 
+Cuenta requerida:
+
+- Enviar `account_slug` en el body JSON, por ejemplo `"account_slug": "tmedia-global"`.
+- Tambien se puede enviar en query string: `?account_slug=tmedia-global`.
+- No hay cuenta por defecto en este endpoint. Es intencionado para que un lead de un cliente no termine en el CRM de otro.
+
 ## Payload base
 
 ```json
 {
+  "account_slug": "tmedia-global",
   "source_platform": "google_ads",
   "source_campaign": "Lead Ads SEO Abril",
   "source_form_name": "Formulario SEO",
@@ -39,6 +46,29 @@ Header requerido:
   "preferred_contact_channel": "whatsapp",
   "consent": true,
   "auto_start": true
+}
+```
+
+## Payload Meta Lead Ads
+
+El endpoint tambien acepta el formato de Meta con `field_data`; el backend lo aplana y conserva campos no estandar como `custom_fields`.
+
+```json
+{
+  "account_slug": "tmedia-global",
+  "source_platform": "fb",
+  "source_campaign": "TMedia_LeadAds_NEW",
+  "source_form_name": "Formulario Google Ads",
+  "external_user_id": "961191756517367",
+  "field_data": [
+    { "name": "name", "values": ["Nuria esther mejias perez"] },
+    { "name": "email", "values": ["nmejiasperez@gmail.com"] },
+    { "name": "phone", "values": ["+34678113500"] },
+    { "name": "budget_range", "values": ["mas_de_2000€/mes"] },
+    { "name": "main_goal", "values": ["conseguir_mas_leads"] },
+    { "name": "preferred_contact_channel", "values": ["whatsapp"] }
+  ],
+  "consent": true
 }
 ```
 
@@ -60,6 +90,7 @@ Header requerido:
    - Webhook propio
 
 2. Nodo de normalizacion
+   - anadir siempre `account_slug` del cliente
    - mapear nombres de campos al payload unificado
    - limpiar telefono
    - decidir `preferred_contact_channel`

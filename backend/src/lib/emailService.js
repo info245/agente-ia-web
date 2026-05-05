@@ -429,6 +429,7 @@ export async function sendClientConfirmationEmail({
   lead,
   conversation_id,
   emailConfig = null,
+  brandName = "TMedia Global",
 }) {
   if (!clientEnabled) return { skipped: true, reason: "client-disabled" };
   if (!lead?.email) return { skipped: true, reason: "no-email" };
@@ -436,12 +437,13 @@ export async function sendClientConfirmationEmail({
   const runtime = resolveEmailRuntimeConfig(emailConfig);
   if (!runtime.clientFromAddress) throw new Error("Falta el email de salida.");
 
-  const subject = "Hemos recibido tu solicitud - TMedia Global";
+  const safeBrandName = compact(brandName) || "nuestro equipo";
+  const subject = `Hemos recibido tu solicitud - ${safeBrandName}`;
   const summaryText = buildClientFriendlySummary(lead);
   const html = `
   <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #111;">
     <h2>Gracias${lead?.name ? ", " + escapeHtml(lead.name) : ""}</h2>
-    <p>Hemos recibido correctamente tu solicitud en TMedia Global.</p>
+    <p>Hemos recibido correctamente tu solicitud en ${escapeHtml(safeBrandName)}.</p>
     <p><b>Servicio de interes:</b> ${escapeHtml(lead?.interest_service || "No indicado")}</p>
     <p><b>Presupuesto indicado:</b> ${escapeHtml(lead?.budget_range || "No indicado")}</p>
     <h3 style="margin: 18px 0 8px;">Resumen de tu solicitud</h3>
@@ -451,7 +453,7 @@ export async function sendClientConfirmationEmail({
     <p style="margin-top: 16px;">Revisaremos la informacion y te contactaremos lo antes posible.</p>
     <hr/>
     <p style="font-size: 13px; color: #444;">
-      TMedia Global<br/>
+      ${escapeHtml(safeBrandName)}<br/>
       Referencia de conversacion: ${escapeHtml(conversation_id || lead?.conversation_id || "")}
     </p>
   </div>`;
@@ -459,7 +461,7 @@ export async function sendClientConfirmationEmail({
   const text = `
 Gracias${lead?.name ? ", " + lead.name : ""}
 
-Hemos recibido correctamente tu solicitud en TMedia Global.
+Hemos recibido correctamente tu solicitud en ${safeBrandName}.
 
 Servicio de interes: ${lead?.interest_service || "No indicado"}
 Presupuesto indicado: ${lead?.budget_range || "No indicado"}

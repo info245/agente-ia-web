@@ -699,10 +699,13 @@ function isCaptureFieldEnabled(appConfig = null, field) {
 }
 
 function getNotificationRecipients(appConfig = null) {
-  return String(appConfig?.notifications?.email_to || "")
+  const recipients = String(appConfig?.notifications?.email_to || "")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+  const supportEmail = String(appConfig?.contact?.support_email || "").trim();
+  if (supportEmail && !recipients.includes(supportEmail)) recipients.push(supportEmail);
+  return recipients;
 }
 
 function hasConfiguredWhatsApp(appConfig = null) {
@@ -1907,6 +1910,105 @@ function isAuthorizedIntegrationRequest(req) {
   return String(headerSecret || "") === String(INTEGRATIONS_SECRET);
 }
 
+function firstPayloadValue(payload = {}, aliases = []) {
+  for (const alias of aliases) {
+    if (payload?.[alias] !== undefined && payload?.[alias] !== null && payload?.[alias] !== "") {
+      return payload[alias];
+    }
+  }
+  return "";
+}
+
+function normalizeExternalPayload(rawPayload = {}) {
+  const payload = rawPayload && typeof rawPayload === "object" ? { ...rawPayload } : {};
+  const fieldData = Array.isArray(payload.field_data)
+    ? payload.field_data
+    : Array.isArray(payload.leadgen_data?.field_data)
+      ? payload.leadgen_data.field_data
+      : [];
+
+  for (const field of fieldData) {
+    const key = normalizeCustomFieldKey(field?.name || field?.key || field?.label || "");
+    if (!key || payload[key] !== undefined) continue;
+    const values = Array.isArray(field?.values) ? field.values : [field?.value];
+    payload[key] = values.filter((item) => item !== undefined && item !== null).join(", ");
+  }
+
+  return payload;
+}
+
+function normalizeSourcePlatform(value = "") {
+  const clean = normalizeText(value || "");
+  if (["fb", "facebook", "meta", "meta_ads", "facebook_ads", "facebook_lead_ads"].includes(clean)) {
+    return "meta_ads";
+  }
+  if (["ig", "instagram", "instagram_ads"].includes(clean)) return "meta_ads";
+  if (["google", "google_ads", "adwords"].includes(clean)) return "google_ads";
+  return norm(value || "external_form") || "external_form";
+}
+
+function buildExternalLeadCustomFields(payload = {}) {
+  const reservedKeys = new Set([
+    "account_id",
+    "account_slug",
+    "account",
+    "secret",
+    "name",
+    "full_name",
+    "nombre",
+    "email",
+    "correo",
+    "phone",
+    "telefono",
+    "teléfono",
+    "p",
+    "interest_service",
+    "service",
+    "servicio",
+    "urgency",
+    "budget_range",
+    "budget",
+    "presupuesto",
+    "main_goal",
+    "objetivo",
+    "current_situation",
+    "situacion_actual",
+    "pain_points",
+    "business_type",
+    "business_activity",
+    "company_name",
+    "preferred_contact_channel",
+    "contact_channel",
+    "source_platform",
+    "platform",
+    "source_campaign",
+    "campaign",
+    "campaign_name",
+    "source_form_name",
+    "form_name",
+    "source_ad_name",
+    "ad_name",
+    "source_adset_name",
+    "adset_name",
+    "external_user_id",
+    "lead_id",
+    "leadgen_id",
+    "l",
+    "custom_fields",
+    "field_data",
+    "leadgen_data",
+  ]);
+  const output = sanitizeCustomFieldsPayload(payload.custom_fields || {});
+  for (const [key, value] of Object.entries(payload)) {
+    const cleanKey = normalizeCustomFieldKey(key);
+    if (!cleanKey || reservedKeys.has(cleanKey) || value === undefined || value === null || value === "") continue;
+    if (typeof value === "object") continue;
+    const cleanValue = normalizeCustomFieldValue(value, {});
+    if (cleanValue !== null && output[cleanKey] === undefined) output[cleanKey] = cleanValue;
+  }
+  return output;
+}
+
 function buildExternalLeadSummary(payload = {}) {
   const parts = [];
   if (payload?.interest_service) parts.push(`interesado en ${payload.interest_service}`);
@@ -1917,15 +2019,16 @@ function buildExternalLeadSummary(payload = {}) {
   return parts.length ? parts.join(" | ") : "Lead importado desde formulario externo.";
 }
 
-function buildExternalLeadIntroMessage(lead = {}) {
+function buildExternalLeadIntroMessage(lead = {}, brandName = "TMedia Global") {
   const safeName = getSafeLeadName(lead);
   const service = norm(lead?.interest_service) || "nuestros servicios";
   const goal = norm(lead?.main_goal);
+  const safeBrandName = norm(brandName) || "nuestro equipo";
 
   return [
     safeName
-      ? `Hola ${safeName}, hemos recibido tu solicitud en TMedia Global.`
-      : "Hola, hemos recibido tu solicitud en TMedia Global.",
+      ? `Hola ${safeName}, hemos recibido tu solicitud en ${safeBrandName}.`
+      : `Hola, hemos recibido tu solicitud en ${safeBrandName}.`,
     goal
       ? `Vemos que te interesa ${service} y que tu objetivo va orientado a ${goal}.`
       : `Vemos que te interesa ${service}.`,
@@ -4569,6 +4672,7 @@ ${ragContext}
         lead: latestLead,
         conversation_id: currentConversationId,
         emailConfig: appConfig?.integrations?.email || null,
+        brandName: appConfig?.brand?.name || "TMedia Global",
       });
 
       clientConfirmationSent.set(currentConversationId, true);
@@ -6535,32 +6639,60 @@ app.post("/api/integrations/external-lead", async (req, res) => {
 
     const account = await resolveExplicitRequestAccount(req);
     const accountConfig = await getAppConfig({ accountId: account.id }).catch(() => null);
-    const payload = req.body || {};
-    const sourcePlatform = norm(payload.source_platform || payload.platform || "external_form");
-    const sourceCampaign = norm(payload.source_campaign || payload.campaign || "");
-    const sourceFormName = norm(payload.source_form_name || payload.form_name || "");
-    const sourceAdName = norm(payload.source_ad_name || payload.ad_name || "");
-    const sourceAdsetName = norm(payload.source_adset_name || payload.adset_name || "");
-    const customFields = sanitizeCustomFieldsPayload(payload.custom_fields || {});
+    const payload = normalizeExternalPayload(req.body || {});
+    const brandName = norm(accountConfig?.brand?.name || account.name || "TMedia Global");
+    const sourcePlatform = normalizeSourcePlatform(
+      firstPayloadValue(payload, ["source_platform", "platform", "source", "publisher_platform"])
+    );
+    const sourceCampaign = norm(
+      firstPayloadValue(payload, ["source_campaign", "campaign", "campaign_name", "campaignName"])
+    );
+    const sourceFormName = norm(
+      firstPayloadValue(payload, ["source_form_name", "form_name", "form", "formName"])
+    );
+    const sourceAdName = norm(firstPayloadValue(payload, ["source_ad_name", "ad_name", "ad", "adName"]));
+    const sourceAdsetName = norm(
+      firstPayloadValue(payload, ["source_adset_name", "adset_name", "adset", "adsetName"])
+    );
+    const customFields = buildExternalLeadCustomFields(payload);
     const preferredContactChannel = normalizeText(
-      payload.preferred_contact_channel || payload.contact_channel || ""
+      firstPayloadValue(payload, [
+        "preferred_contact_channel",
+        "contact_channel",
+        "canal_preferido",
+        "canal",
+        "channel",
+      ])
     );
 
     const conversation = await createConversation({
       channel: "lead_form",
-      external_user_id: norm(payload.external_user_id || `${sourcePlatform}:${Date.now()}`),
+      external_user_id: norm(
+        firstPayloadValue(payload, ["external_user_id", "lead_id", "leadgen_id", "leadgenId", "l"]) ||
+          `${sourcePlatform}:${Date.now()}`
+      ),
       account_id: account.id,
     });
 
     const leadPayload = {
       conversation_id: conversation.id,
-      name: norm(payload.name || ""),
-      email: norm(payload.email || ""),
-      phone: norm(payload.phone || ""),
-      interest_service: norm(payload.interest_service || payload.service || ""),
-      urgency: norm(payload.urgency || ""),
-      budget_range: norm(payload.budget_range || payload.budget || ""),
-      summary: norm(payload.summary || buildExternalLeadSummary(payload)),
+      name: norm(firstPayloadValue(payload, ["name", "full_name", "nombre", "nombre_completo"])),
+      email: norm(firstPayloadValue(payload, ["email", "correo", "correo_electronico"])),
+      phone: norm(firstPayloadValue(payload, ["phone", "telefono", "teléfono", "mobile", "p"])),
+      interest_service: norm(firstPayloadValue(payload, ["interest_service", "service", "servicio"])),
+      urgency: norm(firstPayloadValue(payload, ["urgency", "urgencia"])),
+      budget_range: norm(firstPayloadValue(payload, ["budget_range", "budget", "presupuesto"])),
+      summary: norm(
+        payload.summary ||
+          buildExternalLeadSummary({
+            ...payload,
+            interest_service: firstPayloadValue(payload, ["interest_service", "service", "servicio"]),
+            business_activity: firstPayloadValue(payload, ["business_activity", "actividad"]),
+            main_goal: firstPayloadValue(payload, ["main_goal", "objetivo", "goal"]),
+            budget_range: firstPayloadValue(payload, ["budget_range", "budget", "presupuesto"]),
+            source_platform: sourcePlatform,
+          })
+      ),
       lead_score: Number.isFinite(Number(payload.lead_score))
         ? Number(payload.lead_score)
         : 0,
@@ -6574,12 +6706,14 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         normalizeText(payload.consent) === "true"
           ? new Date().toISOString()
           : null),
-      business_type: norm(payload.business_type || ""),
-      business_activity: norm(payload.business_activity || ""),
-      company_name: norm(payload.company_name || ""),
-      main_goal: norm(payload.main_goal || ""),
-      current_situation: norm(payload.current_situation || ""),
-      pain_points: norm(payload.pain_points || ""),
+      business_type: norm(firstPayloadValue(payload, ["business_type", "tipo_negocio"])),
+      business_activity: norm(firstPayloadValue(payload, ["business_activity", "actividad"])),
+      company_name: norm(firstPayloadValue(payload, ["company_name", "empresa", "company"])),
+      main_goal: norm(firstPayloadValue(payload, ["main_goal", "objetivo", "goal"])),
+      current_situation: norm(
+        firstPayloadValue(payload, ["current_situation", "situacion_actual", "situación_actual"])
+      ),
+      pain_points: norm(firstPayloadValue(payload, ["pain_points", "puntos_dolor", "problema"])),
       preferred_contact_channel: preferredContactChannel || null,
       last_intent: norm(payload.last_intent || "external_lead"),
       crm_status: "nuevo",
@@ -6664,20 +6798,41 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       account_id: account.id,
     });
 
+    let internalNotification = null;
     if (payload.notify_internal !== false && accountConfig?.notifications?.notify_new_lead !== false) {
-      await sendLeadEmail({
+      const recipients = getNotificationRecipients(accountConfig);
+      internalNotification = await sendLeadEmail({
         lead: {
           ...lead,
+          ...leadPayload,
           summary: leadPayload.summary,
           custom_fields: customFields,
         },
         conversation_id: conversation.id,
         type: "new",
         emailConfig: accountConfig?.integrations?.email || null,
-        recipients: getNotificationRecipients(accountConfig),
-      }).catch((error) => {
-        console.log("external lead internal email error", error.message);
-      });
+        recipients: recipients.length ? recipients : null,
+      })
+        .then((result) => ({
+          ok: Boolean(result?.ok),
+          skipped: Boolean(result?.skipped),
+          reason: result?.reason || null,
+          message_id: result?.messageId || null,
+          recipients,
+        }))
+        .catch(async (error) => {
+          const errorPayload = { ok: false, error: error.message, recipients };
+          console.log("external lead internal email error", error.message);
+          await trackConversationEvent({
+            conversation_id: conversation.id,
+            event_type: "external_lead_notification_error",
+            channel: "email",
+            external_user_id: conversation.external_user_id,
+            account_id: account.id,
+            payload: errorPayload,
+          }).catch(() => {});
+          return errorPayload;
+        });
     }
 
     const autoStart = normalizeText(payload.auto_start || payload.auto_contact || "");
@@ -6697,10 +6852,13 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       });
 
       if (phone) {
-        const introMessage = buildExternalLeadIntroMessage({
-          ...lead,
-          ...leadPayload,
-        });
+        const introMessage = buildExternalLeadIntroMessage(
+          {
+            ...lead,
+            ...leadPayload,
+          },
+          brandName
+        );
         await sendWhatsAppText(phone, introMessage);
         await saveMessage({
           conversation_id: conversation.id,
@@ -6729,6 +6887,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         },
         conversation_id: conversation.id,
         emailConfig: accountConfig?.integrations?.email || null,
+        brandName,
       }).catch((error) => {
         console.log("external lead client email error", error.message);
       });
@@ -6751,6 +6910,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       conversation_id: conversation.id,
       lead_id: lead.id,
       auto_contact: autoContact,
+      notification: internalNotification,
     });
   } catch (error) {
     console.log("external lead intake error", error);
