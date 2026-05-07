@@ -384,11 +384,11 @@ async function resolveRequestAccount(req) {
 }
 
 function getExplicitRequestAccountInput(req) {
+  const body = req.body && typeof req.body === "object" ? req.body : {};
   return (
     req.query?.account_id ||
     req.query?.account_slug ||
-    req.body?.account_id ||
-    req.body?.account_slug ||
+    firstPayloadValue(body, ["account_id", "account_slug"]) ||
     null
   );
 }
@@ -1910,17 +1910,35 @@ function isAuthorizedIntegrationRequest(req) {
   return String(headerSecret || "") === String(INTEGRATIONS_SECRET);
 }
 
+function getPayloadKeyVariants(value = "") {
+  const raw = String(value || "");
+  const trimmed = raw.trim();
+  const normalized = normalizeCustomFieldKey(trimmed);
+  return [raw, trimmed, normalized].filter(Boolean);
+}
+
 function firstPayloadValue(payload = {}, aliases = []) {
   for (const alias of aliases) {
-    if (payload?.[alias] !== undefined && payload?.[alias] !== null && payload?.[alias] !== "") {
-      return payload[alias];
+    for (const key of getPayloadKeyVariants(alias)) {
+      if (payload?.[key] !== undefined && payload?.[key] !== null && payload?.[key] !== "") {
+        return payload[key];
+      }
     }
   }
   return "";
 }
 
 function normalizeExternalPayload(rawPayload = {}) {
-  const payload = rawPayload && typeof rawPayload === "object" ? { ...rawPayload } : {};
+  const payload = {};
+  if (rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)) {
+    for (const [key, value] of Object.entries(rawPayload)) {
+      payload[key] = value;
+      const trimmedKey = String(key || "").trim();
+      if (trimmedKey && payload[trimmedKey] === undefined) payload[trimmedKey] = value;
+      const normalizedKey = normalizeCustomFieldKey(trimmedKey);
+      if (normalizedKey && payload[normalizedKey] === undefined) payload[normalizedKey] = value;
+    }
+  }
   const fieldData = Array.isArray(payload.field_data)
     ? payload.field_data
     : Array.isArray(payload.leadgen_data?.field_data)
