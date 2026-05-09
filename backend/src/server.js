@@ -2037,6 +2037,77 @@ function buildExternalLeadSummary(payload = {}) {
   return parts.length ? parts.join(" | ") : "Lead importado desde formulario externo.";
 }
 
+const EXTERNAL_LEAD_ALIASES = {
+  business_activity: [
+    "business_activity",
+    "actividad",
+    "actividad_empresa",
+    "sector",
+    "tipo_de_negocio",
+    "tipo_negocio",
+    "company_name",
+    "empresa",
+    "company",
+  ],
+  budget_range: [
+    "budget_range",
+    "budget",
+    "presupuesto",
+    "presupuesto_estimado",
+    "inversion",
+    "inversión",
+    "cuanto_inviertes",
+    "cuánto_inviertes",
+    "actualmente_estoy_gastando",
+    "actualmente_estoy_invirtiendo",
+  ],
+  main_goal: [
+    "main_goal",
+    "objetivo",
+    "goal",
+    "objetivo_principal",
+    "que_quieres_mejorar",
+    "qué_quieres_mejorar",
+    "cual_es_tu_objetivo_seo",
+    "cuál_es_tu_objetivo_seo",
+    "que_objetivo_tienes",
+    "qué_objetivo_tienes",
+  ],
+  current_situation: [
+    "current_situation",
+    "situacion_actual",
+    "situación_actual",
+    "cual_es_tu_situacion_actual",
+    "cuál_es_tu_situación_actual",
+    "actualmente",
+    "actualmente_seo",
+    "estado_actual",
+  ],
+  pain_points: [
+    "pain_points",
+    "puntos_dolor",
+    "problema",
+    "problema_principal",
+    "que_esta_pasando_con_tus_campanas",
+    "qué_está_pasando_con_tus_campañas",
+    "cual_de_estos_problemas_se_parece_mas_a_tu_situacion",
+    "cuál_de_estos_problemas_se_parece_más_a_tu_situación",
+    "que_te_esta_fallando",
+    "qué_te_está_fallando",
+  ],
+  internal_notes: [
+    "internal_notes",
+    "notas",
+    "comentarios",
+    "mensaje",
+    "web",
+    "website",
+    "url",
+    "si_quieres_que_revise_tu_web_pegame_tu_web_aqui",
+    "si_quieres_que_revise_tu_web,_pegame_tu_web_aqui",
+  ],
+};
+
 function buildExternalLeadIntroMessage(lead = {}, brandName = "TMedia Global") {
   const safeName = getSafeLeadName(lead);
   const service = norm(lead?.interest_service) || "nuestros servicios";
@@ -6673,6 +6744,12 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       firstPayloadValue(payload, ["source_adset_name", "adset_name", "adset", "adsetName"])
     );
     const customFields = buildExternalLeadCustomFields(payload);
+    const businessActivity = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.business_activity));
+    const budgetRange = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.budget_range));
+    const mainGoal = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.main_goal));
+    const currentSituation = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.current_situation));
+    const painPoints = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.pain_points));
+    const internalNotes = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.internal_notes));
     const preferredContactChannel = normalizeText(
       firstPayloadValue(payload, [
         "preferred_contact_channel",
@@ -6699,15 +6776,15 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       phone: norm(firstPayloadValue(payload, ["phone", "telefono", "teléfono", "mobile", "p"])),
       interest_service: norm(firstPayloadValue(payload, ["interest_service", "service", "servicio"])),
       urgency: norm(firstPayloadValue(payload, ["urgency", "urgencia"])),
-      budget_range: norm(firstPayloadValue(payload, ["budget_range", "budget", "presupuesto"])),
+      budget_range: budgetRange,
       summary: norm(
         payload.summary ||
           buildExternalLeadSummary({
             ...payload,
             interest_service: firstPayloadValue(payload, ["interest_service", "service", "servicio"]),
-            business_activity: firstPayloadValue(payload, ["business_activity", "actividad"]),
-            main_goal: firstPayloadValue(payload, ["main_goal", "objetivo", "goal"]),
-            budget_range: firstPayloadValue(payload, ["budget_range", "budget", "presupuesto"]),
+            business_activity: businessActivity,
+            main_goal: mainGoal,
+            budget_range: budgetRange,
             source_platform: sourcePlatform,
           })
       ),
@@ -6725,13 +6802,11 @@ app.post("/api/integrations/external-lead", async (req, res) => {
           ? new Date().toISOString()
           : null),
       business_type: norm(firstPayloadValue(payload, ["business_type", "tipo_negocio"])),
-      business_activity: norm(firstPayloadValue(payload, ["business_activity", "actividad"])),
+      business_activity: businessActivity,
       company_name: norm(firstPayloadValue(payload, ["company_name", "empresa", "company"])),
-      main_goal: norm(firstPayloadValue(payload, ["main_goal", "objetivo", "goal"])),
-      current_situation: norm(
-        firstPayloadValue(payload, ["current_situation", "situacion_actual", "situación_actual"])
-      ),
-      pain_points: norm(firstPayloadValue(payload, ["pain_points", "puntos_dolor", "problema"])),
+      main_goal: mainGoal,
+      current_situation: currentSituation,
+      pain_points: painPoints,
       preferred_contact_channel: preferredContactChannel || null,
       last_intent: norm(payload.last_intent || "external_lead"),
       crm_status: "nuevo",
@@ -6774,6 +6849,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         `Lead importado desde ${sourcePlatform}`,
         sourceCampaign ? `CampaÃ±a: ${sourceCampaign}` : null,
         sourceFormName ? `Formulario: ${sourceFormName}` : null,
+        internalNotes ? `Notas: ${internalNotes}` : null,
       ].filter(Boolean).join(" | "),
     }).catch((error) => {
       console.log("external lead crm patch error", error.message);

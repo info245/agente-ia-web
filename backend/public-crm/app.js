@@ -33,6 +33,42 @@ const MESSAGE_TEMPLATE_ORDER = [
   "recovery_email",
 ];
 const AUTOMATION_FLOW_ORDER = ["lead_recovery", "quote_followup"];
+
+function repairMojibake(value) {
+  if (value === undefined || value === null) return "";
+  let text = String(value);
+  const replacements = [
+    ["ÃƒÂ¡", "á"],
+    ["ÃƒÂ©", "é"],
+    ["ÃƒÂ­", "í"],
+    ["ÃƒÂ³", "ó"],
+    ["ÃƒÂº", "ú"],
+    ["ÃƒÂ±", "ñ"],
+    ["Ã¢â€šÂ¬", "€"],
+    ["â‚¬", "€"],
+    ["Ã¡", "á"],
+    ["Ã©", "é"],
+    ["Ã­", "í"],
+    ["Ã³", "ó"],
+    ["Ãº", "ú"],
+    ["Ã±", "ñ"],
+    ["Ã", "Á"],
+    ["Ã‰", "É"],
+    ["Ã", "Í"],
+    ["Ã“", "Ó"],
+    ["Ãš", "Ú"],
+    ["Ã‘", "Ñ"],
+    ["Â¿", "¿"],
+    ["Â¡", "¡"],
+    ["Â·", "·"],
+  ];
+
+  for (const [from, to] of replacements) {
+    text = text.replaceAll(from, to);
+  }
+  return text;
+}
+
 const SECTOR_PRESETS = {
   clinic: {
     label: "Clinica",
@@ -6654,21 +6690,21 @@ function renderQuote(quote) {
   const content = quote?.content_json || {};
   state.quoteItems = Array.isArray(content.items) && content.items.length
     ? content.items.map((item) => ({
-        concept: item?.concept || "",
+        concept: repairMojibake(item?.concept || ""),
         quantity: Number(item?.quantity || 1),
         unit_price: Number(item?.unit_price || 0),
       }))
     : [];
 
-  el.quoteTitle.value = quote?.title || "";
+  el.quoteTitle.value = repairMojibake(quote?.title || "");
   el.quoteCurrency.value = quote?.currency || "EUR";
   el.quoteBillingType.value = content.billing_type || "monthly";
-  el.quoteBillingLabel.value = content.billing_label || "";
+  el.quoteBillingLabel.value = repairMojibake(content.billing_label || "");
   el.quoteTaxRate.value = content.tax_rate ?? 21;
-  el.quoteSummary.value = content.summary || "";
-  el.quoteScope.value = content.scope || "";
-  el.quoteBody.value = content.body || "";
-  el.quoteAssumptions.value = content.assumptions || "";
+  el.quoteSummary.value = repairMojibake(content.summary || "");
+  el.quoteScope.value = repairMojibake(content.scope || "");
+  el.quoteBody.value = repairMojibake(content.body || "");
+  el.quoteAssumptions.value = repairMojibake(content.assumptions || "");
   renderQuoteItems();
   updateQuoteTotals();
 }
@@ -7560,15 +7596,15 @@ function getBillingTypeLabel(value) {
 }
 
 function buildAccountScopedQuoteSuggestion(lead, serviceFacts = null) {
-  const service = lead?.interest_service || "servicio de marketing";
-  const business = lead?.business_activity || lead?.business_type || "tu proyecto";
-  const goal = lead?.main_goal || "mejorar resultados";
+  const service = repairMojibake(lead?.interest_service || "servicio de marketing");
+  const business = repairMojibake(lead?.business_activity || lead?.business_type || "tu proyecto");
+  const goal = repairMojibake(lead?.main_goal || "mejorar resultados");
   const items = buildAccountScopedServiceItems(service, serviceFacts);
   const hasConfiguredPrice = items.some((item) => Number(item?.unit_price || 0) > 0);
   const billingType = inferBillingType(service);
   const billingLabel = getBillingTypeLabel(billingType);
   const includedBase = serviceFacts?.description
-    ? serviceFacts.description
+    ? repairMojibake(serviceFacts.description)
     : [
         "Analisis inicial del negocio y del punto de partida.",
         `Definicion de estrategia para ${service}.`,
@@ -7613,14 +7649,14 @@ async function autofillQuote() {
   }
 
   const draft = buildAccountScopedQuoteSuggestion(state.selectedLead, serviceFacts);
-  el.quoteTitle.value = draft.title;
+  el.quoteTitle.value = repairMojibake(draft.title);
   el.quoteBillingType.value = draft.billing_type;
-  el.quoteBillingLabel.value = draft.billing_label;
+  el.quoteBillingLabel.value = repairMojibake(draft.billing_label);
   el.quoteTaxRate.value = draft.tax_rate;
-  el.quoteSummary.value = draft.summary;
-  el.quoteScope.value = draft.scope;
-  el.quoteBody.value = draft.body;
-  el.quoteAssumptions.value = draft.assumptions;
+  el.quoteSummary.value = repairMojibake(draft.summary);
+  el.quoteScope.value = repairMojibake(draft.scope);
+  el.quoteBody.value = repairMojibake(draft.body);
+  el.quoteAssumptions.value = repairMojibake(draft.assumptions);
   state.quoteItems = draft.items.map((item) => ({ ...item }));
   renderQuoteItems();
   updateQuoteTotals();
@@ -7718,18 +7754,21 @@ async function saveQuote() {
 
   try {
     const payload = {
-      title: el.quoteTitle.value,
+      title: repairMojibake(el.quoteTitle.value),
       subtotal: calculateQuoteTotals().subtotal,
       tax: calculateQuoteTotals().tax,
       total: calculateQuoteTotals().total,
       currency: el.quoteCurrency.value || "EUR",
       billing_type: el.quoteBillingType.value || "monthly",
-      billing_label: el.quoteBillingLabel.value,
-      summary: el.quoteSummary.value,
-      scope: el.quoteScope.value,
-      body: el.quoteBody.value,
-      assumptions: el.quoteAssumptions.value,
-      items: state.quoteItems,
+      billing_label: repairMojibake(el.quoteBillingLabel.value),
+      summary: repairMojibake(el.quoteSummary.value),
+      scope: repairMojibake(el.quoteScope.value),
+      body: repairMojibake(el.quoteBody.value),
+      assumptions: repairMojibake(el.quoteAssumptions.value),
+      items: state.quoteItems.map((item) => ({
+        ...item,
+        concept: repairMojibake(item?.concept || ""),
+      })),
       tax_rate: calculateQuoteTotals().taxRate,
       status: "draft",
     };

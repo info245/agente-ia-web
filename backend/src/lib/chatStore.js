@@ -11,6 +11,36 @@ function cleanJson(value) {
   return value;
 }
 
+function cleanCustomFields(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const output = {};
+
+  for (const [key, rawValue] of Object.entries(value)) {
+    const cleanKey = clean(key)
+      ?.toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (!cleanKey) continue;
+
+    if (rawValue === null || rawValue === undefined || rawValue === "") continue;
+    if (typeof rawValue === "boolean" || typeof rawValue === "number") {
+      output[cleanKey] = rawValue;
+      continue;
+    }
+    if (Array.isArray(rawValue)) {
+      const values = rawValue.map((item) => clean(item)).filter(Boolean);
+      if (values.length) output[cleanKey] = values;
+      continue;
+    }
+    if (typeof rawValue === "object") continue;
+
+    const cleanValue = clean(rawValue);
+    if (cleanValue) output[cleanKey] = cleanValue;
+  }
+
+  return output;
+}
+
 function cleanQuoteItems(value) {
   if (!Array.isArray(value)) return [];
 
@@ -882,12 +912,16 @@ export async function updateLeadCrmFields(leadId, patch = {}, { accountId = null
   assignClean("next_action");
   assignClean("quote_status");
   assignClean("source_platform");
-  assignClean("source_campaign");
-  assignClean("source_form_name");
-  assignClean("source_ad_name");
-  assignClean("source_adset_name");
+    assignClean("source_campaign");
+    assignClean("source_form_name");
+    assignClean("source_ad_name");
+    assignClean("source_adset_name");
 
-  if (has("follow_up_at")) {
+    if (has("custom_fields")) {
+      payload.custom_fields = cleanCustomFields(patch.custom_fields) || {};
+    }
+
+    if (has("follow_up_at")) {
     payload.follow_up_at = patch.follow_up_at || null;
   }
 
@@ -1261,8 +1295,9 @@ export async function upsertLeadFromConversation(lead = {}) {
     company_name: clean(lead.company_name),
     business_activity: clean(lead.business_activity),
     current_step: clean(lead.current_step),
-    last_question: clean(lead.last_question),
-    source_platform: clean(lead.source_platform),
+      last_question: clean(lead.last_question),
+      custom_fields: cleanCustomFields(lead.custom_fields),
+      source_platform: clean(lead.source_platform),
       source_campaign: clean(lead.source_campaign),
       source_form_name: clean(lead.source_form_name),
       source_ad_name: clean(lead.source_ad_name),

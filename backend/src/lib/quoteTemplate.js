@@ -7,6 +7,45 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function repairMojibake(value) {
+  if (value === undefined || value === null) return value;
+  let text = String(value);
+  const replacements = [
+    ["ÃƒÂ¡", "á"],
+    ["ÃƒÂ©", "é"],
+    ["ÃƒÂ­", "í"],
+    ["ÃƒÂ³", "ó"],
+    ["ÃƒÂº", "ú"],
+    ["ÃƒÂ±", "ñ"],
+    ["Ã¢â€šÂ¬", "€"],
+    ["â‚¬", "€"],
+    ["Ã¡", "á"],
+    ["Ã©", "é"],
+    ["Ã­", "í"],
+    ["Ã³", "ó"],
+    ["Ãº", "ú"],
+    ["Ã±", "ñ"],
+    ["Ã", "Á"],
+    ["Ã‰", "É"],
+    ["Ã", "Í"],
+    ["Ã“", "Ó"],
+    ["Ãš", "Ú"],
+    ["Ã‘", "Ñ"],
+    ["Â¿", "¿"],
+    ["Â¡", "¡"],
+    ["Â·", "·"],
+  ];
+
+  for (const [from, to] of replacements) {
+    text = text.replaceAll(from, to);
+  }
+  return text;
+}
+
+function escapeCleanHtml(value) {
+  return escapeHtml(repairMojibake(value));
+}
+
 function resolveColor(value = "", fallback = "#ff5d6d") {
   const color = String(value || "").trim();
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(color) ? color : fallback;
@@ -73,7 +112,7 @@ export function renderQuotePreviewHtml({
 
           return `
             <tr>
-              <td>${escapeHtml(item?.concept || "-")}</td>
+              <td>${escapeCleanHtml(item?.concept || "-")}</td>
               <td class="num">${quantity}</td>
               <td class="num">${formatMoney(unitPrice, currency)}</td>
               <td class="num">${formatMoney(lineTotal, currency)}</td>
@@ -96,7 +135,7 @@ export function renderQuotePreviewHtml({
 
           return `
             <article class="mobile-item">
-              <div class="mobile-item-title">${escapeHtml(item?.concept || "-")}</div>
+              <div class="mobile-item-title">${escapeCleanHtml(item?.concept || "-")}</div>
               <div class="mobile-item-grid">
                 <div class="mobile-item-cell">
                   <span>Cantidad</span>
@@ -592,8 +631,8 @@ export function renderQuotePreviewHtml({
         <div class="brand-box">
           ${logoUrl ? `<img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(brandName)}" />` : ""}
           <div class="eyebrow">${escapeHtml(brandName)}</div>
-          <h1>${escapeHtml(quote?.title || "Propuesta comercial")}</h1>
-          <div class="copy">${escapeHtml(content.summary || "Propuesta personalizada preparada a partir de la informacion recogida en el CRM.")}</div>
+          <h1>${escapeCleanHtml(quote?.title || "Propuesta comercial")}</h1>
+          <div class="copy">${escapeCleanHtml(content.summary || "Propuesta personalizada preparada a partir de la informacion recogida en el CRM.")}</div>
         </div>
         <div class="status">${escapeHtml(quote?.status || "draft")}</div>
       </div>
@@ -601,11 +640,11 @@ export function renderQuotePreviewHtml({
       <div class="hero-grid">
         <div class="hero-card">
           <strong>Cliente</strong>
-          <div class="hero-card-value">${escapeHtml(leadName)}</div>
+          <div class="hero-card-value">${escapeCleanHtml(leadName)}</div>
         </div>
         <div class="hero-card">
           <strong>Servicio</strong>
-          <div class="hero-card-value">${escapeHtml(lead?.interest_service || "-")}</div>
+          <div class="hero-card-value">${escapeCleanHtml(lead?.interest_service || "-")}</div>
         </div>
         <div class="hero-card">
           <strong>Contacto</strong>
@@ -616,7 +655,7 @@ export function renderQuotePreviewHtml({
 
     <section class="section">
       <h2>Alcance</h2>
-      <div class="copy">${escapeHtml(content.scope || quote?.title || "")}</div>
+      <div class="copy">${escapeCleanHtml(content.scope || quote?.title || "")}</div>
     </section>
 
     <section class="section">
@@ -661,7 +700,7 @@ export function renderQuotePreviewHtml({
 
     <section class="section">
       <h2>Mensaje de la propuesta</h2>
-      <div class="copy">${escapeHtml(content.body || "")}</div>
+      <div class="copy">${escapeCleanHtml(content.body || "")}</div>
       <div class="cta-box">
         <p>${escapeHtml(
           ctaIntro ||
