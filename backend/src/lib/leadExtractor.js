@@ -185,6 +185,22 @@ const NAME_STOPWORDS = new Set([
   "dedicamos",
 ]);
 
+const GENERIC_COMPANY_RESPONSES = new Set([
+  "hola",
+  "buenas",
+  "buenos dias",
+  "buenas tardes",
+  "buenas noches",
+  "ok",
+  "vale",
+  "gracias",
+  "perfecto",
+  "genial",
+  "no",
+  "si",
+  "sÃ­",
+]);
+
 export function isGenericService(service) {
   return GENERIC_SERVICES.has(String(service || ""));
 }
@@ -710,6 +726,8 @@ function extractCompanyName(text = "") {
   const t = normalizeText(raw);
 
   if (!raw) return null;
+  if (GENERIC_COMPANY_RESPONSES.has(t)) return null;
+  if (isNegativeResponse(raw) || isUnknownResponse(raw)) return null;
   if (isLikelyQuestion(raw)) return null;
   if (extractEmail(raw) || extractPhone(raw)) return null;
   if (hasCurrentSituationSignals(raw) || hasPainPointSignals(raw)) return null;

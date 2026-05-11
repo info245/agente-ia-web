@@ -945,7 +945,15 @@ function looksLikeExplicitBudgetMessage(text = "", lead = null) {
   if (raw.replace(/\D/g, "").length >= 8) return false;
 
   if (/^\d{2,6}$/.test(raw)) {
-    return normalizeText(lead?.current_step || "") === "ask_budget";
+    const lastQuestion = normalizeText(lead?.last_question || "");
+    return (
+      normalizeText(lead?.current_step || "") === "ask_budget" ||
+      lastQuestion.includes("presupuesto") ||
+      lastQuestion.includes("inversion") ||
+      lastQuestion.includes("inversión") ||
+      lastQuestion.includes("mensual") ||
+      lastQuestion.includes("al mes")
+    );
   }
 
   return (
@@ -963,20 +971,20 @@ function looksLikeExplicitBudgetMessage(text = "", lead = null) {
   );
 }
 
-function normalizeBudget(text) {
+function normalizeBudget(text, lead = null) {
   const t = String(text || "").trim();
-  if (!looksLikeExplicitBudgetMessage(t, null)) return null;
+  if (!looksLikeExplicitBudgetMessage(t, lead)) return null;
 
   const m1 = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(â‚¬|eur)\b/i);
   if (m1) {
     const n = Number(String(m1[1]).replace(/[.,](?=\d{3}\b)/g, ""));
-    if (Number.isFinite(n) && n >= 10) return `${n} â‚¬`;
+    if (Number.isFinite(n) && n >= 10) return `${n} EUR`;
   }
 
   const m2 = t.match(/\b(\d{2,6})\b/);
   if (m2) {
     const n = Number(m2[1]);
-    if (Number.isFinite(n) && n >= 10) return `${n} â‚¬`;
+    if (Number.isFinite(n) && n >= 10) return `${n} EUR`;
   }
 
   return null;
@@ -1016,6 +1024,96 @@ function detectService(text) {
   }
 
   return null;
+}
+
+function inferLeadStepFromAssistantMessage(message = "") {
+  const text = normalizeText(message);
+  if (!text) return null;
+
+  if (
+    text.includes("presupuesto") ||
+    text.includes("inversion") ||
+    text.includes("inversión") ||
+    text.includes("mensual") ||
+    text.includes("al mes")
+  ) {
+    return "ask_budget";
+  }
+
+  if (
+    text.includes("que servicio") ||
+    text.includes("qué servicio") ||
+    text.includes("servicio te interesa") ||
+    text.includes("seo, google ads") ||
+    text.includes("google ads, redes sociales")
+  ) {
+    return "ask_service";
+  }
+
+  return null;
+}
+
+function extractSalesContextFromHistory(messages = [], lead = null) {
+  const patch = {};
+  let lastAssistantMessage = "";
+  const baseLead = lead || {};
+
+  for (const message of Array.isArray(messages) ? messages : []) {
+    const role = String(message?.role || "").toLowerCase();
+    const content = String(message?.content || "").trim();
+    if (!content) continue;
+
+    if (role === "assistant") {
+      lastAssistantMessage = content;
+      continue;
+    }
+
+    if (role !== "user") continue;
+
+    const inferredStep = inferLeadStepFromAssistantMessage(lastAssistantMessage);
+    if (!inferredStep) continue;
+
+    const contextLead = {
+      ...baseLead,
+      ...patch,
+      current_step: inferredStep,
+      last_question: lastAssistantMessage,
+    };
+    const extracted = extractLeadDataFromText(content, contextLead);
+
+    if (
+      inferredStep === "ask_service" &&
+      !normalizeText(baseLead?.interest_service || patch.interest_service || "") &&
+      extracted?.interest_service
+    ) {
+      patch.interest_service = extracted.interest_service;
+    }
+
+    if (
+      inferredStep === "ask_budget" &&
+      !normalizeText(baseLead?.budget_range || patch.budget_range || "")
+    ) {
+      const budget =
+        normalizeBudget(content, contextLead) ||
+        (looksLikeExplicitBudgetMessage(content, contextLead)
+          ? extracted?.budget_range
+          : null);
+      if (budget) patch.budget_range = budget;
+    }
+  }
+
+  let score = Number(baseLead?.lead_score || 0);
+  if (patch.interest_service && !normalizeText(baseLead?.interest_service || "")) {
+    score += 15;
+  }
+  if (patch.budget_range && !normalizeText(baseLead?.budget_range || "")) {
+    score += 10;
+  }
+  if (score > Number(baseLead?.lead_score || 0)) {
+    patch.lead_score = Math.min(100, score);
+  }
+
+  return patch;
 }
 
 function detectBusinessType(text) {
@@ -1170,7 +1268,27 @@ function detectPainPoints(text) {
 
 function detectCompanyName(text) {
   const raw = norm(text);
+  const t = normalizeText(text);
   if (!raw) return null;
+  if (
+    [
+      "hola",
+      "buenas",
+      "buenos dias",
+      "buenas tardes",
+      "buenas noches",
+      "ok",
+      "vale",
+      "gracias",
+      "perfecto",
+      "genial",
+      "no",
+      "si",
+      "sí",
+    ].includes(t)
+  ) {
+    return null;
+  }
   if (isUserQuestion(text)) return null;
   if (detectEmail(text) || detectPhone(text)) return null;
   if (detectService(text)) return null;
@@ -3612,7 +3730,7 @@ function applyFlowPatch(
   const detectedEmail = detectEmail(text);
   const detectedPhone = detectPhone(text);
   const detectedService = detectService(text);
-  const detectedBudget = normalizeBudget(text);
+  const detectedBudget = normalizeBudget(text, lead);
   const detectedBusinessType = detectBusinessType(text);
   const detectedBusinessActivity = detectBusinessActivity(text);
   const detectedCurrentSituation = detectCurrentSituation(text);
@@ -4034,23 +4152,32 @@ async function processIncomingMessage({
 
   const history = await getConversationMessages(currentConversationId, 30);
   const leadBefore = await loadLeadForConversation();
+  const historicalSalesContext = extractSalesContextFromHistory(history, leadBefore);
+  const leadContext =
+    Object.keys(historicalSalesContext).length > 0
+      ? mergeLeadData({
+          currentLead: leadBefore || {},
+          extractedLead: historicalSalesContext,
+          lastUserMessage: "",
+        })
+      : leadBefore;
   const leadSignatureBefore = buildLeadSignature(leadBefore || {});
   const whatsappPhone =
     channel === "whatsapp"
       ? normalizeWhatsAppPhone(external_user_id)
       : null;
 
-  const extracted = extractLeadDataFromText(userText, leadBefore);
+  const extracted = extractLeadDataFromText(userText, leadContext);
 
   const incoming = {
     conversation_id: currentConversationId,
     name: extracted?.name ?? null,
     email: extracted?.email ?? null,
-    phone: extracted?.phone ?? whatsappPhone ?? leadBefore?.phone ?? null,
+    phone: extracted?.phone ?? whatsappPhone ?? leadContext?.phone ?? null,
     interest_service: extracted?.interest_service ?? null,
     urgency: extracted?.urgency ?? null,
     budget_range: extracted?.budget_range ?? null,
-    summary: leadBefore?.summary ?? null,
+    summary: leadContext?.summary ?? null,
     lead_score: extracted?.lead_score ?? extracted?.lead_Score ?? null,
     consent: extracted?.consent ?? null,
     consent_at: extracted?.consent_at ?? null,
@@ -4064,34 +4191,32 @@ async function processIncomingMessage({
         extracted?.preferred_contact_channel ??
         (channel === "whatsapp" ? "whatsapp" : null),
       last_intent: extracted?.last_intent ?? null,
-      custom_fields: leadBefore?.custom_fields || {},
-      current_step: leadBefore?.current_step ?? null,
-      last_question: leadBefore?.last_question ?? null,
+      custom_fields: leadContext?.custom_fields || {},
+      current_step: leadContext?.current_step ?? null,
+      last_question: leadContext?.last_question ?? null,
     };
 
-  if (!incoming.budget_range) {
-    const detectedBudget = normalizeBudget(userText);
-    if (detectedBudget) {
-      incoming.budget_range = detectedBudget;
-    }
+  const detectedBudget = normalizeBudget(userText, leadContext);
+  if (detectedBudget) {
+    incoming.budget_range = detectedBudget;
   }
 
   if (
     incoming.budget_range &&
-    !looksLikeExplicitBudgetMessage(userText, leadBefore)
+    !looksLikeExplicitBudgetMessage(userText, leadContext)
   ) {
     incoming.budget_range = null;
   }
 
   const mergedLeadBase = mergeLeadData({
-    currentLead: leadBefore || {},
+    currentLead: leadContext || {},
     extractedLead: incoming,
     lastUserMessage: userText,
   });
 
   const memoryPatch = buildMemoryPatch({
     text: userText,
-    leadBefore,
+    leadBefore: leadContext,
     extracted,
     mergedLead: mergedLeadBase,
   });
@@ -4107,10 +4232,10 @@ async function processIncomingMessage({
     account_id: scopedAccountId,
     conversation_id: currentConversationId,
     business_activity:
-      mergedLead?.business_activity ?? leadBefore?.business_activity ?? null,
-    company_name: mergedLead?.company_name ?? leadBefore?.company_name ?? null,
-    current_step: leadBefore?.current_step ?? null,
-    last_question: leadBefore?.last_question ?? null,
+      mergedLead?.business_activity ?? leadContext?.business_activity ?? null,
+    company_name: mergedLead?.company_name ?? leadContext?.company_name ?? null,
+    current_step: leadContext?.current_step ?? null,
+    last_question: leadContext?.last_question ?? null,
   });
 
   let leadAfter = await loadLeadForConversation();

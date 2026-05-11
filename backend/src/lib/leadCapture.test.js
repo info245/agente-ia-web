@@ -59,6 +59,18 @@ test("does not treat apology words as names in close flow", () => {
   assert.equal(result.name, null);
 });
 
+test("does not treat greetings or negative replies as company names", () => {
+  const greeting = extractLeadDataFromText("hola", {
+    current_step: "ask_company_name",
+  });
+  const negative = extractLeadDataFromText("no", {
+    current_step: "ask_company_name",
+  });
+
+  assert.equal(greeting.company_name, null);
+  assert.equal(negative.company_name, null);
+});
+
 test("does not infer contact channel just because a phone or email appears", () => {
   const phoneResult = extractLeadDataFromText("608339316", {
     current_step: "close_ask_phone",
