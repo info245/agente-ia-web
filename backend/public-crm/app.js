@@ -5039,25 +5039,29 @@ function createAutomationStepItem(step = {}) {
   const channel = step.channel || "whatsapp";
   const templateKey = step.template_key || "";
   const active = step.active !== false;
+  const channelLabel = channel === "email" ? "Email" : "WhatsApp";
 
   item.innerHTML = `
-    <div class="automation-step-head">
-      <strong>Paso automatico</strong>
-      <button type="button" class="service-remove-btn automation-step-remove">Quitar</button>
+    <div class="automation-node-top">
+      <span class="automation-node-icon">${channel === "email" ? "@" : "W"}</span>
+      <div>
+        <strong>${escapeHtml(channelLabel)}</strong>
+        <small>Despues de la espera</small>
+      </div>
+      <button type="button" class="service-remove-btn automation-step-remove" title="Quitar modulo">x</button>
     </div>
-    <div class="automation-step-grid">
-      <label class="automation-step-field">
-        Espera
+    <div class="automation-node-wait">
+      <span>Esperar</span>
+      <div>
         <input type="number" min="0" step="1" data-field="delay_value" value="${escapeHtml(delayValue)}" />
-      </label>
-      <label class="automation-step-field">
-        Unidad
         <select data-field="delay_unit">
           <option value="minutes"${delayUnit === "minutes" ? " selected" : ""}>minutos</option>
           <option value="hours"${delayUnit === "hours" ? " selected" : ""}>horas</option>
           <option value="days"${delayUnit === "days" ? " selected" : ""}>dias</option>
         </select>
-      </label>
+      </div>
+    </div>
+    <div class="automation-node-fields">
       <label class="automation-step-field">
         Canal
         <select data-field="channel">
@@ -5088,12 +5092,13 @@ function createAutomationFlowCard(key, flow = {}) {
   card.className = "automation-flow-card";
   card.dataset.flowKey = key;
   const steps = Array.isArray(flow.steps) && flow.steps.length ? flow.steps : [];
+  const flowLabel = flow.label || key;
 
   card.innerHTML = `
     <div class="automation-flow-head">
       <div class="automation-flow-head-copy">
         <span>Flujo</span>
-        <strong>${escapeHtml(flow.label || key)}</strong>
+        <strong>${escapeHtml(flowLabel)}</strong>
         <p>${escapeHtml(flow.description || "Secuencia automatica para mover la oportunidad sin depender de seguimiento manual.")}</p>
       </div>
       <div class="automation-flow-head-meta">
@@ -5135,13 +5140,78 @@ function createAutomationFlowCard(key, flow = {}) {
   return card;
 }
 
+function createAutomationFlowCanvasCard(key, flow = {}) {
+  const card = document.createElement("article");
+  card.className = "automation-flow-card automation-flow-card-canvas";
+  card.dataset.flowKey = key;
+  const steps = Array.isArray(flow.steps) && flow.steps.length ? flow.steps : [];
+  const flowLabel = flow.label || key;
+
+  card.innerHTML = `
+    <div class="automation-flow-head">
+      <div class="automation-flow-head-copy">
+        <span>Flujo</span>
+        <strong>${escapeHtml(flowLabel)}</strong>
+        <p>${escapeHtml(flow.description || "Secuencia automatica para mover la oportunidad sin depender de seguimiento manual.")}</p>
+      </div>
+      <div class="automation-flow-head-meta">
+        <em>${steps.length} modulo${steps.length === 1 ? "" : "s"}</em>
+        <label class="automation-flow-toggle">
+          <input type="checkbox" data-field="enabled"${flow.enabled !== false ? " checked" : ""} />
+          <span>Activo</span>
+        </label>
+      </div>
+    </div>
+    <div class="automation-flow-fields">
+      <label class="automation-flow-field">
+        Nombre visible
+        <input type="text" data-field="label" value="${escapeHtml(flow.label || "")}" />
+      </label>
+      <label class="automation-flow-field quote-grid-full">
+        Descripcion
+        <textarea rows="3" data-field="description">${escapeHtml(flow.description || "")}</textarea>
+      </label>
+    </div>
+    <div class="automation-canvas">
+      <div class="automation-canvas-head">
+        <div>
+          <strong>Canvas de automatizacion</strong>
+          <p>Modulos ordenados por espera, canal y plantilla.</p>
+        </div>
+        <button type="button" class="crm-secondary-btn automation-add-step-btn">+ Añadir modulo</button>
+      </div>
+      <div class="automation-canvas-track">
+        <div class="automation-start-node">
+          <span>Inicio</span>
+          <strong>${escapeHtml(flowLabel)}</strong>
+          <small>Cuando el lead entra en este flujo</small>
+        </div>
+        <div class="automation-steps-list"></div>
+      </div>
+    </div>
+  `;
+
+  const stepsList = card.querySelector(".automation-steps-list");
+  for (const step of steps) {
+    stepsList?.appendChild(createAutomationStepItem(step));
+  }
+
+  card
+    .querySelector(".automation-add-step-btn")
+    ?.addEventListener("click", () => {
+      stepsList?.appendChild(createAutomationStepItem());
+    });
+
+  return card;
+}
+
 function renderAutomationFlows(flows = {}) {
   if (!el.configAutomationFlowsList) return;
   el.configAutomationFlowsList.innerHTML = "";
 
   for (const key of AUTOMATION_FLOW_ORDER) {
     el.configAutomationFlowsList.appendChild(
-      createAutomationFlowCard(key, flows?.[key] || {})
+      createAutomationFlowCanvasCard(key, flows?.[key] || {})
     );
   }
 }
