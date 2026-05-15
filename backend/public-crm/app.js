@@ -5042,6 +5042,7 @@ function createAutomationStepItem(step = {}) {
   const channelLabel = channel === "email" ? "Email" : "WhatsApp";
 
   item.innerHTML = `
+    <span class="automation-node-handle automation-node-handle-in"></span>
     <div class="automation-node-top">
       <span class="automation-node-icon">${channel === "email" ? "@" : "W"}</span>
       <div>
@@ -5078,6 +5079,7 @@ function createAutomationStepItem(step = {}) {
         <span>Paso activo</span>
       </label>
     </div>
+    <span class="automation-node-handle automation-node-handle-out"></span>
   `;
 
   item
@@ -5180,8 +5182,9 @@ function createAutomationFlowCanvasCard(key, flow = {}) {
         </div>
         <button type="button" class="crm-secondary-btn automation-add-step-btn">+ Añadir modulo</button>
       </div>
-      <div class="automation-canvas-track">
+      <div class="automation-node-layer">
         <div class="automation-start-node">
+          <span class="automation-node-handle automation-node-handle-out"></span>
           <span>Inicio</span>
           <strong>${escapeHtml(flowLabel)}</strong>
           <small>Cuando el lead entra en este flujo</small>

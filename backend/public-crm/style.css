@@ -2066,11 +2066,17 @@ textarea {
   color: var(--accent-dark);
 }
 
-.message-template-grid,
-.automation-flow-list {
+.message-template-grid {
   display: grid;
   gap: 22px;
   grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
+  align-items: start;
+}
+
+.automation-flow-list {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: 1fr;
   align-items: start;
 }
 
@@ -2292,9 +2298,12 @@ textarea {
 .automation-canvas {
   display: grid;
   gap: 16px;
-  padding: 16px;
+  min-height: 430px;
+  padding: 18px;
   border-radius: 22px;
-  background: linear-gradient(180deg, rgba(241, 246, 255, 0.96), rgba(250, 252, 255, 0.98));
+  background:
+    radial-gradient(circle at 1px 1px, rgba(91, 118, 163, 0.28) 1px, transparent 0) 0 0 / 22px 22px,
+    linear-gradient(180deg, rgba(241, 246, 255, 0.96), rgba(250, 252, 255, 0.98));
   border: 1px solid rgba(191, 208, 234, 0.78);
   overflow: hidden;
 }
@@ -2319,18 +2328,20 @@ textarea {
   line-height: 1.45;
 }
 
-.automation-canvas-track {
+.automation-node-layer {
+  position: relative;
   display: flex;
-  align-items: stretch;
-  gap: 18px;
+  align-items: center;
+  gap: 86px;
   overflow-x: auto;
-  padding: 4px 4px 12px;
+  min-height: 318px;
+  padding: 28px 52px 36px;
   scroll-snap-type: x proximity;
 }
 
 .automation-start-node,
 .automation-step-item {
-  flex: 0 0 260px;
+  flex: 0 0 282px;
   scroll-snap-align: start;
 }
 
@@ -2338,26 +2349,43 @@ textarea {
   display: grid;
   align-content: center;
   gap: 8px;
-  min-height: 228px;
+  min-height: 176px;
   padding: 18px;
-  border-radius: 20px;
+  border-radius: 10px;
   background: #0b1f3d;
   color: #fff;
   position: relative;
   box-shadow: 0 14px 28px rgba(11, 31, 61, 0.16);
 }
 
+.automation-start-node::before,
+.automation-step-item::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: -86px;
+  width: 86px;
+  height: 38px;
+  border-top: 2px solid rgba(109, 65, 243, 0.54);
+  border-right: 2px solid rgba(109, 65, 243, 0.54);
+  border-radius: 0 18px 0 0;
+  transform: translateY(-1px);
+  pointer-events: none;
+}
+
 .automation-start-node::after,
 .automation-step-item::after {
   content: "";
   position: absolute;
-  top: 50%;
-  right: -18px;
-  width: 18px;
+  top: calc(50% + 36px);
+  right: -86px;
+  width: 86px;
   height: 2px;
-  background: rgba(109, 65, 243, 0.42);
+  background: rgba(109, 65, 243, 0.54);
+  pointer-events: none;
 }
 
+.automation-steps-list .automation-step-item:last-child::before,
 .automation-steps-list .automation-step-item:last-child::after {
   display: none;
 }
@@ -2384,18 +2412,45 @@ textarea {
 
 .automation-steps-list {
   display: flex;
-  gap: 18px;
-  align-items: stretch;
+  gap: 86px;
+  align-items: center;
 }
 
 .automation-step-item {
   position: relative;
-  min-height: 228px;
+  min-height: 236px;
   padding: 16px;
-  border-radius: 20px;
+  border-radius: 10px;
   background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(246,249,255,0.98));
-  border: 1px solid rgba(169, 190, 225, 0.88);
-  box-shadow: 0 14px 26px rgba(83, 110, 160, 0.1);
+  border: 1px solid rgba(145, 166, 205, 0.95);
+  box-shadow: 0 18px 34px rgba(83, 110, 160, 0.16);
+}
+
+.automation-step-item:hover,
+.automation-start-node:hover {
+  outline: 2px solid rgba(109, 65, 243, 0.28);
+  outline-offset: 3px;
+}
+
+.automation-node-handle {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #fff;
+  border: 2px solid rgba(109, 65, 243, 0.78);
+  box-shadow: 0 2px 8px rgba(46, 67, 116, 0.18);
+  transform: translateY(-50%);
+  z-index: 2;
+}
+
+.automation-node-handle-in {
+  left: -7px;
+}
+
+.automation-node-handle-out {
+  right: -7px;
 }
 
 .automation-node-top {
@@ -2410,7 +2465,7 @@ textarea {
   place-items: center;
   width: 38px;
   height: 38px;
-  border-radius: 14px;
+  border-radius: 8px;
   background: rgba(109, 65, 243, 0.12);
   color: var(--accent-dark);
   font-weight: 900;
@@ -2431,7 +2486,7 @@ textarea {
   display: grid;
   gap: 8px;
   padding: 12px;
-  border-radius: 16px;
+  border-radius: 8px;
   background: rgba(109, 65, 243, 0.07);
   border: 1px dashed rgba(109, 65, 243, 0.28);
 }
@@ -2470,14 +2525,14 @@ textarea {
 .automation-node-fields select {
   min-height: 40px;
   padding: 9px 10px;
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .automation-step-remove {
   width: 34px;
   height: 34px;
   padding: 0;
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .admin-overview-grid {
