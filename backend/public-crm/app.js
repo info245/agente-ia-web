@@ -2077,7 +2077,7 @@ function buildExternalLeadInstructions(config = state.appConfig || {}, type = "c
     `Tipo de web: ${getExternalLeadTypeLabel(type)}.`,
     `Responsable: ${getExternalLeadOwnerLabel(owner)}.`,
     `Endpoint del CRM: ${endpoint}.`,
-    `Header obligatorio: x-integrations-secret.`,
+    `Autenticacion: header x-integrations-secret o, si el plugin no permite headers, query ?secret=TU_INTEGRATIONS_SECRET.`,
     `Slug de la cuenta: ${slug}.`,
     `Datos mínimos que queremos recibir: ${goalText}.`,
     `Notas: ${notesText}`,

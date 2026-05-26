@@ -1,5 +1,5 @@
 const CONFIG = {
-  backendBaseUrl: "https://agente-ia-web-backend.onrender.com",
+  backendBaseUrl: "https://tmedia-global-ai.onrender.com",
   channel: "web",
   externalUserIdStorageKey: "agente_ia_external_user_id",
   conversationIdStorageKey: "agente_ia_conversation_id",

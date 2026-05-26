@@ -65,6 +65,11 @@ import {
   verifyCrmUserCredentials,
 } from "./lib/authStore.js";
 import { uploadBrandLogo } from "./lib/storageStore.js";
+import {
+  getWhatsAppChannelForAccount,
+  resolveWhatsAppChannelFromWebhookValue,
+} from "./lib/whatsappChannelsStore.js";
+import { processTmediaIncomingMessage } from "./agents/orchestrators/tmediaChatOrchestrator.js";
 
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
 import { buildKnowledgeContext, getServiceFacts, getWebsiteFacts } from "./lib/websiteFacts.js";
@@ -2046,6 +2051,70 @@ function firstPayloadValue(payload = {}, aliases = []) {
   return "";
 }
 
+function getExternalFieldValue(value) {
+  if (value === undefined || value === null) return "";
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => getExternalFieldValue(item))
+      .filter(Boolean)
+      .join(", ");
+  }
+  if (typeof value !== "object") return value;
+
+  for (const key of ["value", "values", "raw_value", "rawValue", "answer", "text"]) {
+    const nested = value?.[key];
+    if (nested !== undefined && nested !== null && nested !== "") {
+      return getExternalFieldValue(nested);
+    }
+  }
+
+  return "";
+}
+
+function assignExternalPayloadValue(payload, key, value) {
+  const cleanKey = String(key || "").trim();
+  const cleanValue = getExternalFieldValue(value);
+  if (!cleanKey || cleanValue === undefined || cleanValue === null || cleanValue === "") return;
+
+  if (payload[cleanKey] === undefined) payload[cleanKey] = cleanValue;
+  const normalizedKey = normalizeCustomFieldKey(cleanKey);
+  if (normalizedKey && payload[normalizedKey] === undefined) payload[normalizedKey] = cleanValue;
+}
+
+function flattenExternalFields(payload, fields) {
+  if (!fields) return;
+
+  if (Array.isArray(fields)) {
+    for (const field of fields) {
+      if (!field || typeof field !== "object") continue;
+      const key =
+        field.name ||
+        field.key ||
+        field.label ||
+        field.title ||
+        field.id ||
+        field.field_name ||
+        field.fieldName;
+      assignExternalPayloadValue(payload, key, field);
+    }
+    return;
+  }
+
+  if (typeof fields !== "object") return;
+
+  for (const [key, value] of Object.entries(fields)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      assignExternalPayloadValue(payload, key, value);
+      assignExternalPayloadValue(payload, value.id, value);
+      assignExternalPayloadValue(payload, value.name, value);
+      assignExternalPayloadValue(payload, value.label, value);
+      assignExternalPayloadValue(payload, value.title, value);
+      continue;
+    }
+    assignExternalPayloadValue(payload, key, value);
+  }
+}
+
 function normalizeExternalPayload(rawPayload = {}) {
   const payload = {};
   if (rawPayload && typeof rawPayload === "object" && !Array.isArray(rawPayload)) {
@@ -2057,6 +2126,20 @@ function normalizeExternalPayload(rawPayload = {}) {
       if (normalizedKey && payload[normalizedKey] === undefined) payload[normalizedKey] = value;
     }
   }
+
+  flattenExternalFields(payload, payload.fields);
+  flattenExternalFields(payload, payload.form_fields);
+  flattenExternalFields(payload, payload.formFields);
+  flattenExternalFields(payload, payload.entry);
+  flattenExternalFields(payload, payload.submission);
+  flattenExternalFields(payload, payload.data);
+  flattenExternalFields(payload, payload.contact);
+  flattenExternalFields(payload, payload.lead);
+
+  if (payload.form && typeof payload.form === "object" && !Array.isArray(payload.form)) {
+    assignExternalPayloadValue(payload, "source_form_name", payload.form.name || payload.form.title || payload.form.id);
+  }
+
   const fieldData = Array.isArray(payload.field_data)
     ? payload.field_data
     : Array.isArray(payload.leadgen_data?.field_data)
@@ -2092,15 +2175,30 @@ function buildExternalLeadCustomFields(payload = {}) {
     "name",
     "full_name",
     "nombre",
+    "nombre_completo",
+    "your_name",
+    "first_name",
+    "last_name",
     "email",
     "correo",
+    "correo_electronico",
+    "email_address",
+    "your_email",
     "phone",
     "telefono",
     "teléfono",
+    "tel",
+    "mobile",
+    "movil",
+    "your_phone",
     "p",
     "interest_service",
     "service",
     "servicio",
+    "servicio_interesado",
+    "servicio_de_interes",
+    "en_que_servicio_estas_interesado",
+    "que_servicio_necesitas",
     "urgency",
     "budget_range",
     "budget",
@@ -2156,6 +2254,61 @@ function buildExternalLeadSummary(payload = {}) {
 }
 
 const EXTERNAL_LEAD_ALIASES = {
+  name: [
+    "name",
+    "full_name",
+    "nombre",
+    "nombre_completo",
+    "your_name",
+    "your-name",
+    "first_name",
+    "last_name",
+  ],
+  email: [
+    "email",
+    "correo",
+    "correo_electronico",
+    "correo_electrónico",
+    "email_address",
+    "your_email",
+    "your-email",
+  ],
+  phone: [
+    "phone",
+    "telefono",
+    "teléfono",
+    "mobile",
+    "movil",
+    "móvil",
+    "tel",
+    "your_phone",
+    "your-phone",
+    "p",
+  ],
+  interest_service: [
+    "interest_service",
+    "service",
+    "servicio",
+    "servicio_interesado",
+    "servicio_de_interes",
+    "servicio_de_interés",
+    "en_que_servicio_estas_interesado",
+    "en_qué_servicio_estás_interesado",
+    "en_que_servicio_estás_interesado",
+    "que_servicio_necesitas",
+    "qué_servicio_necesitas",
+  ],
+  consent: [
+    "consent",
+    "rgpd",
+    "gdpr",
+    "acuerdo_rgpd",
+    "consentimiento",
+    "consentimiento_de_datos",
+    "acepto",
+    "acceptance",
+    "acceptance_rgpd",
+  ],
   business_activity: [
     "business_activity",
     "actividad",
@@ -2221,6 +2374,11 @@ const EXTERNAL_LEAD_ALIASES = {
     "web",
     "website",
     "url",
+    "page_url",
+    "source_url",
+    "mensaje",
+    "message",
+    "comments",
     "si_quieres_que_revise_tu_web_pegame_tu_web_aqui",
     "si_quieres_que_revise_tu_web,_pegame_tu_web_aqui",
   ],
@@ -2871,10 +3029,18 @@ ${transcript}
   return result.output_text?.trim() || "";
 }
 
-async function sendWhatsAppText(to, bodyText) {
-  if (!WHATSAPP_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
+async function sendWhatsAppText(to, bodyText, options = {}) {
+  const channel =
+    options?.phone_number_id
+      ? options
+      : await getWhatsAppChannelForAccount(options?.accountId || options?.account_id || null);
+  const accessToken = channel?.access_token || WHATSAPP_TOKEN;
+  const phoneNumberId = channel?.phone_number_id || WHATSAPP_PHONE_NUMBER_ID;
+  const apiVersion = channel?.api_version || WHATSAPP_API_VERSION;
+
+  if (!accessToken || !phoneNumberId) {
     throw new Error(
-      `Faltan variables WHATSAPP_TOKEN o WHATSAPP_PHONE_NUMBER_ID. TOKEN=${!!WHATSAPP_TOKEN} PHONE_ID=${!!WHATSAPP_PHONE_NUMBER_ID}`
+      `Falta configuracion WhatsApp para enviar. TOKEN=${!!accessToken} PHONE_ID=${!!phoneNumberId}`
     );
   }
 
@@ -2888,11 +3054,11 @@ async function sendWhatsAppText(to, bodyText) {
   };
 
   const response = await fetch(
-    `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+        Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -3065,7 +3231,7 @@ async function sendAutomationStep({
       return { skipped: true, reason: "no-whatsapp-phone" };
     }
 
-    const sendResult = await sendWhatsAppText(phone, body);
+    const sendResult = await sendWhatsAppText(phone, body, { accountId });
     await saveMessage({
       conversation_id: conversationId,
       role: "assistant",
@@ -6681,7 +6847,7 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
         .filter(Boolean)
         .join("\n\n");
 
-      await sendWhatsAppText(phone, message);
+      await sendWhatsAppText(phone, message, { accountId: account.id });
     }
 
     const updatedQuote = await markLatestQuoteAsSent(lead.id, via);
@@ -6824,14 +6990,15 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
 app.post("/messages", async (req, res) => {
   try {
     const account = await resolveExplicitRequestAccount(req);
-    const { text, conversation_id, external_user_id, channel } = req.body || {};
+    const { text, message, conversation_id, external_user_id, channel, metadata } = req.body || {};
 
-    const result = await processIncomingMessage({
-      text,
-      conversation_id,
-      external_user_id,
-      channel,
-      account_id: account.id,
+    const result = await processTmediaIncomingMessage({
+      conversationId: conversation_id,
+      externalUserId: external_user_id,
+      sourceChannel: channel || "web",
+      message: message || text,
+      metadata: metadata || req.body?.meta || {},
+      accountId: account.id,
     });
 
     res.json(result);
@@ -6884,29 +7051,43 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         "channel",
       ])
     );
+    const leadName = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.name));
+    const leadEmail = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.email));
+    const leadPhone = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.phone));
+    const leadInterestService = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.interest_service));
 
     const conversation = await createConversation({
       channel: "lead_form",
       external_user_id: norm(
         firstPayloadValue(payload, ["external_user_id", "lead_id", "leadgen_id", "leadgenId", "l"]) ||
+          leadEmail ||
+          leadPhone ||
           `${sourcePlatform}:${Date.now()}`
       ),
       account_id: account.id,
     });
 
+    const consentValue = firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.consent);
+    const normalizedConsent = normalizeText(consentValue);
+    const hasConsent =
+      typeof consentValue === "boolean"
+        ? consentValue
+        : Boolean(norm(consentValue)) &&
+          !["false", "0", "no", "off", "rechazado", "rejected"].includes(normalizedConsent);
+
     const leadPayload = {
       conversation_id: conversation.id,
-      name: norm(firstPayloadValue(payload, ["name", "full_name", "nombre", "nombre_completo"])),
-      email: norm(firstPayloadValue(payload, ["email", "correo", "correo_electronico"])),
-      phone: norm(firstPayloadValue(payload, ["phone", "telefono", "teléfono", "mobile", "p"])),
-      interest_service: norm(firstPayloadValue(payload, ["interest_service", "service", "servicio"])),
+      name: leadName,
+      email: leadEmail,
+      phone: leadPhone,
+      interest_service: leadInterestService,
       urgency: norm(firstPayloadValue(payload, ["urgency", "urgencia"])),
       budget_range: budgetRange,
       summary: norm(
         payload.summary ||
           buildExternalLeadSummary({
             ...payload,
-            interest_service: firstPayloadValue(payload, ["interest_service", "service", "servicio"]),
+            interest_service: firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.interest_service),
             business_activity: businessActivity,
             main_goal: mainGoal,
             budget_range: budgetRange,
@@ -6916,14 +7097,10 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       lead_score: Number.isFinite(Number(payload.lead_score))
         ? Number(payload.lead_score)
         : 0,
-      consent:
-        typeof payload.consent === "boolean"
-          ? payload.consent
-          : normalizeText(payload.consent) === "true",
+      consent: hasConsent,
       consent_at:
         payload.consent_at ||
-        ((typeof payload.consent === "boolean" && payload.consent) ||
-        normalizeText(payload.consent) === "true"
+        (hasConsent
           ? new Date().toISOString()
           : null),
       business_type: norm(firstPayloadValue(payload, ["business_type", "tipo_negocio"])),
@@ -7078,7 +7255,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
           },
           brandName
         );
-        await sendWhatsAppText(phone, introMessage);
+        await sendWhatsAppText(phone, introMessage, { accountId: account.id });
         await saveMessage({
           conversation_id: conversation.id,
           role: "assistant",
@@ -7309,7 +7486,7 @@ async function runWhatsAppFollowupsTask() {
     if (!phone) continue;
 
     const reminderText = buildWhatsAppReminderHook(lead);
-    await sendWhatsAppText(phone, reminderText);
+    await sendWhatsAppText(phone, reminderText, { accountId: lead?.account_id || null });
 
     await trackConversationEvent({
       conversation_id: conversationId,
@@ -7481,6 +7658,9 @@ app.post("/webhooks/whatsapp", async (req, res) => {
         const messages = value?.messages || [];
         if (!messages.length) continue;
 
+        const whatsappChannel = await resolveWhatsAppChannelFromWebhookValue(value);
+        const webhookAccountId = whatsappChannel?.account_id || getDefaultAccount().id;
+
         for (const message of messages) {
           const messageId = message?.id;
 
@@ -7500,7 +7680,8 @@ app.post("/webhooks/whatsapp", async (req, res) => {
             try {
               await sendWhatsAppText(
                 from,
-                "Ahora mismo solo puedo procesar mensajes de texto."
+                "Ahora mismo solo puedo procesar mensajes de texto.",
+                whatsappChannel
               );
             } catch (e) {
               console.log("non-text reply error", e.message);
@@ -7515,11 +7696,18 @@ app.post("/webhooks/whatsapp", async (req, res) => {
             type: message?.type,
           });
 
-          const result = await processIncomingMessage({
-            text,
-            conversation_id: null,
-            external_user_id: from,
-            channel: "whatsapp",
+          const result = await processTmediaIncomingMessage({
+            conversationId: null,
+            externalUserId: from,
+            sourceChannel: "whatsapp",
+            message: text,
+            metadata: {
+              whatsappMessageId: messageId,
+              whatsappPhoneNumberId: whatsappChannel?.phone_number_id || null,
+              whatsappBusinessAccountId: whatsappChannel?.waba_id || null,
+              raw: message,
+            },
+            accountId: webhookAccountId,
           });
 
           console.log("whatsapp processed result", {
@@ -7531,7 +7719,7 @@ app.post("/webhooks/whatsapp", async (req, res) => {
 
           if (result?.reply) {
             try {
-              const sendResult = await sendWhatsAppText(from, result.reply);
+              const sendResult = await sendWhatsAppText(from, result.reply, whatsappChannel);
               console.log("whatsapp send ok", {
                 from,
                 messageId: sendResult?.messages?.[0]?.id || null,

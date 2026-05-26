@@ -14,9 +14,13 @@ Motivos:
 
 `POST /api/integrations/external-lead`
 
-Header requerido:
+Autenticacion requerida:
 
 `x-integrations-secret: TU_INTEGRATIONS_SECRET`
+
+Si el plugin del formulario no permite headers personalizados, se puede enviar el mismo secreto en la URL:
+
+`POST /api/integrations/external-lead?secret=TU_INTEGRATIONS_SECRET`
 
 Cuenta requerida:
 
@@ -71,6 +75,41 @@ El endpoint tambien acepta el formato de Meta con `field_data`; el backend lo ap
   "consent": true
 }
 ```
+
+## Payloads de formularios web
+
+El endpoint tambien normaliza formatos habituales de plugins como Elementor Forms, WPForms, Contact Form 7 o Forminator cuando envian los campos dentro de `fields`, `form_fields`, `entry`, `submission`, `data`, `contact` o `lead`.
+
+Ejemplo compatible con Elementor:
+
+```json
+{
+  "account_slug": "tmedia-global",
+  "source_platform": "website_form",
+  "form": { "name": "Formulario SEO" },
+  "fields": {
+    "nombre": { "title": "Nombre", "value": "Miguel Morales" },
+    "email": { "title": "Correo electrónico", "value": "miguemoratrabajo@gmail.com" },
+    "telefono": { "title": "Teléfono", "value": "679006444" },
+    "servicio": {
+      "title": "¿En qué servicio estás interesado?",
+      "value": "Posicionamiento SEO"
+    },
+    "rgpd": {
+      "title": "Acuerdo RGPD",
+      "value": "Doy mi consentimiento para que esta web almacene la información que envío."
+    }
+  }
+}
+```
+
+Campos españoles reconocidos:
+
+- `Nombre`, `nombre_completo`
+- `Correo electrónico`, `correo_electronico`
+- `Teléfono`, `telefono`, `tel`
+- `¿En qué servicio estás interesado?`, `servicio`, `servicio_interesado`
+- `Consentimiento de datos`, `Acuerdo RGPD`, `rgpd`
 
 ## Comportamiento
 

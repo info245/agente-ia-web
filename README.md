@@ -24,3 +24,12 @@ Plantilla disponible en:
 Guia completa de configuracion, pruebas locales, ngrok y Meta:
 
 - [`docs/whatsapp-setup.md`](./docs/whatsapp-setup.md)
+
+## Medicion
+
+El backend puede registrar eventos unificados de conversacion para web y WhatsApp en la tabla `conversation_events`.
+
+SQL nueva:
+
+- [`sql/002_conversation_events.sql`](./sql/002_conversation_events.sql)
+- [`sql/010_whatsapp_channels.sql`](./sql/010_whatsapp_channels.sql) para preparar WhatsApp multi-cuenta

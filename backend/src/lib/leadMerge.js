@@ -2,6 +2,13 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
+function normalizeKey(value) {
+  return normalizeText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function isMeaningful(value) {
   return normalizeText(value) !== "";
 }
@@ -72,10 +79,17 @@ function looksLikeValidName(value) {
     "media",
     "baja",
     "esta semana",
-    "esta misma semana"
+    "esta misma semana",
+    "instagram",
+    "facebook",
+    "telefono",
+    "teléfono",
+    "numero",
+    "número"
   ];
 
-  if (invalidExact.includes(v.toLowerCase())) return false;
+  if (invalidExact.map(normalizeKey).includes(normalizeKey(v))) return false;
+  if (/^[\p{L}\s'-]+$/u.test(v)) return true;
 
   if (!/^[a-záéíóúüñA-ZÁÉÍÓÚÜÑ\s'-]+$/.test(v)) return false;
 
@@ -83,7 +97,7 @@ function looksLikeValidName(value) {
 }
 
 function userExplicitlyCorrectedName(lastUserMessage = "") {
-  const msg = normalizeText(lastUserMessage).toLowerCase();
+  const msg = normalizeKey(lastUserMessage);
 
   return [
     "me llamo",
@@ -92,7 +106,8 @@ function userExplicitlyCorrectedName(lastUserMessage = "") {
     "nombre correcto",
     "corrijo mi nombre",
     "no, mi nombre es",
-    "el nombre es"
+    "el nombre es",
+    "te lo dije antes"
   ].some((pattern) => msg.includes(pattern));
 }
 
@@ -124,6 +139,32 @@ function chooseField(currentValue, newValue, validator) {
   if (!current) return next;
 
   return current;
+}
+
+function normalizeCustomFields(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const output = {};
+  for (const [key, rawValue] of Object.entries(value)) {
+    const cleanKey = normalizeText(key)
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+    if (!cleanKey) continue;
+    if (rawValue === null || rawValue === undefined || rawValue === "") continue;
+    if (typeof rawValue === "boolean" || typeof rawValue === "number") {
+      output[cleanKey] = rawValue;
+      continue;
+    }
+    if (Array.isArray(rawValue)) {
+      const values = rawValue.map((item) => normalizeText(item)).filter(Boolean);
+      if (values.length) output[cleanKey] = values;
+      continue;
+    }
+    if (typeof rawValue === "object") continue;
+    const cleanValue = normalizeText(rawValue);
+    if (cleanValue) output[cleanKey] = cleanValue;
+  }
+  return output;
 }
 
 export function mergeLeadData({ currentLead, extractedLead, lastUserMessage }) {
@@ -183,6 +224,11 @@ export function mergeLeadData({ currentLead, extractedLead, lastUserMessage }) {
   if (!normalizeText(currentLead?.last_intent) && isMeaningful(extractedLead?.last_intent)) {
     merged.last_intent = normalizeText(extractedLead.last_intent);
   }
+
+  merged.custom_fields = {
+    ...normalizeCustomFields(currentLead?.custom_fields),
+    ...normalizeCustomFields(extractedLead?.custom_fields),
+  };
 
   if (typeof currentLead?.consent !== "boolean") {
     merged.consent = !!extractedLead?.consent;

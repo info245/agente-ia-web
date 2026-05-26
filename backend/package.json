@@ -7,7 +7,8 @@
   "scripts": {
     "postinstall": "npx puppeteer browsers install chrome",
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "test:tmedia-agents": "node scripts/test-tmedia-agents.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",

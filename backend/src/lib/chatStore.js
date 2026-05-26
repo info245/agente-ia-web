@@ -254,6 +254,26 @@ export async function saveMessage({
   return data;
 }
 
+export async function findOrCreateConversationByExternalUserId({
+  channel = "web",
+  external_user_id = null,
+  account_id = null,
+} = {}) {
+  const existing = await getLatestConversationByExternalUserId({
+    channel,
+    external_user_id,
+    account_id,
+  });
+
+  if (existing) return existing;
+
+  return createConversation({
+    channel,
+    external_user_id,
+    account_id,
+  });
+}
+
 export async function saveConversationEvent({
   conversation_id,
   event_type,

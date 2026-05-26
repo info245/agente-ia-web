@@ -22,7 +22,57 @@ WHATSAPP_TOKEN=tu_whatsapp_token
 WHATSAPP_PHONE_NUMBER_ID=tu_phone_number_id
 WHATSAPP_BUSINESS_ACCOUNT_ID=tu_business_account_id
 WHATSAPP_VERIFY_TOKEN=tu_verify_token
-WHATSAPP_API_VERSION=v23.0
+WHATSAPP_API_VERSION=v25.0
+WHATSAPP_APP_SECRET=tu_app_secret_de_meta
+```
+
+Estas variables siguen funcionando como fallback para la cuenta interna de TMedia. Para evolucionar a Sancho multi-cliente, cada numero conectado debe guardarse en la tabla `whatsapp_channels` creada por:
+
+```text
+sql/010_whatsapp_channels.sql
+```
+
+Campos clave:
+
+- `account_id`: cuenta/cliente del CRM.
+- `phone_number_id`: ID del numero de WhatsApp en Meta.
+- `waba_id`: WhatsApp Business Account ID.
+- `access_token`: token del canal si no se usa el fallback global.
+- `status`: usar `active` para el canal operativo.
+
+Ejemplo para registrar el canal actual de TMedia despues de ejecutar el SQL:
+
+```sql
+insert into whatsapp_channels (
+  account_id,
+  provider,
+  status,
+  waba_id,
+  phone_number_id,
+  display_phone_number,
+  verified_name,
+  token_label,
+  connected_at
+) values (
+  'default',
+  'meta_cloud',
+  'active',
+  '2028905611388376',
+  '1168546906332736',
+  '+34 624 87 17 95',
+  'TMedia Global',
+  'env:WHATSAPP_TOKEN',
+  now()
+)
+on conflict (phone_number_id) do update set
+  account_id = excluded.account_id,
+  provider = excluded.provider,
+  status = excluded.status,
+  waba_id = excluded.waba_id,
+  display_phone_number = excluded.display_phone_number,
+  verified_name = excluded.verified_name,
+  token_label = excluded.token_label,
+  updated_at = now();
 ```
 
 ## Rutas activas del backend
@@ -54,6 +104,7 @@ Meta envia eventos a `POST /webhooks/whatsapp`.
 El backend:
 
 - ignora estados de entrega
+- resuelve el canal/cuenta usando `metadata.phone_number_id`
 - deduplica mensajes por `message.id`
 - extrae el texto del mensaje entrante
 - llama a la misma logica central `processIncomingMessage`
@@ -181,7 +232,7 @@ El repositorio incluye un blueprint en `render.yaml` para desplegar el backend c
 Cuando Render genere la URL publica, el webhook sera:
 
 ```text
-https://TU-SERVICIO.onrender.com/webhooks/whatsapp
+https://tmedia-global-ai.onrender.com/webhooks/whatsapp
 ```
 
 ### Variables a cargar en Render
@@ -194,6 +245,7 @@ https://TU-SERVICIO.onrender.com/webhooks/whatsapp
 - `WHATSAPP_BUSINESS_ACCOUNT_ID`
 - `WHATSAPP_VERIFY_TOKEN`
 - `WHATSAPP_API_VERSION`
+- `WHATSAPP_APP_SECRET`
 
 Si mantienes los correos activos:
 
@@ -226,3 +278,13 @@ Si quieres mantener email interno y email al cliente en Render:
 ## Nota tecnica
 
 Existen archivos auxiliares bajo `backend/src/routes` y `backend/src/lib` relacionados con WhatsApp que no son la ruta activa montada en el servidor principal. La ruta que actualmente atiende las peticiones reales es la declarada directamente en `backend/src/server.js`.
+
+## Seguridad de Meta
+
+Para endurecer el webhook frente a llamadas falsificadas, el backend puede validar la cabecera `X-Hub-Signature-256` usando el `App Secret` de Meta.
+
+Configura en produccion:
+
+- `WHATSAPP_APP_SECRET`
+
+Sin ese valor, el webhook puede seguir funcionando, pero la verificacion criptografica de origen queda desactivada.
