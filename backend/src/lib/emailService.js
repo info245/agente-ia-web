@@ -189,7 +189,17 @@ function getProviderDefaults(provider = "smtp") {
 }
 
 function resolveEmailRuntimeConfig(emailConfig = null) {
-  const provider = String(emailConfig?.provider || "smtp").trim().toLowerCase();
+  const requestedProvider = String(emailConfig?.provider || "smtp").trim().toLowerCase();
+  const oauthConfigured = Boolean(
+    emailConfig?.google_refresh_token && emailConfig?.google_connected_email
+  );
+  const canFallbackToGlobalSmtp = Boolean(
+    process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
+  );
+  const provider =
+    requestedProvider === "google_oauth" && !oauthConfigured && canFallbackToGlobalSmtp
+      ? "smtp"
+      : requestedProvider;
   const providerDefaults = getProviderDefaults(provider);
 
   const host = String(
@@ -217,7 +227,11 @@ function resolveEmailRuntimeConfig(emailConfig = null) {
   const oauthSenderAddress =
     provider === "google_oauth" ? googleConnectedEmail || String(emailConfig?.from_email || "").trim() : "";
   const fromAddress = String(
-    oauthSenderAddress || emailConfig?.from_email || fallbackFrom || user || ""
+    oauthSenderAddress ||
+      (requestedProvider === "google_oauth" && provider !== "google_oauth" ? "" : emailConfig?.from_email) ||
+      fallbackFrom ||
+      user ||
+      ""
   ).trim();
   const clientFromAddress = String(
     oauthSenderAddress ||
@@ -332,8 +346,9 @@ export async function sendLeadEmail({
   recipients = null,
   conversationMessages = [],
 }) {
-  if (!internalEnabled) return { skipped: true, reason: "internal-disabled" };
   const targetRecipients = Array.isArray(recipients) && recipients.length ? recipients : internalTo;
+  const hasAccountRecipients = Array.isArray(recipients) && recipients.length > 0;
+  if (!internalEnabled && !hasAccountRecipients) return { skipped: true, reason: "internal-disabled" };
   if (!targetRecipients.length) throw new Error("LEADS_EMAIL_TO esta vacio");
 
   const runtime = resolveEmailRuntimeConfig(emailConfig);
