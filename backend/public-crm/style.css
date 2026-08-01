@@ -4330,6 +4330,43 @@ textarea {
     align-items: stretch;
   }
 
+  .crm-topbar {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .crm-brand,
+  .crm-topbar-actions,
+  .crm-account-switcher {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .crm-brand h1 {
+    font-size: clamp(1.8rem, 5vw, 2.35rem);
+  }
+
+  .crm-topbar-actions {
+    width: 100%;
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) auto auto auto;
+    justify-content: stretch;
+  }
+
+  .crm-account-switcher {
+    width: 100%;
+  }
+
+  .crm-topbar-actions > .pill,
+  .crm-topbar-actions > button {
+    align-self: stretch;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
   .filter-box {
     flex: 1 1 220px;
   }
@@ -4817,6 +4854,8 @@ textarea {
 
   .crm-topbar-actions {
     margin-left: 0;
+    display: flex;
+    width: auto;
   }
 
   .crm-topbar {
