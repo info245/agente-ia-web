@@ -7190,7 +7190,7 @@ function buildSuggestedTemplates(payload = {}, currentTemplates = {}) {
       ...(currentTemplates?.recovery_whatsapp || {}),
       channel: "whatsapp",
       label: "Recuperacion por WhatsApp",
-      body: `Hola {nombre}, retomo este hilo porque creo que todavía podemos ayudarte con {servicio}. Si quieres, te dejo aquí una recomendación concreta para tu caso y vemos si tiene sentido avanzar.`,
+      body: `Hola {nombre}, retomo este hilo porque creo que aún podemos ayudarte con {servicio}. Si quieres, te dejo aquí una recomendación concreta para tu caso y vemos si tiene sentido avanzar.`,
     },
     recovery_email: {
       ...(currentTemplates?.recovery_email || {}),

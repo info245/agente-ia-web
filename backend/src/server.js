@@ -2001,17 +2001,17 @@ function buildWhatsAppReminderHook(lead = {}) {
   const summary = norm(lead?.summary);
 
   const intro = safeName
-    ? `Hola ${safeName}, te escribo por aquÃ­ por si quieres retomar lo que dejamos pendiente.`
-    : "Hola, te escribo por aquÃ­ por si quieres retomar lo que dejamos pendiente.";
+    ? `Hola ${safeName}, te escribo por aquí por si quieres retomar lo que dejamos pendiente.`
+    : "Hola, te escribo por aquí por si quieres retomar lo que dejamos pendiente.";
 
   const contextLine = summary
-    ? `Por lo que vimos, tu interÃ©s principal va orientado a ${summary}.`
-    : `TenÃ­amos pendiente avanzar con ${service}.`;
+    ? `Por lo que vimos, tu interés principal va orientado a ${summary}.`
+    : `Teníamos pendiente avanzar con ${service}.`;
 
   return [
     intro,
     contextLine,
-    `Si te va bien, te doy una recomendaciÃ³n concreta para avanzar con ${service} o ajustamos el siguiente paso segÃºn tu presupuesto.`,
+    `Si te va bien, te doy una recomendación concreta para avanzar con ${service} o ajustamos el siguiente paso según tu presupuesto.`,
   ].join("\n\n");
 }
 
@@ -3138,7 +3138,10 @@ function buildAutomationTemplateVars({ lead, appConfig, previewUrl }) {
     ...customVars,
     nombre: getSafeLeadName(lead) || lead?.name || "hola",
     marca: appConfig?.brand?.name || "TMedia Global",
-    servicio: lead?.interest_service || "nuestros servicios",
+    servicio:
+      lead?.interest_service && lead.interest_service !== "unknown"
+        ? lead.interest_service
+        : "tu caso",
     empresa: lead?.company_name || lead?.business_activity || "tu proyecto",
     presupuesto: lead?.budget_range || "",
     email: lead?.email || "",
@@ -3205,6 +3208,28 @@ function wasAutomationStepAlreadySent(events = [], flowKey, stepIndex) {
   const signature = getFlowStepSignature(flowKey, stepIndex);
   return events.some(
     (event) => String(event?.payload?.step_signature || "") === signature
+  );
+}
+
+function getEventTimestamp(event) {
+  const timestamp = event?.created_at ? new Date(event.created_at).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getLastUserMessageTimestamp(messages = []) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role !== "user") continue;
+    const timestamp = new Date(messages[index].created_at).getTime();
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  return 0;
+}
+
+function hasRecoveryAttemptAfter(events = [], timestamp = 0) {
+  return events.some(
+    (event) =>
+      event?.payload?.flow_key === "lead_recovery" &&
+      getEventTimestamp(event) >= timestamp
   );
 }
 
@@ -7334,10 +7359,30 @@ async function runAutomationFlowsForAccount({
       account.id
     );
 
+    const messages = await getConversationMessages(conversationId, 100, {
+      accountId: account.id,
+    });
+    const lastUserMessageAt = getLastUserMessageTimestamp(messages);
+    const latestWhatsAppFollowup = await getLatestConversationEvent(
+      conversationId,
+      "whatsapp_followup_sent"
+    ).catch(() => null);
+
     const flowEntries = Object.entries(appConfig?.automation_flows || {});
 
     for (const [flowKey, flow] of flowEntries) {
       if (flow?.enabled === false) continue;
+
+      // Una recuperación es un único intento hasta que el usuario responda.
+      // Así tampoco compite este flujo con el recordatorio de WhatsApp.
+      if (
+        flowKey === "lead_recovery" &&
+        (hasRecoveryAttemptAfter(automationEvents, lastUserMessageAt) ||
+          (latestWhatsAppFollowup &&
+            getEventTimestamp(latestWhatsAppFollowup) >= lastUserMessageAt))
+      ) {
+        continue;
+      }
 
       const needsQuote = flowKey === "quote_followup";
       const quote = needsQuote ? await getLatestQuoteByLeadId(lead.id).catch(() => null) : null;
@@ -7415,6 +7460,8 @@ async function runAutomationFlowsForAccount({
             step_index: index,
             via: sendResult.via,
           });
+
+          if (flowKey === "lead_recovery") break;
         }
       }
     }
@@ -7467,6 +7514,8 @@ async function runWhatsAppFollowupsTask() {
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.role !== "assistant") continue;
 
+    const lastUserMessageAt = getLastUserMessageTimestamp(messages);
+
     const lastMessageAt = new Date(lastMessage.created_at).getTime();
     if (!Number.isFinite(lastMessageAt)) continue;
     if (now - lastMessageAt < followupMs) continue;
@@ -7476,11 +7525,20 @@ async function runWhatsAppFollowupsTask() {
       "whatsapp_followup_sent"
     ).catch(() => null);
 
-    const latestFollowupAt = latestFollowup?.created_at
-      ? new Date(latestFollowup.created_at).getTime()
-      : 0;
+    // El evento puede guardarse unos milisegundos antes que el mensaje del
+    // propio recordatorio. Se compara con la última respuesta del usuario,
+    // no con nuestro último mensaje, para impedir envíos diarios repetidos.
+    if (latestFollowup && getEventTimestamp(latestFollowup) >= lastUserMessageAt) {
+      continue;
+    }
 
-    if (latestFollowupAt && latestFollowupAt >= lastMessageAt) continue;
+    const recoveryEvents = await listConversationEventsByType(
+      conversationId,
+      "automation_step_sent",
+      100,
+      lead?.account_id || null
+    ).catch(() => []);
+    if (hasRecoveryAttemptAfter(recoveryEvents, lastUserMessageAt)) continue;
 
     const phone = normalizeLeadPhoneForWhatsApp(lead);
     if (!phone) continue;

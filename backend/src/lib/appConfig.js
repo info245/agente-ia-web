@@ -270,14 +270,14 @@ export const DEFAULT_APP_CONFIG = {
       label: "Recuperacion por WhatsApp",
       subject: "",
       body:
-        "Hola {nombre}, retomo este hilo porque creo que aun podemos ayudarte con {servicio}. Si quieres, te dejo aqui una recomendacion concreta para tu caso y vemos si tiene sentido avanzar.",
+        "Hola {nombre}, retomo este hilo porque creo que aún podemos ayudarte con {servicio}. Si quieres, te dejo aquí una recomendación concreta para tu caso y vemos si tiene sentido avanzar.",
     },
     recovery_email: {
       channel: "email",
       label: "Recuperacion por email",
       subject: "Seguimos disponibles para ayudarte con {servicio}",
       body:
-        "Hola {nombre},\n\nRetomo el contacto porque creo que aun hay recorrido para ayudarte con {servicio}. Si te encaja, podemos retomar la conversacion y proponerte un siguiente paso muy concreto.\n\nQuedo pendiente,\n{marca}",
+        "Hola {nombre},\n\nRetomo el contacto porque creo que aún hay recorrido para ayudarte con {servicio}. Si te encaja, podemos retomar la conversación y proponerte un siguiente paso muy concreto.\n\nQuedo pendiente,\n{marca}",
     },
   },
   automation_flows: {
