@@ -28,6 +28,25 @@ function sanitizeCommercialReply(reply = "") {
   return cleaned || text;
 }
 
+function isSanchoSupportComplaint(message = "") {
+  const text = String(message || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return (
+    /\b(la (web|pagina) (que )?no funciona (bien )?es la tuya|la que no funciona (bien )?es la tuya)\b/.test(text) ||
+    /\b(tu|vuestra|esta) (web|pagina|chat|asistente)\b.*\b(no funciona|falla|fallo|problema|error)\b/.test(text) ||
+    /\b(no funciona|falla|fallo|problema|error)\b.*\b(sancho|sanchito|tu web|vuestra web|este chat|esta web)\b/.test(text) ||
+    /\b(sancho|sanchito)\b.*\b(no funciona|falla|fallo|problema|error)\b/.test(text)
+  );
+}
+
+function sanchoSupportReply() {
+  return "Entiendo: te refieres a que la propia web o el asistente de Sancho no está funcionando bien. Perdona, te había interpretado como una consulta comercial y por eso repetí la pregunta. ¿Qué fallo concreto estás viendo para que pueda registrarlo y ayudarte?";
+}
+
 function shouldRunClosing(routerResult, lead = {}, memoryResult = {}) {
   if (routerResult?.next_agent === "closing") return true;
   const merged = { ...(lead || {}), ...(memoryResult?.lead_patch || {}) };
@@ -82,7 +101,9 @@ export async function processTmediaIncomingMessage({
   });
 
   const routerResult = await runAgent("lead_router", refreshedContext);
-  const selectedAgentId = routerResult.next_agent || "sales_qualification";
+  const ownProductSupport = isSanchoSupportComplaint(refreshedContext.message);
+  const selectedAgentId = ownProductSupport
+    ? "lead_memory" : routerResult.next_agent || "sales_qualification";
   const selectedResult = await runAgent(selectedAgentId, {
     ...refreshedContext,
     routerResult,
@@ -117,7 +138,9 @@ export async function processTmediaIncomingMessage({
     });
   }
 
-  const reply = finalReply({ selectedResult, closingResult, memoryResult });
+  const reply = ownProductSupport
+    ? sanchoSupportReply()
+    : finalReply({ selectedResult, closingResult, memoryResult });
 
   await saveMessage({
     conversation_id: context.conversationId,
