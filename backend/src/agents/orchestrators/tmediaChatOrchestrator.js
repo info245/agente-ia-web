@@ -47,6 +47,35 @@ function sanchoSupportReply() {
   return "Entiendo: te refieres a que la propia web o el asistente de Sancho no está funcionando bien. Perdona, te había interpretado como una consulta comercial y por eso repetí la pregunta. ¿Qué fallo concreto estás viendo para que pueda registrarlo y ayudarte?";
 }
 
+function normalizeIntegrationText(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function buildOdooIntegrationReply({ messages = [], currentMessage = "" } = {}) {
+  const recentUserMessages = (messages || [])
+    .filter((message) => message?.role === "user")
+    .slice(-8)
+    .map((message) => String(message?.content || message?.text || ""));
+  const thread = normalizeIntegrationText([currentMessage, ...recentUserMessages].join(" "));
+  const current = normalizeIntegrationText(currentMessage);
+  if (!/\b(odoo|erp)\b/.test(thread)) return null;
+
+  if (/\b(api|mcp|como se integra|como integrar|integracion)\b/.test(current)) {
+    return "La vía base es la API de Odoo. MCP no viene integrado automáticamente: solo se usaría si se configura un servidor o conector MCP específico sobre esa API. Para automatizar campañas habría que definir qué datos salen de Odoo, qué acciones vuelven al ERP y con qué plataformas publicitarias se conectará. ¿Usas Odoo Online, Odoo.sh o una instalación propia?";
+  }
+
+  if (/\b(automatizar|automatizacion)\b.*\b(campana|campanas|marketing|ads|anuncios)\b/.test(current)) {
+    return "Perfecto: el objetivo es automatizar campañas usando los datos de Odoo. El siguiente paso ya no es volver a preguntarte el objetivo, sino concretar la arquitectura: ¿usas Odoo Online, Odoo.sh o una instalación propia, y quieres conectarlo con Google Ads, Meta Ads o ambas?";
+  }
+
+  return null;
+}
+
 function shouldRunClosing(routerResult, lead = {}, memoryResult = {}) {
   if (routerResult?.next_agent === "closing") return true;
   const merged = { ...(lead || {}), ...(memoryResult?.lead_patch || {}) };
@@ -138,9 +167,10 @@ export async function processTmediaIncomingMessage({
     });
   }
 
+  const integrationReply = buildOdooIntegrationReply({ messages: refreshedContext.messages, currentMessage: refreshedContext.message });
   const reply = ownProductSupport
     ? sanchoSupportReply()
-    : finalReply({ selectedResult, closingResult, memoryResult });
+    : integrationReply || finalReply({ selectedResult, closingResult, memoryResult });
 
   await saveMessage({
     conversation_id: context.conversationId,
