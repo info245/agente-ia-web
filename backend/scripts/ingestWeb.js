@@ -24,6 +24,7 @@ const EMBEDDING_MODEL = "text-embedding-3-small"; // 1536 dims
 const CHUNK_SIZE = 1200; // caracteres aprox
 const CHUNK_OVERLAP = 200;
 const USER_AGENT = "TMediaGlobalRAGBot/1.0";
+const ACCOUNT_ID = String(process.env.ACCOUNT_ID || process.env.KB_ACCOUNT_ID || "default").trim();
 
 function stripHtml(html) {
   return html
@@ -75,12 +76,13 @@ async function embed(text) {
 }
 
 async function clearUrl(url) {
-  const { error } = await supabase.from("kb_docs").delete().eq("url", url);
+  const { error } = await supabase.from("kb_docs").delete().eq("account_id", ACCOUNT_ID).eq("url", url);
   if (error) throw error;
 }
 
 async function insertChunk({ url, title, chunk, embedding }) {
   const { error } = await supabase.from("kb_docs").insert({
+    account_id: ACCOUNT_ID,
     url,
     title,
     chunk,
@@ -122,7 +124,7 @@ async function ingestUrl(url) {
 }
 
 (async () => {
-  console.log("RAG ingest start...");
+  console.log(`RAG ingest start... account_id=${ACCOUNT_ID}`);
   for (const url of URLS) {
     try {
       await ingestUrl(url);

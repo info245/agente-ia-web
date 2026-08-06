@@ -44,6 +44,12 @@ export function detectBusinessType(text = "", existing = null) {
 
   if (!t.trim()) return existing || null;
 
+  if (/(saas|software as a service)/i.test(t)) {
+    return "SaaS";
+  }
+  if (/(agencia\s+de\s+marketing|agencia|marketing agency)/i.test(t)) {
+    return "Agencia de marketing";
+  }
   if (/(ecommerce|e-commerce|tienda\s+online|shopify|woocommerce|prestashop)/i.test(t)) {
     return "Ecommerce";
   }
@@ -62,8 +68,14 @@ export function detectBusinessType(text = "", existing = null) {
   if (/(restaurante|cafeter[ií]a|bar)/i.test(t)) {
     return "Restauración";
   }
-  if (/(colegio|ampa|asociaci[oó]n de padres)/i.test(t)) {
+  if (/(colegio|\bampa\b|asociaci[oó]n de padres)/i.test(t)) {
     return "Educación / AMPA";
+  }
+
+  if (/(conversion|conversi|checkout|redise|cpa|coste por lead|coste por adquisici|bajar costes|reducir costes)/i.test(t)) {
+    return /cpa|coste por lead|coste por adquisici|bajar costes|reducir costes/i.test(t)
+      ? "Reducir costes de captación"
+      : "Mejorar conversión";
   }
 
   return existing || null;

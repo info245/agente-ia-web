@@ -15,6 +15,8 @@ export async function runAgent(agentId, context = {}) {
       inputSummary: context.message || context.userMessage || "",
       outputSummary: compactString(JSON.stringify(output || {}), 1000),
       toolsUsed: output?.tools_used || [],
+    }).catch((error) => {
+      console.log(`[agentRouter] log skipped for ${agentId}:`, error.message);
     });
     return output;
   } catch (error) {

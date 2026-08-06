@@ -8,14 +8,47 @@ function cleanCell(value) {
   return String(value || "").trim();
 }
 
-function splitSpreadsheetLine(line = "") {
+function detectDelimiter(line = "") {
   const raw = String(line || "");
-  const delimiter = raw.includes("\t")
-    ? "\t"
-    : raw.includes(";")
-      ? ";"
-      : ",";
-  return raw.split(delimiter).map((cell) => cleanCell(cell));
+  if (raw.includes("\t")) return "\t";
+  const commaCount = (raw.match(/,/g) || []).length;
+  const semicolonCount = (raw.match(/;/g) || []).length;
+  return semicolonCount > commaCount ? ";" : ",";
+}
+
+function splitSpreadsheetLine(line = "", delimiter = null) {
+  const raw = String(line || "");
+  const safeDelimiter = delimiter || detectDelimiter(raw);
+  const cells = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < raw.length; index += 1) {
+    const char = raw[index];
+    const next = raw[index + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === safeDelimiter && !inQuotes) {
+      cells.push(cleanCell(current));
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(cleanCell(current));
+  return cells;
 }
 
 function parseSpreadsheetRows(raw = "") {
@@ -26,12 +59,13 @@ function parseSpreadsheetRows(raw = "") {
 
   if (lines.length < 2) return [];
 
-  const headers = splitSpreadsheetLine(lines[0]).map((header) =>
+  const delimiter = detectDelimiter(lines[0]);
+  const headers = splitSpreadsheetLine(lines[0], delimiter).map((header) =>
     normalizeOfferName(header)
   );
 
   return lines.slice(1).map((line) => {
-    const cells = splitSpreadsheetLine(line);
+    const cells = splitSpreadsheetLine(line, delimiter);
     const row = {};
     headers.forEach((header, index) => {
       row[header] = cleanCell(cells[index]);
@@ -102,6 +136,56 @@ function mapRowToOfferFacts(row = {}) {
   };
 }
 
+function mapRowToPricingPlan(row = {}) {
+  const plan = findColumnValue(row, ["plan", "paquete", "package", "tier"]);
+  if (!plan) return null;
+
+  const monthly_price = findColumnValue(row, [
+    "monthly_price",
+    "monthly price",
+    "precio mensual",
+    "tarifa mensual",
+    "mensual",
+  ]);
+  const annual_price = findColumnValue(row, [
+    "annual_price",
+    "annual price",
+    "precio anual",
+    "tarifa anual",
+    "anual",
+  ]);
+  const setup = findColumnValue(row, [
+    "setup",
+    "setup fee",
+    "alta",
+    "implantacion",
+    "implementacion",
+  ]);
+  const audience = findColumnValue(row, ["audience", "cliente", "publico", "segmento"]);
+  const modules = findColumnValue(row, ["modules", "modulos", "modulos incluidos"]);
+  const users = findColumnValue(row, ["users", "usuarios"]);
+  const workspaces = findColumnValue(row, ["workspaces", "workspace"]);
+  const trial_days = findColumnValue(row, ["trial_days", "trial", "prueba"]);
+  const notes = findColumnValue(row, ["notes", "notas", "observaciones"]);
+  const badge = findColumnValue(row, ["badge", "etiqueta"]);
+
+  if (!monthly_price && !annual_price && !setup && !notes) return null;
+
+  return {
+    plan,
+    badge,
+    monthly_price,
+    annual_price,
+    setup,
+    audience,
+    modules,
+    users,
+    workspaces,
+    trial_days,
+    notes,
+  };
+}
+
 function mergeOfferFacts(base = {}, incoming = {}) {
   return {
     category: incoming.category || base.category || "",
@@ -111,6 +195,11 @@ function mergeOfferFacts(base = {}, incoming = {}) {
     description: incoming.description || base.description || "",
     notes: incoming.notes || base.notes || "",
     conversion_goal: incoming.conversion_goal || base.conversion_goal || "",
+    pricing_plans: Array.isArray(incoming.pricing_plans)
+      ? incoming.pricing_plans
+      : Array.isArray(base.pricing_plans)
+      ? base.pricing_plans
+      : [],
   };
 }
 
@@ -130,6 +219,14 @@ function getSpreadsheetOffers(appConfig = null) {
   }, {});
 }
 
+function getSpreadsheetPricingPlans(appConfig = null) {
+  const merged = sanitizeAppConfig(appConfig || {});
+  const rows = parseSpreadsheetRows(
+    merged?.knowledge_sources?.spreadsheet_data || ""
+  );
+  return rows.map(mapRowToPricingPlan).filter(Boolean).slice(0, 20);
+}
+
 function summariseOffers(offers = {}) {
   return Object.entries(offers)
     .slice(0, 8)
@@ -138,6 +235,19 @@ function summariseOffers(offers = {}) {
       if (facts?.category) parts.push(`categoria: ${facts.category}`);
       if (facts?.min_monthly_fee) parts.push(`mensual: ${facts.min_monthly_fee}`);
       if (facts?.min_project_fee) parts.push(`proyecto: ${facts.min_project_fee}`);
+      if (Array.isArray(facts?.pricing_plans) && facts.pricing_plans.length) {
+        const planSummary = facts.pricing_plans
+          .slice(0, 5)
+          .map((plan) => {
+            const bits = [
+              plan.monthly_price ? `${plan.monthly_price}/mes` : "",
+              plan.setup ? `setup ${plan.setup}` : "",
+            ].filter(Boolean);
+            return `${plan.plan}${bits.length ? ` (${bits.join(", ")})` : ""}`;
+          })
+          .join("; ");
+        parts.push(`planes: ${planSummary}`);
+      }
       if (facts?.url) parts.push(`url: ${facts.url}`);
       if (facts?.description) parts.push(`descripcion: ${facts.description}`);
       if (facts?.notes) parts.push(`notas: ${facts.notes}`);
@@ -154,10 +264,22 @@ export function getWebsiteFacts(appConfig = null) {
     : merged.services || {};
   const legacyServices = merged.services || {};
   const spreadsheetOffers = getSpreadsheetOffers(merged);
+  const spreadsheetPricingPlans = getSpreadsheetPricingPlans(merged);
   const offers = { ...spreadsheetOffers };
 
   for (const [offerName, facts] of Object.entries(manualOffers || {})) {
     offers[offerName] = mergeOfferFacts(offers[offerName], facts);
+  }
+
+  if (spreadsheetPricingPlans.length) {
+    const targetOfferName =
+      Object.keys(offers)[0] ||
+      Object.keys(manualOffers || {})[0] ||
+      merged?.brand?.name ||
+      "Oferta";
+    offers[targetOfferName] = mergeOfferFacts(offers[targetOfferName] || {}, {
+      pricing_plans: spreadsheetPricingPlans,
+    });
   }
 
   return {

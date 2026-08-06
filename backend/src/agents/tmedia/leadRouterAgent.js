@@ -1,13 +1,24 @@
-import { openai } from "../../lib/openaiClient.js";
 import {
   ROUTER_SCHEMA,
   clamp01,
   compactString,
-  parseJsonObject,
 } from "../core/agentResponseSchema.js";
+import {
+  detectPriorityIntent,
+  isGreetingOnly,
+  isHumanRequest,
+  isSupportRequest,
+} from "../../lib/conversationIntent.js";
 
-const SERVICES = ["seo", "google_ads", "meta_ads", "web_design", "consulting", "unknown"];
-const INTENTS = ["lead_capture", "service_question", "pricing_question", "support", "unknown"];
+const INTENTS = [
+  "greeting",
+  "lead_capture",
+  "service_question",
+  "pricing_question",
+  "support",
+  "human_request",
+  "unknown",
+];
 const STAGES = ["new", "qualifying", "qualified", "closing", "completed"];
 const NEXT_AGENTS = ["sales_qualification", "service_expert", "closing", "lead_memory"];
 
@@ -15,17 +26,25 @@ function normalizeText(value = "") {
   return String(value || "")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
-function detectService(text = "") {
+function getConfiguredServices(appConfig = null) {
+  const offersSource = Object.keys(appConfig?.offers || {}).length
+    ? appConfig.offers
+    : appConfig?.services || {};
+  return Object.keys(offersSource || {}).filter(Boolean);
+}
+
+function detectService(text = "", appConfig = null) {
   const t = normalizeText(text);
-  if (t.includes("google ads") || /\bsem\b/.test(t)) return "google_ads";
-  if (/\bseo\b/.test(t) || t.includes("posicionamiento")) return "seo";
-  if (t.includes("meta ads") || t.includes("facebook ads") || t.includes("instagram ads")) return "meta_ads";
-  if (t.includes("diseno web") || t.includes("diseño web") || t.includes("pagina web") || t.includes("tienda online")) return "web_design";
-  if (t.includes("consultoria") || t.includes("consultoría") || t.includes("estrategia digital")) return "consulting";
-  return "unknown";
+  const match = getConfiguredServices(appConfig).find((service) => {
+    const normalizedService = normalizeText(service);
+    return normalizedService && (t.includes(normalizedService) || normalizedService.includes(t));
+  });
+  return match || "unknown";
 }
 
 function inferLeadStage(lead = {}) {
@@ -39,25 +58,34 @@ function inferLeadStage(lead = {}) {
   return "new";
 }
 
+function safeAgentForIntent(intent = "") {
+  if (["greeting", "lead_capture"].includes(intent)) return "sales_qualification";
+  if (["service_question", "pricing_question"].includes(intent)) return "service_expert";
+  return "lead_memory";
+}
+
 function heuristicRoute(context = {}) {
   const text = context.message || "";
   const t = normalizeText(text);
-  const service = detectService(text);
+  const service = detectService(text, context.appConfig);
   const lead_stage = inferLeadStage(context.lead || {});
-  const isPricing = /(precio|precios|cuanto cuesta|cuánto cuesta|tarifa|desde|presupuesto|coste|€|eur)/i.test(t);
-  const isSupport = /(soporte|incidencia|problema tecnico|factura|reclamacion)/i.test(t);
+  const isPricing =
+    /(precio|precios|cuanto|cuesta|tarifa|coste|eur|iva|paquete|plan|setup|trial|demo)/i.test(t) ||
+    (/\b(presupuesto|inversion)\b/i.test(t) &&
+      /\b(cuanto|que|necesita|recomendada|minima|minimo|para empezar|para probar|demo|trial|plan|precio|cuesta)\b/i.test(t));
+  const priorityIntent = detectPriorityIntent(text);
+  const asksServiceInfo =
+    service !== "unknown" ||
+    /\b(que haceis|que ofreceis|servicios|como funciona|informacion|explicame|integrar|integracion|conectar|compatible|api|mcp|webhook)\b/.test(t);
   const hasLeadData = /(@|\+?\d[\d\s().-]{7,}|me llamo|mi nombre|soy |presupuesto|urgente|prioridad|necesito|quiero|busco)/i.test(text);
 
   let intent = "unknown";
-  if (isSupport) intent = "support";
+  if (priorityIntent) intent = priorityIntent;
   else if (isPricing) intent = "pricing_question";
-  else if (service !== "unknown" || /\?$/.test(text.trim())) intent = "service_question";
+  else if (asksServiceInfo) intent = "service_question";
   else if (hasLeadData) intent = "lead_capture";
 
-  let next_agent = "sales_qualification";
-  if (intent === "service_question" || intent === "pricing_question") next_agent = "service_expert";
-  if (lead_stage === "qualified" || lead_stage === "closing") next_agent = "closing";
-  if (intent === "unknown") next_agent = "lead_memory";
+  const next_agent = safeAgentForIntent(intent);
 
   return {
     intent,
@@ -69,10 +97,11 @@ function heuristicRoute(context = {}) {
   };
 }
 
-function sanitizeRoute(route = {}) {
+function sanitizeRoute(route = {}, appConfig = null) {
+  const services = [...getConfiguredServices(appConfig), "unknown"];
   const output = { ...ROUTER_SCHEMA, ...route };
   if (!INTENTS.includes(output.intent)) output.intent = "unknown";
-  if (!SERVICES.includes(output.service)) output.service = "unknown";
+  if (!services.includes(output.service)) output.service = "unknown";
   if (!STAGES.includes(output.lead_stage)) output.lead_stage = "new";
   if (!NEXT_AGENTS.includes(output.next_agent)) output.next_agent = "sales_qualification";
   output.confidence = clamp01(output.confidence, 0.5);
@@ -80,34 +109,27 @@ function sanitizeRoute(route = {}) {
   return output;
 }
 
-export async function runLeadRouterAgent(context = {}) {
-  const fallback = heuristicRoute(context);
-
-  try {
-    const response = await openai.responses.create({
-      model: process.env.OPENAI_AGENT_MODEL || "gpt-4.1-mini",
-      input: [
-        {
-          role: "system",
-          content:
-            "Eres Lead Router Agent de TMedia Global. Devuelve solo JSON valido con intent, service, lead_stage, next_agent, confidence y reason. No mezcles reporting, BigQuery, dashboards ni analisis de campanas.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            message: context.message,
-            source_channel: context.sourceChannel,
-            lead: context.lead || {},
-            recent_messages: (context.messages || []).slice(-8),
-            allowed: { intents: INTENTS, services: SERVICES, stages: STAGES, next_agents: NEXT_AGENTS },
-          }),
-        },
-      ],
-    });
-
-    return sanitizeRoute(parseJsonObject(response.output_text, fallback));
-  } catch (error) {
-    console.log("[leadRouterAgent] fallback:", error.message);
-    return sanitizeRoute(fallback);
-  }
+function enforceSafeRoute(route = {}, fallback = {}) {
+  const protectedIntents = new Set(["greeting", "support", "human_request"]);
+  const intent = protectedIntents.has(fallback.intent) ? fallback.intent : route.intent;
+  return {
+    ...route,
+    intent,
+    next_agent: safeAgentForIntent(intent),
+    reason: protectedIntents.has(fallback.intent)
+      ? fallback.reason
+      : route.reason,
+  };
 }
+
+export async function runLeadRouterAgent(context = {}) {
+  return sanitizeRoute(heuristicRoute(context), context.appConfig);
+}
+
+export const __leadRouterTestables = {
+  heuristicRoute,
+  enforceSafeRoute,
+  isGreetingOnly,
+  isHumanRequest,
+  isSupportRequest,
+};

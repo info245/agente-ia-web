@@ -1,5 +1,6 @@
 import {
   createConversation,
+  getConversationById,
   getConversationMessages,
   getLeadByConversationId,
 } from "../../lib/chatStore.js";
@@ -16,6 +17,25 @@ export async function buildTmediaAgentContext({
   accountId = null,
 } = {}) {
   let conversation_id = conversationId || null;
+  const safeAccountId = accountId ? String(accountId).trim() : null;
+
+  if (conversation_id) {
+    // Nunca reutilices una conversation_id que pertenezca a otra cuenta.
+    // Esto evita que un conversation_id "viejo" (p.ej. de localStorage
+    // compartido entre previews de distintos clientes) mezcle leads,
+    // mensajes y contexto entre cuentas distintas.
+    const existingConversation = await getConversationById(conversation_id).catch(() => null);
+    const ownerAccountId = existingConversation?.account_id
+      ? String(existingConversation.account_id).trim()
+      : null;
+
+    if (
+      !existingConversation ||
+      (safeAccountId && ownerAccountId !== safeAccountId)
+    ) {
+      conversation_id = null;
+    }
+  }
 
   if (!conversation_id) {
     const conversation = await createConversation({
@@ -27,7 +47,7 @@ export async function buildTmediaAgentContext({
   }
 
   const [messages, lead, appConfig] = await Promise.all([
-    getConversationMessages(conversation_id, 40).catch(() => []),
+    getConversationMessages(conversation_id, 40, { accountId: safeAccountId }).catch(() => []),
     getLeadByConversationId(conversation_id, { accountId }).catch(() => null),
     getAppConfig({ accountId }).catch(() => null),
   ]);
@@ -37,6 +57,7 @@ export async function buildTmediaAgentContext({
   const kbContext = await retrieveWebsiteContext(message, {
     topK: 4,
     threshold: 0.72,
+    accountId,
   }).catch(() => []);
 
   return {

@@ -7,17 +7,10 @@ import {
   sendClientConfirmationEmail,
   sendLeadEmail,
 } from "../tools/emailTools.js";
+import { buildLeadSignature } from "../../lib/leadEmailPolicy.js";
 
 function signature(lead = {}) {
-  return JSON.stringify({
-    name: lead?.name || "",
-    email: lead?.email || "",
-    phone: lead?.phone || "",
-    service: lead?.interest_service || "",
-    budget: lead?.budget_range || "",
-    urgency: lead?.urgency || "",
-    summary: lead?.summary || "",
-  });
+  return buildLeadSignature(lead);
 }
 
 export async function runNotificationAgent(context = {}) {
@@ -27,7 +20,11 @@ export async function runNotificationAgent(context = {}) {
   };
   const sig = signature(lead);
   const previous = await getRecentNotificationEvents(context.conversationId, 25);
-  const duplicate = previous.some((event) => event?.payload?.signature === sig);
+  const duplicate = previous.some(
+    (event) =>
+      event?.payload?.signature === sig &&
+      (event?.payload?.internal?.ok === true || event?.payload?.sent_internal === true)
+  );
 
   if (duplicate) {
     return {
@@ -45,23 +42,28 @@ export async function runNotificationAgent(context = {}) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+  const supportEmail = String(context.appConfig?.contact?.support_email || "").trim();
+  if (supportEmail && !recipients.includes(supportEmail)) recipients.push(supportEmail);
 
   const internal = await sendLeadEmail({
     lead,
     conversation_id: context.conversationId,
-    type: previous.length ? "update" : "new",
-    changedFields: [],
+    type: context.notificationType || (previous.length ? "update" : "new"),
+    changedFields: context.changedFields || [],
     emailConfig,
     recipients,
     conversationMessages,
   }).catch((error) => ({ ok: false, error: error.message }));
 
-  const client = await sendClientConfirmationEmail({
-    lead,
-    conversation_id: context.conversationId,
-    emailConfig,
-    brandName: context.appConfig?.brand?.name || "TMedia Global",
-  }).catch((error) => ({ ok: false, error: error.message }));
+  const shouldSendClient = context.sendClientConfirmation !== false;
+  const client = shouldSendClient
+    ? await sendClientConfirmationEmail({
+        lead,
+        conversation_id: context.conversationId,
+        emailConfig,
+        brandName: context.appConfig?.brand?.name || "TMedia Global",
+      }).catch((error) => ({ ok: false, error: error.message }))
+    : { skipped: true, reason: "client-confirmation-not-due" };
 
   await saveConversationEvent({
     conversation_id: context.conversationId,
@@ -72,6 +74,8 @@ export async function runNotificationAgent(context = {}) {
     payload: {
       signature: sig,
       sent_at: new Date().toISOString(),
+      sent_internal: !!internal?.ok,
+      sent_client: !!client?.ok,
       internal,
       client,
     },

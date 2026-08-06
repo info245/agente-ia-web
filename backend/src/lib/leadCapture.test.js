@@ -124,6 +124,16 @@ test("separates current situation, pain points and goal instead of mixing them",
   );
 });
 
+test("accepts short objective answers when the bot asked for the main goal", () => {
+  const result = extractLeadDataFromText("Unificar", {
+    current_step: "ask_main_goal",
+  });
+
+  assert.equal(result.main_goal, "Unificar");
+  assert.equal(result.name, null);
+  assert.equal(result.company_name, null);
+});
+
 test("mergeLeadData only accepts standalone name during close name step", () => {
   const accepted = mergeLeadData({
     currentLead: { current_step: "close_ask_name" },

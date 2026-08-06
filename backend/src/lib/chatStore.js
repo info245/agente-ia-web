@@ -187,6 +187,20 @@ export async function createConversation({
   return data;
 }
 
+export async function getConversationById(conversationId) {
+  const safeConversationId = clean(conversationId);
+  if (!safeConversationId) return null;
+
+  const { data, error } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("id", safeConversationId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data || null;
+}
+
 export async function saveMessage({
   conversation_id,
   role,
@@ -234,13 +248,10 @@ export async function saveMessage({
       payload.metadata &&
       String(error.message || "").toLowerCase().includes("metadata")
     ) {
+      const { metadata: _metadata, ...retryPayload } = payload;
       const retry = await supabase
         .from("messages")
-        .insert({
-          conversation_id: safeConversationId,
-          role: safeRole,
-          content: safeContent,
-        })
+        .insert(retryPayload)
         .select()
         .single();
 
@@ -479,18 +490,25 @@ function formatAverageMinutes(minutes) {
   return `${days.toFixed(1)} d`;
 }
 
-export async function getConversationMessages(conversation_id, limit = 30) {
+export async function getConversationMessages(conversation_id, limit = 30, { accountId = null } = {}) {
   const safeConversationId = clean(conversation_id);
   if (!safeConversationId) {
     throw new Error("getConversationMessages: conversation_id es obligatorio");
   }
 
   const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 30;
+  const safeAccountId = clean(accountId);
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("messages")
     .select("*")
-    .eq("conversation_id", safeConversationId)
+    .eq("conversation_id", safeConversationId);
+
+  if (safeAccountId && (await tableHasAccountColumn("messages"))) {
+    query = query.eq("account_id", safeAccountId);
+  }
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .limit(safeLimit);
 

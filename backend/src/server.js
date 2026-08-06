@@ -91,6 +91,13 @@ import {
 } from "./lib/nextBestAction.js";
 import { executeConfiguredAction } from "./lib/actionExecutor.js";
 import {
+  canRecoverLead,
+  canUseAutomationChannel,
+  getLatestConversationMessage,
+  getSafeAutomationDueAt,
+  userRepliedAfter,
+} from "./lib/automationPolicy.js";
+import {
   renderQuotePreviewHtml,
   renderQuoteResponseHtml,
 } from "./lib/quoteTemplate.js";
@@ -3175,12 +3182,12 @@ function buildAutomationEmailHtml({ subject, body }) {
   `;
 }
 
-function getAutomationBaseTimestamp({ flowKey, lead, quote }) {
+function getAutomationBaseTimestamp({ flowKey, lead, quote, messages = [] }) {
   if (flowKey === "quote_followup") {
     return quote?.sent_at || quote?.updated_at || null;
   }
 
-  return lead?.created_at || null;
+  return getLatestConversationMessage(messages)?.created_at || lead?.created_at || null;
 }
 
 function leadEligibleForFlow(flowKey, lead, quote) {
@@ -3241,10 +3248,15 @@ async function sendAutomationStep({
   emailConfig = null,
   accountId,
   conversationId,
+  flowKey,
 }) {
   const channel = String(step?.channel || template?.channel || "").trim().toLowerCase();
   const subject = renderTemplateString(template?.subject || "", vars).trim();
   const body = renderTemplateString(template?.body || "", vars).trim();
+
+  if (!canUseAutomationChannel({ lead, channel, flowKey })) {
+    return { skipped: true, reason: "contact-not-authorized" };
+  }
 
   if (!body) {
     throw new Error("La plantilla no tiene cuerpo de mensaje.");
@@ -7373,6 +7385,10 @@ async function runAutomationFlowsForAccount({
     for (const [flowKey, flow] of flowEntries) {
       if (flow?.enabled === false) continue;
 
+      if (flowKey === "lead_recovery" && !canRecoverLead({ lead, messages })) {
+        continue;
+      }
+
       // Una recuperación es un único intento hasta que el usuario responda.
       // Así tampoco compite este flujo con el recordatorio de WhatsApp.
       if (
@@ -7388,9 +7404,10 @@ async function runAutomationFlowsForAccount({
       const quote = needsQuote ? await getLatestQuoteByLeadId(lead.id).catch(() => null) : null;
       if (!leadEligibleForFlow(flowKey, lead, quote)) continue;
 
-      const baseTimestamp = getAutomationBaseTimestamp({ flowKey, lead, quote });
+      const baseTimestamp = getAutomationBaseTimestamp({ flowKey, lead, quote, messages });
       const baseDate = baseTimestamp ? new Date(baseTimestamp) : null;
       if (!baseDate || Number.isNaN(baseDate.getTime())) continue;
+      if (flowKey === "quote_followup" && userRepliedAfter(messages, baseTimestamp)) continue;
 
       const previewUrl = quote
         ? `${baseUrl}/crm/quotes/${lead.id}/preview?account_id=${encodeURIComponent(account.id)}`
@@ -7402,16 +7419,23 @@ async function runAutomationFlowsForAccount({
       });
 
       const steps = Array.isArray(flow?.steps) ? flow.steps : [];
+      const flowEvents = automationEvents
+        .filter((event) => event?.payload?.flow_key === flowKey)
+        .sort((a, b) => getEventTimestamp(a) - getEventTimestamp(b));
+      const previousEvent = flowEvents[flowEvents.length - 1] || null;
+      const previousStepIndex = Number(previousEvent?.payload?.step_index);
+      const previousStep = Number.isInteger(previousStepIndex) ? steps[previousStepIndex] : null;
       for (let index = 0; index < steps.length; index += 1) {
         const step = steps[index];
         if (!step || step.active === false) continue;
         if (wasAutomationStepAlreadySent(automationEvents, flowKey, index)) continue;
 
-        const delayValue = Number(step.delay_value || 0);
-        const delayUnit = String(step.delay_unit || "hours").trim().toLowerCase();
-        const multiplier =
-          delayUnit === "minutes" ? 60_000 : delayUnit === "days" ? 86_400_000 : 3_600_000;
-        const dueAt = baseDate.getTime() + Math.max(0, delayValue) * multiplier;
+        const dueAt = getSafeAutomationDueAt({
+          baseTimestamp,
+          step,
+          previousEvent,
+          previousStep,
+        });
         if (Date.now() < dueAt) continue;
 
         const template = appConfig?.message_templates?.[step.template_key] || null;
@@ -7425,6 +7449,7 @@ async function runAutomationFlowsForAccount({
           emailConfig: appConfig?.integrations?.email || null,
           accountId: account.id,
           conversationId,
+          flowKey,
         });
 
         if (sendResult?.ok) {
@@ -7461,7 +7486,10 @@ async function runAutomationFlowsForAccount({
             via: sendResult.via,
           });
 
-          if (flowKey === "lead_recovery") break;
+          // Nunca mandamos dos pasos de una secuencia en la misma ejecución.
+          // Si el servicio estuvo parado, el siguiente conserva su separación
+          // respecto al envío real anterior en vez de salir inmediatamente.
+          break;
         }
       }
     }
@@ -7513,6 +7541,7 @@ async function runWhatsAppFollowupsTask() {
     const messages = await getConversationMessages(conversationId, 10);
     const lastMessage = messages[messages.length - 1];
     if (!lastMessage || lastMessage.role !== "assistant") continue;
+    if (!canRecoverLead({ lead, messages })) continue;
 
     const lastUserMessageAt = getLastUserMessageTimestamp(messages);
 

@@ -30,6 +30,25 @@ function looksLikeValidName(value) {
   if (looksLikeEmail(v)) return false;
   if (looksLikePhone(v)) return false;
 
+  const normalized = normalizeKey(v);
+  const companyLikePrefixes = [
+    "agencia",
+    "asesor",
+    "bufete",
+    "clinica",
+    "consultora",
+    "despacho",
+    "ecommerce",
+    "empresa",
+    "estudio",
+    "tienda",
+  ];
+  if (/^(agencia|asesor\S*|bufete|cl\S*nica|consultora|despacho|ecommerce|empresa|estudio|tienda)\b/iu.test(v)) {
+    return false;
+  }
+  if (companyLikePrefixes.some((prefix) => normalized.startsWith(prefix))) return false;
+  if (/\b(sl|s l|slu|sa|s a)\b/.test(normalized)) return false;
+
   const invalidExact = [
     "si",
     "sí",
@@ -89,7 +108,8 @@ function looksLikeValidName(value) {
   ];
 
   if (invalidExact.map(normalizeKey).includes(normalizeKey(v))) return false;
-  if (/^[\p{L}\s'-]+$/u.test(v)) return true;
+  if (/[¿?]\s*$/.test(v) || v.includes("¿")) return false;
+  if (/^[\p{L}?\s'-]+$/u.test(v)) return true;
 
   if (!/^[a-záéíóúüñA-ZÁÉÍÓÚÜÑ\s'-]+$/.test(v)) return false;
 
@@ -128,7 +148,82 @@ function shouldAcceptNameCandidate(currentLead, extractedLead, lastUserMessage) 
   if (userExplicitlyCorrectedName(lastUserMessage)) return true;
 
   const currentStep = normalizeText(currentLead?.current_step);
-  return currentStep === "ask_name" || currentStep === "close_ask_name";
+  if (currentStep === "ask_name" || currentStep === "close_ask_name") return true;
+
+  return Boolean(
+    !currentLead?.name &&
+      (currentLead?.email ||
+        currentLead?.phone ||
+        currentLead?.company_name ||
+        extractedLead?.email ||
+        extractedLead?.phone ||
+        extractedLead?.company_name) &&
+      (currentLead?.interest_service || currentLead?.main_goal || currentLead?.company_name)
+  );
+}
+
+function shouldReplaceMainGoal(currentGoal, nextGoal) {
+  const current = normalizeKey(currentGoal);
+  const next = normalizeKey(nextGoal);
+  if (!next) return false;
+  if (!current) return true;
+  if (current === next) return false;
+
+  const currentIsGeneric =
+    /\b(mejorar|mejorar mis clientes|clientes|ventas|negocio)\b/.test(current) &&
+    !/\b(captar|conseguir|generar|leads|contactos|citas|solicitudes)\b/.test(current);
+  const nextIsMoreSpecific =
+    /\b(captar|conseguir|generar|leads|contactos|clientes nuevos|citas|solicitudes|reservas|pacientes|vender|ventas|checkout|conversion|medicion|medición|priorizar|reducir|coste por lead|cpl)\b/.test(next);
+  const currentIsServiceExploration =
+    /\b(seo|google ads|meta|anuncios|campanas|campañas|diseno web|diseño web|shopify)\b/.test(current);
+
+  return (currentIsGeneric || currentIsServiceExploration) && nextIsMoreSpecific;
+}
+
+function shouldReplaceService(currentService, nextService, lastUserMessage) {
+  const current = normalizeKey(currentService);
+  const next = normalizeKey(nextService);
+  const message = normalizeKey(lastUserMessage);
+  if (!next) return false;
+  if (!current) return true;
+  if (current === next) return false;
+
+  if (message.includes("mejor") || message.includes("prefiero") || message.includes("primero")) {
+    return true;
+  }
+
+  if (next === "shopify" && /\b(primero|mejor|prefiero)\s+shopify\b/.test(message)) return true;
+  if (next.includes("google ads") && message.includes("google ads")) return true;
+  if (next.includes("redes sociales") && (message.includes("meta") || message.includes("instagram") || message.includes("facebook"))) {
+    return true;
+  }
+  if (next.includes("consultoria") && message.includes("consultoria")) return true;
+  if (next.includes("consultoría") && message.includes("consultoria")) return true;
+
+  return false;
+}
+
+function rejectsCurrentService(currentService, lastUserMessage) {
+  const current = normalizeKey(currentService);
+  const message = normalizeKey(lastUserMessage);
+  if (!current || !message) return false;
+
+  const rejectPrefix = "(no quiero|no necesito|no me vendas|no busco|no es)";
+  if (current === "seo") return new RegExp(`${rejectPrefix}[^.]{0,60}\\bseo\\b`).test(message);
+  if (current.includes("google ads")) return new RegExp(`${rejectPrefix}[^.]{0,60}\\b(google ads|sem|anuncios)\\b`).test(message);
+  if (current.includes("redes sociales")) return new RegExp(`${rejectPrefix}[^.]{0,60}\\b(meta|facebook|instagram|redes)\\b`).test(message);
+  if (current.includes("diseno") || current.includes("dise")) return new RegExp(`${rejectPrefix}[^.]{0,60}\\b(web|pagina)\\b`).test(message);
+  if (current.includes("automatizacion") || current.includes("automatizaci")) return new RegExp(`${rejectPrefix}[^.]{0,60}\\b(crm|automatiz)\\b`).test(message);
+  return false;
+}
+
+function shouldReplaceBusinessType(currentType, nextType) {
+  const current = normalizeKey(currentType);
+  const next = normalizeKey(nextType);
+  if (!next) return false;
+  if (!current) return true;
+  if (current === next) return false;
+  return ["empresa", "negocio", "proyecto"].includes(current);
 }
 
 function chooseField(currentValue, newValue, validator) {
@@ -182,8 +277,10 @@ export function mergeLeadData({ currentLead, extractedLead, lastUserMessage }) {
   merged.email = chooseField(currentLead?.email, extractedLead?.email, looksLikeEmail);
   merged.phone = chooseField(currentLead?.phone, extractedLead?.phone, looksLikePhone);
 
-  if (!normalizeText(currentLead?.interest_service) && isMeaningful(extractedLead?.interest_service)) {
+  if (shouldReplaceService(currentLead?.interest_service, extractedLead?.interest_service, lastUserMessage)) {
     merged.interest_service = normalizeText(extractedLead.interest_service);
+  } else if (rejectsCurrentService(currentLead?.interest_service, lastUserMessage)) {
+    merged.interest_service = "";
   }
 
   if (!normalizeText(currentLead?.urgency) && isMeaningful(extractedLead?.urgency)) {
@@ -194,7 +291,7 @@ export function mergeLeadData({ currentLead, extractedLead, lastUserMessage }) {
     merged.budget_range = normalizeText(extractedLead.budget_range);
   }
 
-  if (!normalizeText(currentLead?.business_type) && isMeaningful(extractedLead?.business_type)) {
+  if (shouldReplaceBusinessType(currentLead?.business_type, extractedLead?.business_type)) {
     merged.business_type = normalizeText(extractedLead.business_type);
   }
 
@@ -202,7 +299,11 @@ export function mergeLeadData({ currentLead, extractedLead, lastUserMessage }) {
     merged.business_activity = normalizeText(extractedLead.business_activity);
   }
 
-  if (!normalizeText(currentLead?.main_goal) && isMeaningful(extractedLead?.main_goal)) {
+  if (!normalizeText(currentLead?.company_name) && isMeaningful(extractedLead?.company_name)) {
+    merged.company_name = normalizeText(extractedLead.company_name);
+  }
+
+  if (shouldReplaceMainGoal(currentLead?.main_goal, extractedLead?.main_goal)) {
     merged.main_goal = normalizeText(extractedLead.main_goal);
   }
 
@@ -219,10 +320,23 @@ export function mergeLeadData({ currentLead, extractedLead, lastUserMessage }) {
     isMeaningful(extractedLead?.preferred_contact_channel)
   ) {
     merged.preferred_contact_channel = normalizeText(extractedLead.preferred_contact_channel);
+  } else if (
+    isMeaningful(extractedLead?.preferred_contact_channel) &&
+    /prefiero|whatsapp|wasap|telefono|tel[eé]fono|email|correo|mail/i.test(lastUserMessage || "")
+  ) {
+    merged.preferred_contact_channel = normalizeText(extractedLead.preferred_contact_channel);
   }
 
   if (!normalizeText(currentLead?.last_intent) && isMeaningful(extractedLead?.last_intent)) {
     merged.last_intent = normalizeText(extractedLead.last_intent);
+  }
+
+  if (isMeaningful(extractedLead?.current_step)) {
+    merged.current_step = normalizeText(extractedLead.current_step);
+  }
+
+  if (isMeaningful(extractedLead?.last_question)) {
+    merged.last_question = normalizeText(extractedLead.last_question);
   }
 
   merged.custom_fields = {

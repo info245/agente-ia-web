@@ -8,7 +8,14 @@ const IMPORTANT_FIELDS = [
   "name",
   "email",
   "phone",
+  "company_name",
+  "business_type",
+  "business_activity",
   "interest_service",
+  "main_goal",
+  "current_situation",
+  "pain_points",
+  "preferred_contact_channel",
   "urgency",
   "budget_range",
   "lead_score",
@@ -65,7 +72,19 @@ export function decideEmailSend({
     leadAfter?.name ||
     leadAfter?.email ||
     leadAfter?.phone ||
-    leadAfter?.interest_service
+    leadAfter?.company_name ||
+    leadAfter?.business_type ||
+    leadAfter?.business_activity ||
+    leadAfter?.interest_service ||
+    leadAfter?.main_goal ||
+    leadAfter?.current_situation ||
+    leadAfter?.pain_points ||
+    leadAfter?.preferred_contact_channel ||
+    leadAfter?.urgency ||
+    leadAfter?.budget_range ||
+    (leadAfter?.custom_fields &&
+      typeof leadAfter.custom_fields === "object" &&
+      Object.keys(leadAfter.custom_fields).length > 0)
   );
   if (!hasAnyData) return { sendType: "none", changedFields: [] };
 
@@ -77,13 +96,22 @@ export function decideEmailSend({
     (leadBefore.email ||
       leadBefore.phone ||
       leadBefore.name ||
-      leadBefore.interest_service)
+      leadBefore.company_name ||
+      leadBefore.business_type ||
+      leadBefore.business_activity ||
+      leadBefore.interest_service ||
+      leadBefore.main_goal ||
+      leadBefore.current_situation ||
+      leadBefore.pain_points ||
+      leadBefore.preferred_contact_channel ||
+      leadBefore.urgency ||
+      leadBefore.budget_range)
   );
 
   const changedFields = getChangedImportantFields(leadBefore || {}, leadAfter || {});
 
   // 1) NEW: no existía lead útil antes y ahora sí
-  if (!beforeExists && (hasContactAfter || hasMinimalAfter)) {
+  if (!beforeExists && (hasContactAfter || hasMinimalAfter || hasAnyData)) {
     return { sendType: "new", changedFields };
   }
 
@@ -94,7 +122,7 @@ export function decideEmailSend({
   if (now - lastSentAtMs < minMinutesBetween * 60_000) {
     // Permitimos update si el cambio es de alto valor (presupuesto/urgencia/phone/email)
     const highValueChange = changedFields.some((f) =>
-      ["budget_range", "urgency", "phone", "email"].includes(f)
+      ["budget_range", "urgency", "phone", "email", "main_goal", "current_situation"].includes(f)
     );
     if (!highValueChange) return { sendType: "none", changedFields: [] };
   }
@@ -107,7 +135,22 @@ export function decideEmailSend({
 
   // 5) Update solo si el cambio incluye algo relevante
   const relevantChange = changedFields.some((f) =>
-    ["budget_range", "urgency", "phone", "email", "interest_service", "lead_score", "name"].includes(f)
+    [
+      "budget_range",
+      "urgency",
+      "phone",
+      "email",
+      "interest_service",
+      "lead_score",
+      "name",
+      "company_name",
+      "business_type",
+      "business_activity",
+      "main_goal",
+      "current_situation",
+      "pain_points",
+      "preferred_contact_channel",
+    ].includes(f)
   );
 
   if (!relevantChange) return { sendType: "none", changedFields: [] };
