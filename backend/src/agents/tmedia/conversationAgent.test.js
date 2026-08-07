@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildDeterministicConversationReply } from "./conversationAgent.js";
+import {
+  buildDeterministicConversationReply,
+  runConversationAgent,
+} from "./conversationAgent.js";
 
 const sanchoConfig = {
   brand: { name: "Sancho AI" },
@@ -76,4 +79,29 @@ test("answers the SaaS fit question and acknowledges a bare URL honestly", () =>
   const url = replyFor("Galunai.com");
   assert.match(url.assistant_message, /has compartido Galunai\.com/i);
   assert.match(url.assistant_message, /no voy a fingir que la he analizado/i);
+});
+
+test("keeps guided qualification active across later user answers", async () => {
+  const result = await runConversationAgent({
+    message: "Vendemos software a departamentos financieros",
+    messages: [
+      { role: "user", content: "Hazme preguntas para saber si encajamos" },
+      { role: "assistant", content: "De acuerdo. Te haré una pregunta cada vez para valorar el encaje." },
+      { role: "user", content: "Vendemos software a departamentos financieros" },
+    ],
+    lead: { current_step: "ask_main_goal" },
+    appConfig: sanchoConfig,
+  });
+
+  assert.match(result.assistant_message, /una pregunta cada vez/i);
+  assert.match(result.assistant_message, /resultado|objetivo|conseguir/i);
+  assert.equal((result.assistant_message.match(/\?/g) || []).length, 1);
+});
+
+test("refuses undocumented CRM connections before asking commercial questions", () => {
+  const result = replyFor("¿HubSpot sí lo conectáis seguro?");
+  assert.equal(result.handled, true);
+  assert.match(result.assistant_message, /no puedo confirmar/i);
+  assert.match(result.assistant_message, /API o los webhooks/i);
+  assert.doesNotMatch(result.assistant_message, /qué objetivo|puedo ayudarte a conectar HubSpot/i);
 });

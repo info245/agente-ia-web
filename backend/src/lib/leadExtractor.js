@@ -910,6 +910,9 @@ function extractMainGoal(text = "", existingLead = null) {
   if (/\b(ya\s+(se\s+lo\s+)?(he|hemos)\s+(comentado|dicho|explicado)|ya\s+lo\s+he\s+explicado|ya\s+esta\s+todo|lo\s+he\s+explicado\s+todo)\b/i.test(t)) {
     return null;
   }
+  if (/^(somos|vendo|vendemos|damos|ofrecemos|trabajamos|tenemos)\b/i.test(t) && !/\b(queremos|buscamos|necesitamos|objetivo|mejorar|reducir|priorizar|captar|conseguir)\b/i.test(t)) {
+    return null;
+  }
   if (
     normalizeText(existingLead?.current_step || "") === "ask_main_goal" &&
     !isNegativeResponse(raw) &&
@@ -920,9 +923,6 @@ function extractMainGoal(text = "", existingLead = null) {
     raw.split(/\s+/).filter(Boolean).length <= 8
   ) {
     return raw;
-  }
-  if (/^(somos|vendo|vendemos|damos|ofrecemos|trabajamos|tenemos)\b/i.test(t) && !/\b(queremos|buscamos|necesitamos|objetivo|mejorar|reducir|priorizar|captar|conseguir)\b/i.test(t)) {
-    return null;
   }
   if (looksLikeValidName(raw)) return null;
   if (/(queremos|necesitamos|buscamos|nos gustar|nuestro objetivo|optimizar|reducir|bajar|redise|conversion|conversi|roas|cpa|seo|visibilidad ia|automatizar|automatizaciones)/i.test(t)) {

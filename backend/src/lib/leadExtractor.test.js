@@ -88,6 +88,16 @@ test("retains commercial evidence in a guided SaaS discovery request", () => {
   assert.equal(result.business_type, "SaaS");
 });
 
+test("does not mistake a business description for the main goal during guided discovery", () => {
+  const result = extractLeadDataFromText(
+    "Vendemos software a departamentos financieros",
+    { current_step: "ask_main_goal" }
+  );
+
+  assert.equal(result.main_goal, null);
+  assert.equal(result.business_activity, "Vendemos software a departamentos financieros");
+});
+
 test("detects common marketing services in messy business conversations", () => {
   const meta = extractLeadDataFromText("necesito campanas en meta para un restaurante");
   const shopify = extractLeadDataFromText("igual luego hacemos meta ads, pero primero shopify");

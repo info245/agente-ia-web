@@ -15,6 +15,7 @@ import {
   hasRequiredLeadData,
 } from "../../lib/leadRequirements.js";
 import { detectPriorityIntent } from "../../lib/conversationIntent.js";
+import { isCapabilityQuestion } from "../../lib/capabilityPolicy.js";
 import { buildDeterministicConversationReply } from "../tmedia/conversationAgent.js";
 
 function finalReply({ selectedResult, closingResult, memoryResult, context = {} }) {
@@ -57,7 +58,11 @@ function previousUserText(messages = [], currentMessage = "") {
 }
 
 function buildLoopBreakerReply({ currentMessage = "", lead = {}, appConfig = null } = {}) {
-  const excerpt = String(currentMessage || "").replace(/\s+/g, " ").trim().slice(0, 180);
+  const excerpt = String(currentMessage || "")
+    .replace(/[¿?]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 180);
   const nextMissing = getMissingLeadRequirements(lead || {}, appConfig)[0];
   const nextQuestion = nextMissing ? getLeadRequirementPrompt(nextMissing, appConfig) : "";
   const acknowledgement = excerpt
@@ -68,6 +73,32 @@ function buildLoopBreakerReply({ currentMessage = "", lead = {}, appConfig = nul
     return `${acknowledgement} La respuesta anterior se estaba repitiendo y la he bloqueado. Para avanzar sin volver atrás: ${nextQuestion}`;
   }
   return `${acknowledgement} La respuesta anterior se estaba repitiendo y la he bloqueado. No voy a inventar una respuesta; puedo dejar este punto registrado para que lo revise el equipo.`;
+}
+
+function buildSafeRepeatedIntentReply({ currentMessage = "", reply = "" } = {}) {
+  const priorityIntent = detectPriorityIntent(currentMessage);
+  if (priorityIntent === "prompt_injection") {
+    return "La respuesta no cambia: no puedo copiar el mensaje de sistema, los prompts ni las instrucciones internas. Puedo explicar mis funciones y límites sin revelar información protegida.";
+  }
+  if (priorityIntent === "human_request") {
+    return "Mantengo tu petición de atención humana y no voy a devolverte al cuestionario comercial. El equipo debe continuar desde el contexto ya recogido.";
+  }
+  if (priorityIntent === "loop_complaint") {
+    return "Entendido: no repetiré la pregunta anterior. Si falta una precisión, debe ser concreta y distinta; si no, responderé con lo que ya has dado.";
+  }
+  if (priorityIntent === "agent_question") {
+    return "No me corresponde decir que soy mejor que otro asistente. Debo demostrar utilidad respondiendo con contexto, límites claros y sin inventar capacidades.";
+  }
+  if (priorityIntent === "booking_request") {
+    return "La limitación sigue siendo la misma: no puedo reservar la cita directamente desde este chat, pero sí recoger los datos para que el equipo continúe y facilite el acceso gratuito a la beta.";
+  }
+  if (isCapabilityQuestion(currentMessage)) {
+    return "La comprobación debe hacerse para cada sistema por separado. Tampoco puedo confirmar esa conexión sin documentación específica; hay que validar su API o sus webhooks y el entorno concreto antes de prometerla.";
+  }
+  if (/\b(precio|precios|cuanto|cuesta|tarifa|coste|plan|planes|pricing)\b/.test(normalizeText(currentMessage))) {
+    return `Para responderte directamente sin cambiar la información: ${String(reply || "").trim()}`;
+  }
+  return "";
 }
 
 function guardAgainstReplyLoop({
@@ -86,6 +117,11 @@ function guardAgainstReplyLoop({
   const currentUserChanged = normalizeText(previousUserText(messages, currentMessage)) !== normalizeText(currentMessage);
   const repeatedVerbatim = currentUserChanged && recentAssistantReplies.includes(normalizedReply);
   const bannedGeneric = BANNED_GENERIC_REPLY.test(normalizedReply);
+
+  if (repeatedVerbatim && !bannedGeneric) {
+    const safeRepeatedIntentReply = buildSafeRepeatedIntentReply({ currentMessage, reply });
+    if (safeRepeatedIntentReply) return sanitizeCommercialReply(safeRepeatedIntentReply);
+  }
 
   if (!reply || bannedGeneric || repeatedVerbatim) {
     const deterministic = buildDeterministicConversationReply({
@@ -664,7 +700,7 @@ export async function processTmediaIncomingMessage({
 
   return {
     ok: true,
-    build: "tmedia-agents-v3-loop-guard",
+    build: "tmedia-agents-v4-scenario-matrix",
     conversation_id: context.conversationId,
     reply,
     replyText: reply,
@@ -701,4 +737,5 @@ export const __tmediaChatOrchestratorTestables = {
   selectAgentId,
   shouldRunClosing,
   guardAgainstReplyLoop,
+  buildSafeRepeatedIntentReply,
 };

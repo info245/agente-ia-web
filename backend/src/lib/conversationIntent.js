@@ -20,7 +20,8 @@ export function isHumanRequest(text = "") {
     /\b(atencion humana|agente humano)\b/.test(value) ||
     /\b(mandar|enviar|dejar|pasar|hacer llegar)\b.*\b(mensaje|nota|email|correo|aviso)\b.*\b(equipo|responsable|propietario|dueno|persona)\b/.test(value) ||
     /\b(dile|avisale|avisa|comunica|comunicale)\b.*\b(equipo|responsable|propietario|dueno|persona)\b/.test(value) ||
-    /\b(puedes|podrias)\b.*\b(mandar|enviar|dejar)\b.*\b(mensaje|nota|email|correo|aviso)\b/.test(value)
+    /\b(puedes|podrias)\b.*\b(mandar|enviar|dejar)\b.*\b(mensaje|nota|email|correo|aviso)\b/.test(value) ||
+    /\b(puedes|podrias)\b.*\b(mandarles|enviarles|avisarles|escribirles|contactarles)\b/.test(value)
   );
 }
 
@@ -53,7 +54,8 @@ export function isLoopComplaint(text = "") {
   return (
     /\b(bucle|loop)\b/.test(value) ||
     /\b(repites|repitiendo|misma respuesta|otra vez lo mismo|no me respondes|no respondes)\b/.test(value) ||
-    /\b(eso es lo que te he preguntado|te he dicho|ya te he dicho)\b/.test(value)
+    /\b(eso es lo que te he preguntado|te he dicho|ya te he dicho)\b/.test(value) ||
+    /\b(no vuelvas a preguntarme|no preguntes otra vez|deja de preguntarme)\b/.test(value)
   );
 }
 
@@ -62,7 +64,8 @@ export function isAgentQuestion(text = "") {
   return (
     /\b(que|cual)\b.*\b(tipo de agente|directrices|capacidad|capacidades|funcion|limitaciones)\b/.test(value) ||
     /\b(que puedes hacer|como asistente|eres un bot|eres una ia|quien eres)\b/.test(value) ||
-    /\b(tu capacidad|la capacidad de sancho)\b/.test(value)
+    /\b(tu capacidad|la capacidad de sancho)\b/.test(value) ||
+    /\b(mejor que chatgpt|mejor que otro asistente|comparado con chatgpt|compararte con chatgpt)\b/.test(value)
   );
 }
 

@@ -77,3 +77,23 @@ test("short replies cannot be mistaken for a configured service substring", () =
   assert.equal(route.intent, "unknown");
   assert.equal(route.next_agent, "conversation");
 });
+
+test("recognizes a distinctive token inside a configured service name", () => {
+  const route = heuristicRoute({
+    message: "¿Qué caso de uso tendría Sancho en una inmobiliaria?",
+    appConfig: { offers: { "Sancho AI": {} } },
+  });
+  assert.equal(route.service, "Sancho AI");
+  assert.equal(route.intent, "service_question");
+  assert.equal(route.next_agent, "service_expert");
+});
+
+test("keeps answering a concrete use-case follow-up instead of restarting qualification", () => {
+  const route = heuristicRoute({
+    message: "Nuestro problema es que vemos ROAS pero no margen ni calidad de cliente",
+    lead: { interest_service: "Sancho AI", business_type: "Ecommerce" },
+    appConfig: { offers: { "Sancho AI": {} } },
+  });
+  assert.equal(route.intent, "service_question");
+  assert.equal(route.next_agent, "service_expert");
+});

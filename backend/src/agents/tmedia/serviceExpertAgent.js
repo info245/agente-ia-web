@@ -6,6 +6,11 @@ import {
   getLeadRequirementPrompt,
   getMissingLeadRequirements,
 } from "../../lib/leadRequirements.js";
+import { buildSanchoUseCaseReply } from "../../lib/sanchoUseCases.js";
+import {
+  buildUngroundedCapabilityReply,
+  guardCapabilityReply,
+} from "../../lib/capabilityPolicy.js";
 
 function configuredOffers(appConfig = null) {
   const offersSource = Object.keys(appConfig?.offers || {}).length
@@ -41,34 +46,6 @@ function isProofOrGuaranteeQuestion(value = "") {
   );
 }
 
-function isCapabilityQuestion(value = "") {
-  return /\b(integrar|integracion|conectar|compatible|api|mcp|webhook|erp|crm)\b/.test(
-    normalizeText(value)
-  );
-}
-
-function hasCapabilityEvidence(message = "", factsText = "") {
-  const evidence = normalizeText(factsText);
-  if (!evidence) return false;
-  const generic = new Set([
-    "puedo", "puede", "usar", "propio", "como", "integra", "integrar", "integracion",
-    "conectar", "compatible", "api", "mcp", "webhook", "erp", "crm", "sistema", "datos",
-  ]);
-  const entities = normalizeText(message)
-    .split(" ")
-    .filter((word) => word.length >= 4 && !generic.has(word));
-  return entities.length > 0 && entities.some((entity) => evidence.includes(entity));
-}
-
-function guardCapabilityReply({ message = "", reply = "", factsText = "" } = {}) {
-  if (!isCapabilityQuestion(message) || hasCapabilityEvidence(message, factsText)) return reply;
-  const claimsAvailability = /\b(si|claro|por supuesto|es posible|se puede|permite|compatible|se integra|se conecta|mediante)\b/.test(
-    normalizeText(reply)
-  );
-  if (!claimsAvailability) return reply;
-  return "Con la información configurada no puedo confirmar que esa integración esté disponible tal cual. La vía habitual sería validar la API o los webhooks del sistema; MCP solo sería una opción si existe y se configura un conector específico. Antes de prometerlo, hay que comprobar la versión y el entorno que utilizas.";
-}
-
 function getConfiguredOfferEntries(appConfig = null) {
   const offersSource = Object.keys(appConfig?.offers || {}).length
     ? appConfig.offers
@@ -76,13 +53,12 @@ function getConfiguredOfferEntries(appConfig = null) {
   return Object.entries(offersSource || {}).filter(([name]) => Boolean(name));
 }
 
-function buildProofReply({ service, facts = {}, lead = {}, appConfig = null } = {}) {
+function buildProofReply({ service, facts = {}, lead = {}, appConfig = null, message = "" } = {}) {
   const brandName = String(appConfig?.brand?.name || "nuestro equipo").trim();
   const serviceName = service && service !== "servicio" && service !== "unknown"
     ? service
     : "SEO";
   const normalizedService = normalizeText(serviceName);
-  const priceText = getPriceText(facts);
   const context = [
     lead?.main_goal ? `objetivo: ${lead.main_goal}` : null,
     lead?.business_activity || lead?.current_situation
@@ -90,7 +66,9 @@ function buildProofReply({ service, facts = {}, lead = {}, appConfig = null } = 
       : null,
   ].filter(Boolean);
   const contextLine = context.length ? `Con lo que me has contado (${context.join("; ")}), ` : "";
-  const priceLine = priceText ? ` En ${brandName}, ${serviceName} parte ${priceText}.` : "";
+  const asksWhatCanBeMeasured = /\b(que resultados|resultados reales|que medir|podria medir|metricas)\b/.test(
+    normalizeText(message)
+  );
   let measurableFacts =
     "posiciones en Google, trafico organico, consultas recibidas, llamadas/formularios y evolucion frente al punto de partida";
   let approach =
@@ -116,9 +94,18 @@ function buildProofReply({ service, facts = {}, lead = {}, appConfig = null } = 
       "rendimiento por canal, coste por lead, conversiones, calidad de contactos, embudos, inversiones y prioridades detectadas";
     approach =
       "auditar canales, detectar fugas, priorizar acciones por impacto y construir un plan medible con responsables y plazos";
+  } else if (normalizedService.includes("sancho")) {
+    measurableFacts =
+      "frescura y completitud de los datos, anomalías detectadas, tiempo hasta identificar una prioridad, recomendaciones revisadas, rendimiento por canal, calidad de lead y avance comercial cuando esas fuentes están conectadas";
+    approach =
+      "definir un punto de partida, conectar las fuentes disponibles, acordar qué decisiones debe apoyar el sistema y comprobar cada recomendación contra el resultado posterior";
   }
 
-  return `${contextLine}lo honesto es esto: no se puede prometer que cada dia entren clientes nuevos solo por contratar ${serviceName}. Lo que si se puede demostrar y revisar son hechos medibles: ${measurableFacts}. El enfoque seria ${approach}.${priceLine} Si alguien te garantiza clientes diarios, te estaria prometiendo algo que no controla.`;
+  if (asksWhatCanBeMeasured) {
+    return `${contextLine}los resultados reales que mediría en ${serviceName} son: ${measurableFacts}. El método sería ${approach}. Así se evalúa utilidad con evidencia, sin atribuir al sistema resultados que dependen también del equipo y la ejecución.`;
+  }
+
+  return `${contextLine}lo honesto es esto: no se puede prometer que cada dia entren clientes nuevos solo por contratar ${serviceName}. Lo que si se puede demostrar y revisar son hechos medibles: ${measurableFacts}. El enfoque seria ${approach}. Si alguien te garantiza clientes diarios, te estaria prometiendo algo que no controla.`;
 }
 
 function getPriceText(facts = {}) {
@@ -263,7 +250,7 @@ export async function runServiceExpertAgent(context = {}) {
     return {
       service,
       assistant_message: compactString(
-        buildProofReply({ service, facts, lead: contextualLead, appConfig: context.appConfig }),
+        buildProofReply({ service, facts, lead: contextualLead, appConfig: context.appConfig, message: context.message }),
         1000
       ),
       lead_patch,
@@ -288,6 +275,20 @@ export async function runServiceExpertAgent(context = {}) {
     };
   }
 
+  const groundedUseCaseReply = buildSanchoUseCaseReply({
+    message: context.message,
+    lead: contextualLead,
+    appConfig: context.appConfig,
+  });
+  if (groundedUseCaseReply) {
+    return {
+      service,
+      assistant_message: compactString(groundedUseCaseReply, 1000),
+      lead_patch: buildContextLeadPatch({ context, contextualLead, service }),
+      tools_used: ["websiteFacts", "sanchoUseCasePolicy"],
+    };
+  }
+
   const factsText = [
     context.knowledgeContext,
     facts?.description,
@@ -298,6 +299,19 @@ export async function runServiceExpertAgent(context = {}) {
     .filter(Boolean)
     .join("\n")
     .slice(0, 8000);
+
+  const capabilityBoundary = buildUngroundedCapabilityReply({
+    message: context.message,
+    factsText,
+  });
+  if (capabilityBoundary) {
+    return {
+      service,
+      assistant_message: compactString(capabilityBoundary, 900),
+      lead_patch: buildContextLeadPatch({ context, contextualLead, service }),
+      tools_used: ["websiteFacts", "capabilityPolicy"],
+    };
+  }
 
   const nextHint = nextConfiguredConversionHint(contextualLead, context.appConfig);
   const fallback = `${service}: podemos orientarte segun tu objetivo y situacion actual. ${nextHint}`;
@@ -318,6 +332,7 @@ export async function runServiceExpertAgent(context = {}) {
               "Usa solo hechos configurados para esta cuenta y lleva la conversacion hacia el siguiente dato del lead.",
               "Responde primero a la pregunta actual. No vuelvas a pedir un dato que aparezca en el lead, en el mensaje actual o en los mensajes recientes.",
               "No inventes servicios ni precios. No presentes canales, fuentes de datos o herramientas como servicios vendidos si no estan en la lista configurada.",
+              "No afirmes que envia mensajes, agenda citas, configura CRM, modifica campanas o ejecuta automatizaciones salvo que ese hecho aparezca expresamente en la informacion configurada.",
               promptAdditions ? `Instrucciones especificas de la cuenta: ${promptAdditions}` : "",
             ].filter(Boolean).join(" "),
         },

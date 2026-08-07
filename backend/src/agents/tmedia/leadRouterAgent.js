@@ -45,12 +45,14 @@ function getConfiguredServices(appConfig = null) {
 
 function detectService(text = "", appConfig = null) {
   const t = normalizeText(text);
+  const messageTokens = new Set(t.split(" ").filter(Boolean));
   const match = getConfiguredServices(appConfig).find((service) => {
     const normalizedService = normalizeText(service);
     const serviceTokens = normalizedService.split(" ").filter(Boolean);
     return normalizedService && (
       t.includes(normalizedService) ||
-      (t.length >= 3 && serviceTokens.includes(t))
+      (t.length >= 3 && serviceTokens.includes(t)) ||
+      serviceTokens.some((token) => token.length >= 3 && messageTokens.has(token))
     );
   });
   return match || "unknown";
@@ -86,7 +88,9 @@ function heuristicRoute(context = {}) {
   const priorityIntent = detectPriorityIntent(text);
   const asksServiceInfo =
     service !== "unknown" ||
-    /\b(que haceis|que ofreceis|servicios|como funciona|informacion|explicame|integrar|integracion|conectar|compatible|api|mcp|webhook)\b/.test(t);
+    /\b(que haceis|que ofreceis|servicios|como funciona|informacion|explicame|integrar|integracion|conectar|compatible|api|mcp|webhook|caso de uso|asesorame|aplica)\b/.test(t) ||
+    (Boolean(context.lead?.interest_service) &&
+      /\b(nuestro problema|mi problema|necesito comparar|quiero distinguir|no quiero otro|que haria|como lo haria|como se aplicaria|entonces|y si)\b/.test(t));
   const hasLeadData = /(@|\+?\d[\d\s().-]{7,}|me llamo|mi nombre|mi empresa|presupuesto|urgente|prioridad|necesito|quiero|busco)/i.test(text);
 
   let intent = "unknown";

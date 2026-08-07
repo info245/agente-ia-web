@@ -35,6 +35,14 @@ test("does not confirm an ungrounded integration capability", () => {
     factsText: "Integración documentada con Odoo mediante API.",
   });
   assert.equal(grounded, "Sí, Odoo está soportado.");
+
+  const brandOnly = __serviceExpertTestables.guardCapabilityReply({
+    message: "¿Puedo usar mi ERP Odoo con Sancho?",
+    reply: "Sí, Sancho facilita la integración con Odoo.",
+    factsText: "Sancho conecta datos y prioriza decisiones.",
+  });
+  assert.match(brandOnly, /no puedo confirmar/i);
+  assert.match(brandOnly, /API o los webhooks/i);
 });
 
 test("answers proof and guarantee objections without promising daily clients", async () => {
@@ -59,6 +67,31 @@ test("answers proof and guarantee objections without promising daily clients", a
   assert.match(result.assistant_message, /posiciones en Google/i);
   assert.match(result.assistant_message, /llamadas\/formularios/i);
   assert.doesNotMatch(result.assistant_message, /objetivo quieres conseguir/i);
+});
+
+test("uses Sancho operational metrics instead of an unrelated SEO proof template", async () => {
+  const appConfig = {
+    brand: { name: "Sancho AI" },
+    offers: { "Sancho AI": { description: "Conecta datos, interpreta y prioriza decisiones." } },
+    lead_capture: { fields: { main_goal: true }, custom_fields: [] },
+  };
+  const guarantee = await runServiceExpertAgent({
+    message: "¿Me garantizas que Sancho hará que entren clientes todos los días?",
+    routerResult: { service: "Sancho AI" },
+    lead: {},
+    appConfig,
+  });
+  const measurement = await runServiceExpertAgent({
+    message: "Entonces, ¿qué resultados reales podría medir?",
+    routerResult: { service: "Sancho AI" },
+    lead: { interest_service: "Sancho AI" },
+    appConfig,
+  });
+
+  assert.match(guarantee.assistant_message, /frescura y completitud|anomalías detectadas/i);
+  assert.doesNotMatch(guarantee.assistant_message, /posiciones en Google|ficha de Google/i);
+  assert.match(measurement.assistant_message, /resultados reales.*Sancho AI/i);
+  assert.notEqual(measurement.assistant_message, guarantee.assistant_message);
 });
 
 const proofScenarios = [
