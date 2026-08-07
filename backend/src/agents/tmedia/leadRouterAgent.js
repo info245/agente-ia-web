@@ -17,10 +17,15 @@ const INTENTS = [
   "pricing_question",
   "support",
   "human_request",
+  "booking_request",
+  "guided_discovery",
+  "loop_complaint",
+  "agent_question",
+  "prompt_injection",
   "unknown",
 ];
 const STAGES = ["new", "qualifying", "qualified", "closing", "completed"];
-const NEXT_AGENTS = ["sales_qualification", "service_expert", "closing", "lead_memory"];
+const NEXT_AGENTS = ["sales_qualification", "service_expert", "closing", "lead_memory", "conversation"];
 
 function normalizeText(value = "") {
   return String(value || "")
@@ -42,7 +47,11 @@ function detectService(text = "", appConfig = null) {
   const t = normalizeText(text);
   const match = getConfiguredServices(appConfig).find((service) => {
     const normalizedService = normalizeText(service);
-    return normalizedService && (t.includes(normalizedService) || normalizedService.includes(t));
+    const serviceTokens = normalizedService.split(" ").filter(Boolean);
+    return normalizedService && (
+      t.includes(normalizedService) ||
+      (t.length >= 3 && serviceTokens.includes(t))
+    );
   });
   return match || "unknown";
 }
@@ -61,7 +70,8 @@ function inferLeadStage(lead = {}) {
 function safeAgentForIntent(intent = "") {
   if (["greeting", "lead_capture"].includes(intent)) return "sales_qualification";
   if (["service_question", "pricing_question"].includes(intent)) return "service_expert";
-  return "lead_memory";
+  if (["support", "human_request"].includes(intent)) return "lead_memory";
+  return "conversation";
 }
 
 function heuristicRoute(context = {}) {
@@ -70,14 +80,14 @@ function heuristicRoute(context = {}) {
   const service = detectService(text, context.appConfig);
   const lead_stage = inferLeadStage(context.lead || {});
   const isPricing =
-    /(precio|precios|cuanto|cuesta|tarifa|coste|eur|iva|paquete|plan|setup|trial|demo)/i.test(t) ||
+    /(precio|precios|cuanto|cuesta|tarifa|coste|eur|iva|paquete|plan|setup|trial)/i.test(t) ||
     (/\b(presupuesto|inversion)\b/i.test(t) &&
-      /\b(cuanto|que|necesita|recomendada|minima|minimo|para empezar|para probar|demo|trial|plan|precio|cuesta)\b/i.test(t));
+      /\b(cuanto|que|necesita|recomendada|minima|minimo|para empezar|para probar|trial|plan|precio|cuesta)\b/i.test(t));
   const priorityIntent = detectPriorityIntent(text);
   const asksServiceInfo =
     service !== "unknown" ||
     /\b(que haceis|que ofreceis|servicios|como funciona|informacion|explicame|integrar|integracion|conectar|compatible|api|mcp|webhook)\b/.test(t);
-  const hasLeadData = /(@|\+?\d[\d\s().-]{7,}|me llamo|mi nombre|soy |presupuesto|urgente|prioridad|necesito|quiero|busco)/i.test(text);
+  const hasLeadData = /(@|\+?\d[\d\s().-]{7,}|me llamo|mi nombre|mi empresa|presupuesto|urgente|prioridad|necesito|quiero|busco)/i.test(text);
 
   let intent = "unknown";
   if (priorityIntent) intent = priorityIntent;
@@ -110,7 +120,16 @@ function sanitizeRoute(route = {}, appConfig = null) {
 }
 
 function enforceSafeRoute(route = {}, fallback = {}) {
-  const protectedIntents = new Set(["greeting", "support", "human_request"]);
+  const protectedIntents = new Set([
+    "greeting",
+    "support",
+    "human_request",
+    "booking_request",
+    "guided_discovery",
+    "loop_complaint",
+    "agent_question",
+    "prompt_injection",
+  ]);
   const intent = protectedIntents.has(fallback.intent) ? fallback.intent : route.intent;
   return {
     ...route,

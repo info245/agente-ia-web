@@ -15,17 +15,19 @@ import {
   hasRequiredLeadData,
 } from "../../lib/leadRequirements.js";
 import { detectPriorityIntent } from "../../lib/conversationIntent.js";
+import { buildDeterministicConversationReply } from "../tmedia/conversationAgent.js";
 
-function finalReply({ selectedResult, closingResult, memoryResult }) {
+function finalReply({ selectedResult, closingResult, memoryResult, context = {} }) {
   if (closingResult?.chat_completed && closingResult?.closing_message) {
     return sanitizeCommercialReply(closingResult.closing_message);
   }
   if (selectedResult?.assistant_message) return sanitizeCommercialReply(selectedResult.assistant_message);
   if (selectedResult?.response) return sanitizeCommercialReply(selectedResult.response);
-  if (memoryResult?.conversation_summary) {
-    return "Gracias, lo tengo en cuenta. ¿Me das un poco más de detalle para poder orientarte mejor?";
+  const deterministic = buildDeterministicConversationReply(context);
+  if (deterministic.handled && deterministic.assistant_message) {
+    return sanitizeCommercialReply(deterministic.assistant_message);
   }
-  return "Gracias. ¿Me cuentas qué necesitas conseguir para poder orientarte?";
+  return "No he podido responder bien a ese mensaje y no voy a sustituirlo por una pregunta genérica. Puedes reformularlo o pedirme que lo derive al equipo.";
 }
 
 function sanitizeCommercialReply(reply = "") {
@@ -40,6 +42,71 @@ function sanitizeCommercialReply(reply = "") {
     .trim();
 
   return cleaned || text;
+}
+
+const BANNED_GENERIC_REPLY = /gracias lo tengo en cuenta me das un poco mas de detalle para poder orientarte mejor/;
+
+function previousUserText(messages = [], currentMessage = "") {
+  const current = normalizeText(currentMessage);
+  const users = (messages || [])
+    .filter((message) => message?.role === "user")
+    .map((message) => String(message?.content || message?.text || "").trim())
+    .filter(Boolean);
+  if (users.length && normalizeText(users.at(-1)) === current) users.pop();
+  return users.at(-1) || "";
+}
+
+function buildLoopBreakerReply({ currentMessage = "", lead = {}, appConfig = null } = {}) {
+  const excerpt = String(currentMessage || "").replace(/\s+/g, " ").trim().slice(0, 180);
+  const nextMissing = getMissingLeadRequirements(lead || {}, appConfig)[0];
+  const nextQuestion = nextMissing ? getLeadRequirementPrompt(nextMissing, appConfig) : "";
+  const acknowledgement = excerpt
+    ? `He entendido tu último mensaje: «${excerpt}».`
+    : "He entendido tu último mensaje.";
+
+  if (nextQuestion) {
+    return `${acknowledgement} La respuesta anterior se estaba repitiendo y la he bloqueado. Para avanzar sin volver atrás: ${nextQuestion}`;
+  }
+  return `${acknowledgement} La respuesta anterior se estaba repitiendo y la he bloqueado. No voy a inventar una respuesta; puedo dejar este punto registrado para que lo revise el equipo.`;
+}
+
+function guardAgainstReplyLoop({
+  reply = "",
+  messages = [],
+  currentMessage = "",
+  lead = {},
+  appConfig = null,
+} = {}) {
+  const normalizedReply = normalizeText(reply);
+  const recentAssistantReplies = (messages || [])
+    .filter((message) => message?.role === "assistant")
+    .slice(-6)
+    .map((message) => normalizeText(message?.content || message?.text || ""))
+    .filter(Boolean);
+  const currentUserChanged = normalizeText(previousUserText(messages, currentMessage)) !== normalizeText(currentMessage);
+  const repeatedVerbatim = currentUserChanged && recentAssistantReplies.includes(normalizedReply);
+  const bannedGeneric = BANNED_GENERIC_REPLY.test(normalizedReply);
+
+  if (!reply || bannedGeneric || repeatedVerbatim) {
+    const deterministic = buildDeterministicConversationReply({
+      message: currentMessage,
+      messages,
+      lead,
+      appConfig,
+    });
+    const deterministicText = sanitizeCommercialReply(deterministic?.assistant_message || "");
+    if (
+      deterministic?.handled &&
+      deterministicText &&
+      !recentAssistantReplies.includes(normalizeText(deterministicText)) &&
+      !BANNED_GENERIC_REPLY.test(normalizeText(deterministicText))
+    ) {
+      return deterministicText;
+    }
+    return sanitizeCommercialReply(buildLoopBreakerReply({ currentMessage, lead, appConfig }));
+  }
+
+  return reply;
 }
 
 function normalizeText(value = "") {
@@ -111,14 +178,21 @@ function buildSanchoSupportReply() {
   return "Entiendo: te refieres a que la propia web o el asistente de Sancho no está funcionando bien. Perdona, te había interpretado como una consulta comercial y por eso repetí la pregunta. ¿Qué fallo concreto estás viendo para que pueda registrarlo y ayudarte?";
 }
 
-function buildHumanHandoffReply(appConfig = null) {
+function buildHumanHandoffReply(appConfig = null, { handoffRecorded = false, notificationResult = null } = {}) {
   const channels = [];
   if (String(appConfig?.contact?.public_whatsapp_number || "").trim()) channels.push("WhatsApp");
   if (String(appConfig?.contact?.support_email || "").trim()) channels.push("email");
-  if (channels.length) {
-    return `Claro. No voy a seguir con el cuestionario comercial. Puedes continuar con una persona del equipo por ${channels.join(" o ")}.`;
+  const registered = handoffRecorded || notificationResult?.sent_internal;
+  if (registered && channels.length) {
+    return `Sí. He dejado registrada la petición para que la revise el equipo. No voy a seguir con el cuestionario comercial; también puedes continuar por ${channels.join(" o ")}.`;
   }
-  return "Claro. No voy a seguir con el cuestionario comercial. He identificado que necesitas atención humana; el equipo debe revisar esta conversación.";
+  if (registered) {
+    return "Sí. He dejado registrada la petición para que la revise el equipo. No voy a seguir con el cuestionario comercial.";
+  }
+  if (channels.length) {
+    return `No puedo confirmar un envío interno desde este chat. No voy a seguir con el cuestionario comercial; puedes continuar con una persona del equipo por ${channels.join(" o ")}.`;
+  }
+  return "No puedo confirmar un envío interno ni prometer que el equipo haya recibido un aviso. Sí he identificado que solicitas atención humana y no seguiré con el cuestionario comercial.";
 }
 
 function buildGenericSupportReply() {
@@ -253,9 +327,19 @@ function buildRecoveryReply({ lead = {}, messages = [], currentMessage = "", app
   return `${summary} Perdona por repetir la pregunta. No voy a inventar resultados ni forzar un cuestionario; lo serio es entender tu negocio, tus datos disponibles y el siguiente paso que necesitas. Con esto, ${brandName} deberia revisarlo y responderte con una orientacion concreta.`;
 }
 
-function repairFinalReply({ reply = "", lead = {}, messages = [], currentMessage = "", appConfig = null } = {}) {
+function repairFinalReply({
+  reply = "",
+  lead = {},
+  messages = [],
+  currentMessage = "",
+  appConfig = null,
+  handoffRecorded = false,
+  notificationResult = null,
+} = {}) {
   const priorityIntent = detectPriorityIntent(currentMessage);
-  if (priorityIntent === "human_request") return buildHumanHandoffReply(appConfig);
+  if (priorityIntent === "human_request") {
+    return buildHumanHandoffReply(appConfig, { handoffRecorded, notificationResult });
+  }
   if (userReportsProblemWithSancho(currentMessage)) {
     return buildSanchoSupportReply();
   }
@@ -329,22 +413,20 @@ function isPricingQuestion(value = "") {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-  return /\b(precio|precios|cuanto|cuesta|tarifa|tarifas|coste|costes|paquete|paquetes|pricing|plan|planes|setup|trial|demo)\b/.test(text);
+  return /\b(precio|precios|cuanto|cuesta|tarifa|tarifas|coste|costes|paquete|paquetes|pricing|plan|planes|setup|trial)\b/.test(text);
 }
 
 function selectAgentId({ routerResult = {}, message = "" } = {}) {
   if (isPricingQuestion(message)) return "service_expert";
 
   const requested = String(routerResult?.next_agent || "").trim();
-  return ["sales_qualification", "service_expert", "lead_memory"].includes(requested)
+  return ["sales_qualification", "service_expert", "lead_memory", "conversation"].includes(requested)
     ? requested
     : "sales_qualification";
 }
 
 function shouldRunClosing(routerResult, lead = {}, memoryResult = {}, appConfig = null) {
-  if (["support", "human_request", "greeting", "service_question", "pricing_question"].includes(routerResult?.intent)) {
-    return false;
-  }
+  if (routerResult?.intent !== "lead_capture") return false;
   if (!hasConfiguredLeadRequirements(appConfig)) return false;
   const merged = { ...(lead || {}), ...(memoryResult?.lead_patch || {}) };
   return hasRequiredLeadData(merged, appConfig);
@@ -443,6 +525,18 @@ export async function processTmediaIncomingMessage({
   });
 
   const leadAfterMemory = await getLeadByConversationId(context.conversationId, { accountId }).catch(() => null);
+  let handoffRecorded = false;
+  if (routerResult?.intent === "human_request") {
+    const handoffEvent = await saveConversationEvent({
+      conversation_id: context.conversationId,
+      event_type: "human_handoff_requested",
+      channel: sourceChannel,
+      external_user_id: externalUserId,
+      account_id: accountId,
+      payload: { text: refreshedContext.message.slice(0, 500), source_channel: sourceChannel },
+    }).catch(() => null);
+    handoffRecorded = Boolean(handoffEvent && !handoffEvent?.skipped);
+  }
   let closingResult = null;
   if (
     refreshedContext.lead?.current_step !== "completed" &&
@@ -478,16 +572,18 @@ export async function processTmediaIncomingMessage({
     chatCompleted: !!closingResult?.chat_completed,
   });
 
-  if (notificationDecision.sendType !== "none") {
+  const forceHandoffNotification = routerResult?.intent === "human_request";
+  if (notificationDecision.sendType !== "none" || forceHandoffNotification) {
     notificationResult = await runAgent("notification", {
       ...refreshedContext,
       lead: leadForNotification || refreshedContext.lead,
       routerResult,
       memoryResult,
       closingResult,
-      notificationType: notificationDecision.sendType,
+      notificationType: forceHandoffNotification ? "handoff" : notificationDecision.sendType,
       changedFields: notificationDecision.changedFields,
-      sendClientConfirmation: !!closingResult?.chat_completed,
+      sendClientConfirmation: forceHandoffNotification ? false : !!closingResult?.chat_completed,
+      forceNotification: forceHandoffNotification,
     }).catch((error) => ({
       sent_internal: false,
       sent_client: false,
@@ -496,12 +592,29 @@ export async function processTmediaIncomingMessage({
     }));
   }
 
-  const rawReply = finalReply({ selectedResult, closingResult, memoryResult });
-  const reply = repairFinalReply({
+  const rawReply = finalReply({
+    selectedResult,
+    closingResult,
+    memoryResult,
+    context: {
+      ...refreshedContext,
+      lead: leadAfterMemory || refreshedContext.lead || {},
+    },
+  });
+  const repairedReply = repairFinalReply({
     reply: rawReply,
     lead: leadAfterMemory || refreshedContext.lead || {},
     messages: refreshedContext.messages || [],
     currentMessage: refreshedContext.message,
+    appConfig: refreshedContext.appConfig,
+    handoffRecorded,
+    notificationResult,
+  });
+  const reply = guardAgainstReplyLoop({
+    reply: repairedReply,
+    messages: refreshedContext.messages || [],
+    currentMessage: refreshedContext.message,
+    lead: leadAfterMemory || refreshedContext.lead || {},
     appConfig: refreshedContext.appConfig,
   });
 
@@ -551,7 +664,7 @@ export async function processTmediaIncomingMessage({
 
   return {
     ok: true,
-    build: "tmedia-agents-v1",
+    build: "tmedia-agents-v3-loop-guard",
     conversation_id: context.conversationId,
     reply,
     replyText: reply,
@@ -563,6 +676,7 @@ export async function processTmediaIncomingMessage({
     memory: memoryResult,
     closing: closingResult,
     notification: notificationResult,
+    handoff_recorded: handoffRecorded,
     chat_completed: isCompleted,
     handoff_options: handoffOptions,
     handoff_url: whatsappHandoff?.url || null,
@@ -586,4 +700,5 @@ export const __tmediaChatOrchestratorTestables = {
   enforceNoRepeatedQuestions,
   selectAgentId,
   shouldRunClosing,
+  guardAgainstReplyLoop,
 };

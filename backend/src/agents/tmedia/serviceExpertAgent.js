@@ -26,10 +26,10 @@ function normalizeText(value = "") {
 function isPricingQuestion(value = "") {
   const t = normalizeText(value);
   const asksPrice =
-    /\b(precio|precios|cuanto|cuesta|vale|tarifa|tarifas|coste|costes|paquete|paquetes|pricing|plan|planes|setup|trial|demo)\b/.test(t);
+    /\b(precio|precios|cuanto|cuesta|vale|tarifa|tarifas|coste|costes|paquete|paquetes|pricing|plan|planes|setup|trial)\b/.test(t);
   const asksBudget =
     /\b(presupuesto|inversion)\b/.test(t) &&
-    /\b(cuanto|que|necesita|recomendada|minima|minimo|para empezar|para probar|demo|trial|plan|precio|cuesta)\b/.test(t);
+    /\b(cuanto|que|necesita|recomendada|minima|minimo|para empezar|para probar|trial|plan|precio|cuesta)\b/.test(t);
   return asksPrice || asksBudget;
 }
 

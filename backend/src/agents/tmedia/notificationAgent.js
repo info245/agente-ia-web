@@ -13,6 +13,18 @@ function signature(lead = {}) {
   return buildLeadSignature(lead);
 }
 
+function isDuplicateNotification(
+  events = [],
+  { signature: leadSignature = "", notificationType = "new", forceNotification = false } = {}
+) {
+  return events.some(
+    (event) =>
+      event?.payload?.signature === leadSignature &&
+      (!forceNotification || event?.payload?.notification_type === notificationType) &&
+      (event?.payload?.internal?.ok === true || event?.payload?.sent_internal === true)
+  );
+}
+
 export async function runNotificationAgent(context = {}) {
   const lead = {
     ...(context.lead || {}),
@@ -20,11 +32,12 @@ export async function runNotificationAgent(context = {}) {
   };
   const sig = signature(lead);
   const previous = await getRecentNotificationEvents(context.conversationId, 25);
-  const duplicate = previous.some(
-    (event) =>
-      event?.payload?.signature === sig &&
-      (event?.payload?.internal?.ok === true || event?.payload?.sent_internal === true)
-  );
+  const notificationType = context.notificationType || (previous.length ? "update" : "new");
+  const duplicate = isDuplicateNotification(previous, {
+    signature: sig,
+    notificationType,
+    forceNotification: context.forceNotification,
+  });
 
   if (duplicate) {
     return {
@@ -48,7 +61,7 @@ export async function runNotificationAgent(context = {}) {
   const internal = await sendLeadEmail({
     lead,
     conversation_id: context.conversationId,
-    type: context.notificationType || (previous.length ? "update" : "new"),
+    type: notificationType,
     changedFields: context.changedFields || [],
     emailConfig,
     recipients,
@@ -73,6 +86,7 @@ export async function runNotificationAgent(context = {}) {
     account_id: context.accountId,
     payload: {
       signature: sig,
+      notification_type: notificationType,
       sent_at: new Date().toISOString(),
       sent_internal: !!internal?.ok,
       sent_client: !!client?.ok,
@@ -89,3 +103,7 @@ export async function runNotificationAgent(context = {}) {
     tools_used: ["supabase", "emailService"],
   };
 }
+
+export const __notificationAgentTestables = {
+  isDuplicateNotification,
+};

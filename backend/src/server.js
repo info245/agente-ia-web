@@ -138,7 +138,7 @@ app.get("/crm", (_req, res) => {
 app.use("/api/crm", requireCrmAuth());
 
 const PORT = process.env.PORT || 3000;
-const BUILD_TAG = "conversation-audit-v2-9a4c714";
+const BUILD_TAG = "conversation-audit-v3-loop-guard";
 const CRM_AUTH_COOKIE = "crm_session";
 const CRM_AUTH_SECRET =
   process.env.CRM_AUTH_SECRET ||

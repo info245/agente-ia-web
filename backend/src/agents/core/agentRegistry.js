@@ -4,6 +4,7 @@ import { runServiceExpertAgent } from "../tmedia/serviceExpertAgent.js";
 import { runLeadMemoryAgent } from "../tmedia/leadMemoryAgent.js";
 import { runClosingAgent } from "../tmedia/closingAgent.js";
 import { runNotificationAgent } from "../tmedia/notificationAgent.js";
+import { runConversationAgent } from "../tmedia/conversationAgent.js";
 
 const registry = new Map([
   ["lead_router", runLeadRouterAgent],
@@ -12,6 +13,7 @@ const registry = new Map([
   ["lead_memory", runLeadMemoryAgent],
   ["closing", runClosingAgent],
   ["notification", runNotificationAgent],
+  ["conversation", runConversationAgent],
 ]);
 
 export function getAgent(agentId) {

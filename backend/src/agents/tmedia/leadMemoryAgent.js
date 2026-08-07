@@ -1,6 +1,7 @@
 import { extractLeadDataFromText, looksLikeValidName } from "../../lib/leadExtractor.js";
 import { mergeLeadData } from "../../lib/leadMerge.js";
 import { buildMemoryPatch } from "../../lib/memoryUtils.js";
+import { shouldBlockLeadExtraction } from "../../lib/conversationIntent.js";
 import {
   getLeadRequirementPrompt,
   getLeadRequirementStep,
@@ -138,6 +139,16 @@ function sanitizeLeadPatch(patch = {}, currentLead = {}) {
     else delete output.company_name;
   }
 
+  for (const field of ["main_goal", "business_activity", "current_situation", "pain_points"]) {
+    if (output[field] && shouldBlockLeadExtraction(output[field])) {
+      if (currentLead?.[field] === output[field]) output[field] = null;
+      else delete output[field];
+    }
+    if (currentLead?.[field] && shouldBlockLeadExtraction(currentLead[field])) {
+      output[field] = null;
+    }
+  }
+
   return output;
 }
 
@@ -212,6 +223,7 @@ function advanceToNextRequirement({ leadPatch = {}, currentLead = {}, appConfig 
 }
 
 export async function runLeadMemoryAgent(context = {}) {
+  const blocksLeadExtraction = shouldBlockLeadExtraction(context.message);
   const extracted = extractLeadDataFromText(context.message, context.lead || {});
   const memoryPatch = buildMemoryPatch({
     text: context.message,
@@ -267,11 +279,12 @@ export async function runLeadMemoryAgent(context = {}) {
     deterministicPatch,
     currentLead: context.lead || {},
   });
-  const recoveredMainGoal =
-    extracted?.main_goal ||
-    context.selectedAgentResult?.lead_patch?.main_goal ||
-    memoryPatch?.main_goal ||
-    recoverMainGoalFromText(context.message);
+  const recoveredMainGoal = blocksLeadExtraction
+    ? null
+    : extracted?.main_goal ||
+      context.selectedAgentResult?.lead_patch?.main_goal ||
+      memoryPatch?.main_goal ||
+      recoverMainGoalFromText(context.message);
 
   if (!lead_patch.main_goal && recoveredMainGoal) {
     lead_patch.main_goal = recoveredMainGoal;
@@ -286,6 +299,7 @@ export async function runLeadMemoryAgent(context = {}) {
   }
 
   if (
+    !blocksLeadExtraction &&
     (isBusinessContextStep(context.lead?.current_step) || lastAssistantAskedBusinessType(context.messages)) &&
     isUsefulBusinessContextAnswer(context.message)
   ) {

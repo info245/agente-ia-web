@@ -1,5 +1,7 @@
 // backend/src/lib/leadExtractor.js
 
+import { shouldBlockLeadExtraction } from "./conversationIntent.js";
+
 const SERVICE_ALIASES = [
   {
     key: "Google Ads",
@@ -1121,6 +1123,29 @@ function calculateLeadScore({
 
 export function extractLeadDataFromText(text, existingLead = null) {
   const safeText = String(text || "");
+
+  if (shouldBlockLeadExtraction(safeText)) {
+    return {
+      name: null,
+      email: null,
+      phone: null,
+      interest_service: null,
+      urgency: null,
+      budget_range: null,
+      summary: null,
+      lead_score: 0,
+      consent: null,
+      consent_at: null,
+      business_type: null,
+      business_activity: null,
+      company_name: null,
+      main_goal: null,
+      current_situation: null,
+      pain_points: null,
+      preferred_contact_channel: null,
+      last_intent: null,
+    };
+  }
 
   const email = extractEmail(safeText);
   const phone = extractPhone(safeText);

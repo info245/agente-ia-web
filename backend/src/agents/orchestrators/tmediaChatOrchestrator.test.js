@@ -77,8 +77,16 @@ test("support and human requests bypass closing and commercial questions", () =>
     currentMessage: "Quiero hablar con una persona",
     appConfig: config,
   });
-  assert.match(humanReply, /persona del equipo/i);
+  assert.match(humanReply, /No puedo confirmar un envío interno/i);
   assert.doesNotMatch(humanReply, /presupuesto/i);
+
+  const recordedHumanReply = repairFinalReply({
+    reply: "¿Qué presupuesto tienes?",
+    currentMessage: "Puedes mandar un mensaje a tu equipo?",
+    appConfig: config,
+    handoffRecorded: true,
+  });
+  assert.match(recordedHumanReply, /He dejado registrada la petición/i);
 
   const supportReply = repairFinalReply({
     reply: "¿Qué objetivo quieres conseguir?",
@@ -99,6 +107,29 @@ test("support and human requests bypass closing and commercial questions", () =>
   );
 });
 
+test("closing only runs for lead capture, not for conversational requests", () => {
+  const appConfig = { lead_capture: { fields: { main_goal: true } } };
+  for (const intent of [
+    "booking_request",
+    "guided_discovery",
+    "loop_complaint",
+    "agent_question",
+    "prompt_injection",
+    "unknown",
+  ]) {
+    assert.equal(
+      __tmediaChatOrchestratorTestables.shouldRunClosing(
+        { intent },
+        { main_goal: "Captar clientes" },
+        {},
+        appConfig
+      ),
+      false,
+      intent
+    );
+  }
+});
+
 test("a completed lead still reaches the specialist for a new service question", () => {
   assert.equal(
     __tmediaChatOrchestratorTestables.selectAgentId({
@@ -114,6 +145,14 @@ test("a completed lead still reaches the specialist for a new service question",
       message: "Quiero revisar otra cosa",
     }),
     "sales_qualification"
+  );
+
+  assert.equal(
+    __tmediaChatOrchestratorTestables.selectAgentId({
+      routerResult: { next_agent: "conversation" },
+      message: "¿Puedes agendar una demo?",
+    }),
+    "conversation"
   );
 });
 
@@ -176,6 +215,34 @@ test("blocks trust complaint from receiving another qualification question", () 
   assert.match(reply, /Perdona por repetir/i);
   assert.match(reply, /no voy a inventar resultados/i);
   assert.doesNotMatch(reply, /objetivo principal que quieres conseguir/i);
+});
+
+test("the circuit breaker rejects the old canned reply and verbatim loops", () => {
+  const config = {
+    lead_capture: { fields: { main_goal: true } },
+  };
+  const banned = __tmediaChatOrchestratorTestables.guardAgainstReplyLoop({
+    reply: "Gracias, lo tengo en cuenta. ¿Me das un poco más de detalle para poder orientarte mejor?",
+    currentMessage: "haz preguntas y te respondo",
+    lead: {},
+    appConfig: config,
+  });
+  assert.match(banned, /una pregunta cada vez/i);
+  assert.doesNotMatch(banned, /me das un poco más de detalle/i);
+
+  const repeated = __tmediaChatOrchestratorTestables.guardAgainstReplyLoop({
+    reply: "Necesito más información.",
+    currentMessage: "Galunai.com",
+    messages: [
+      { role: "user", content: "Puedes mandar un mensaje a tu equipo?" },
+      { role: "assistant", content: "Necesito más información." },
+      { role: "user", content: "Galunai.com" },
+    ],
+    lead: {},
+    appConfig: config,
+  });
+  assert.match(repeated, /has compartido Galunai\.com/i);
+  assert.doesNotMatch(repeated, /^Necesito más información\.$/i);
 });
 
 const repeatedObjectiveScenarios = [

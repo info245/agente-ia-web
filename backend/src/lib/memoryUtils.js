@@ -1,5 +1,7 @@
 // backend/src/lib/memoryUtils.js
 
+import { shouldBlockLeadExtraction } from "./conversationIntent.js";
+
 function norm(v = "") {
   return String(v || "").trim();
 }
@@ -224,6 +226,19 @@ export function buildMemoryPatch({ text = "", leadBefore = null, extracted = {},
   const previous = leadBefore || {};
   const merged = mergedLead || {};
   const extraction = extracted || {};
+
+  if (shouldBlockLeadExtraction(safeText)) {
+    return {
+      business_type: previous?.business_type || null,
+      main_goal: previous?.main_goal || null,
+      pain_points: previous?.pain_points || null,
+      current_situation: previous?.current_situation || null,
+      preferred_contact_channel: previous?.preferred_contact_channel || null,
+      last_intent: previous?.last_intent || null,
+      notes_ai: previous?.notes_ai || null,
+      last_seen_at: new Date().toISOString(),
+    };
+  }
 
   const business_type = detectBusinessType(safeText, previous?.business_type);
   const main_goal = detectMainGoal(safeText, previous?.main_goal);
