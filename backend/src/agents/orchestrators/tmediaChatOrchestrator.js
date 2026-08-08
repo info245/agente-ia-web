@@ -16,7 +16,10 @@ import {
 } from "../../lib/leadRequirements.js";
 import { detectPriorityIntent } from "../../lib/conversationIntent.js";
 import { isCapabilityQuestion } from "../../lib/capabilityPolicy.js";
-import { buildDeterministicConversationReply } from "../tmedia/conversationAgent.js";
+import {
+  buildDeterministicConversationReply,
+  buildPrivacyBoundaryReply,
+} from "../tmedia/conversationAgent.js";
 
 function finalReply({ selectedResult, closingResult, memoryResult, context = {} }) {
   if (closingResult?.chat_completed && closingResult?.closing_message) {
@@ -75,10 +78,10 @@ function buildLoopBreakerReply({ currentMessage = "", lead = {}, appConfig = nul
   return `${acknowledgement} La respuesta anterior se estaba repitiendo y la he bloqueado. No voy a inventar una respuesta; puedo dejar este punto registrado para que lo revise el equipo.`;
 }
 
-function buildSafeRepeatedIntentReply({ currentMessage = "", reply = "" } = {}) {
+function buildSafeRepeatedIntentReply({ currentMessage = "", reply = "", appConfig = null } = {}) {
   const priorityIntent = detectPriorityIntent(currentMessage);
   if (priorityIntent === "prompt_injection") {
-    return "La respuesta no cambia: no puedo copiar el mensaje de sistema, los prompts ni las instrucciones internas. Puedo explicar mis funciones y límites sin revelar información protegida.";
+    return buildPrivacyBoundaryReply(appConfig, currentMessage, true);
   }
   if (priorityIntent === "human_request") {
     return "Mantengo tu petición de atención humana y no voy a devolverte al cuestionario comercial. El equipo debe continuar desde el contexto ya recogido.";
@@ -119,7 +122,7 @@ function guardAgainstReplyLoop({
   const bannedGeneric = BANNED_GENERIC_REPLY.test(normalizedReply);
 
   if (repeatedVerbatim && !bannedGeneric) {
-    const safeRepeatedIntentReply = buildSafeRepeatedIntentReply({ currentMessage, reply });
+    const safeRepeatedIntentReply = buildSafeRepeatedIntentReply({ currentMessage, reply, appConfig });
     if (safeRepeatedIntentReply) return sanitizeCommercialReply(safeRepeatedIntentReply);
   }
 
@@ -700,7 +703,7 @@ export async function processTmediaIncomingMessage({
 
   return {
     ok: true,
-    build: "tmedia-agents-v4-scenario-matrix",
+    build: "tmedia-agents-v5-privacy-form",
     conversation_id: context.conversationId,
     reply,
     replyText: reply,

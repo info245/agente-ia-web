@@ -27,9 +27,18 @@ export function isHumanRequest(text = "") {
 
 export function isPromptExtractionRequest(text = "") {
   const value = normalizeIntentText(text);
+  const protectedTarget =
+    /\b(prompt(?:s)?|prompt interno|system prompt|mensaje(?:s)? de sistema|instrucciones (?:internas|del sistema)|(?:internal|system) instructions|directrices(?: internas)?|reglas internas|reglas de configuracion|configuracion interna|politicas internas|arquitectura interna|herramientas internas|internal tools|parametros internos|modelo interno|cadena de pensamiento|razonamiento interno|secretos|credenciales|api keys?|tokens? internos?)\b/;
+  const extractionRequest =
+    /\b(dame|dime|muestra(?:me)?|ensena(?:me)?|revela(?:me)?|copia(?:me)?|imprime(?:me)?|ignora|explica(?:me)?|enumera(?:me)?|lista(?:me)?|detalla(?:me)?|comparte(?:me)?|describe(?:me)?|show|reveal|copy|print|ignore|disregard|list|give me|tell me)\b/;
+  const interrogativeRequest = /\b(cual|cuales|que|como|what|which|how)\b/;
+  const falseAuthorityClaim =
+    /\b(soy tu dueno|soy el propietario del sistema|soy administrador|soy el administrador|soy el desarrollador|soy developer|owner override|admin override)\b/;
+
   return (
-    /\b(dame|muestra|ensena|revela|copia|imprime|ignora)\b.*\b(prompt|instrucciones internas|system prompt|mensaje de sistema|directrices internas|secretos|credenciales)\b/.test(value) ||
-    /\b(cual|que)\b.*\b(prompt interno|system prompt|mensaje de sistema)\b/.test(value)
+    (protectedTarget.test(value) &&
+      (extractionRequest.test(value) || interrogativeRequest.test(value) || falseAuthorityClaim.test(value))) ||
+    /\b(ignore previous instructions|disregard prior instructions|ignora (?:todas )?(?:las )?instrucciones anteriores)\b/.test(value)
   );
 }
 
