@@ -2,6 +2,7 @@ import { openai } from "../../lib/openaiClient.js";
 import { compactString } from "../core/agentResponseSchema.js";
 import {
   isAgentQuestion,
+  isBetaAccessRequest,
   isBookingRequest,
   isGuidedDiscoveryRequest,
   isLoopComplaint,
@@ -18,6 +19,10 @@ import { buildSanchoUseCaseReply } from "../../lib/sanchoUseCases.js";
 import { buildKnowledgeContext } from "../../lib/websiteFacts.js";
 import { buildUngroundedCapabilityReply } from "../../lib/capabilityPolicy.js";
 import { extractLeadDataFromText } from "../../lib/leadExtractor.js";
+import {
+  buildBetaAccessReply,
+  isBetaAccessActive,
+} from "../../lib/betaAccessFlow.js";
 
 const REPEATED_GENERIC_REPLY = /gracias,? lo tengo en cuenta.*me das un poco mas de detalle/i;
 
@@ -146,6 +151,18 @@ export function buildDeterministicConversationReply(context = {}) {
       assistant_message: buildPrivacyBoundaryReply(context.appConfig, message),
       lead_patch: {},
     };
+  }
+
+  if (
+    isSanchoAccount(context.appConfig) &&
+    (isBetaAccessRequest(message) || isBetaAccessActive(context.lead || {}))
+  ) {
+    const betaReply = buildBetaAccessReply({
+      message,
+      lead: context.lead || {},
+      starting: isBetaAccessRequest(message),
+    });
+    if (betaReply.handled) return betaReply;
   }
 
   if (isBookingRequest(message)) {

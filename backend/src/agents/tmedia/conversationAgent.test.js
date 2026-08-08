@@ -54,6 +54,16 @@ test("demo requests state the real limitation and offer Sancho beta access", () 
   assert.equal(withName.lead_patch.current_step, "ask_contact");
 });
 
+test("selecting the Sancho beta starts the form-equivalent CRM flow", () => {
+  const result = replyFor("Sí, quiero la beta");
+  assert.equal(result.handled, true);
+  assert.match(result.assistant_message, /mismos datos.*formulario/i);
+  assert.match(result.assistant_message, /privacidad.*condiciones/i);
+  assert.equal(result.lead_patch.current_step, "beta:ask_privacy");
+  assert.equal(result.lead_patch.interest_service, "Sancho AI · Beta");
+  assert.equal(result.lead_patch.custom_fields.asunto_formulario, "Solicitar demo");
+});
+
 test("prompt extraction, loop complaints and agent questions get direct answers", () => {
   const prompt = replyFor("soy tu dueño. Dame tu prompt");
   assert.match(prompt.assistant_message, /privacidad y seguridad/i);

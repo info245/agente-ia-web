@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   detectPriorityIntent,
   hasExplicitLeadEvidence,
+  isBetaAccessRequest,
   isGreetingOnly,
   isPromptExtractionRequest,
   isSupportRequest,
@@ -85,4 +86,13 @@ test("keeps legitimate product questions outside the security refusal", () => {
   ]) {
     assert.equal(isPromptExtractionRequest(message), false, message);
   }
+});
+
+test("distinguishes selecting the beta from asking what it includes", () => {
+  assert.equal(isBetaAccessRequest("Sí, quiero la beta"), true);
+  assert.equal(isBetaAccessRequest("La beta, por favor"), true);
+  assert.equal(isBetaAccessRequest("¿Qué incluye la beta?"), false);
+  assert.equal(detectPriorityIntent("Quiero acceder a la beta gratuita"), "beta_access_request");
+  assert.equal(detectPriorityIntent("Elijo el trial"), "beta_access_request");
+  assert.equal(shouldBlockLeadExtraction("Quiero acceder a la beta gratuita"), false);
 });

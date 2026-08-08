@@ -17,6 +17,10 @@ import {
 import { detectPriorityIntent } from "../../lib/conversationIntent.js";
 import { isCapabilityQuestion } from "../../lib/capabilityPolicy.js";
 import {
+  isBetaAccessComplete,
+  isBetaAccessLead,
+} from "../../lib/betaAccessFlow.js";
+import {
   buildDeterministicConversationReply,
   buildPrivacyBoundaryReply,
 } from "../tmedia/conversationAgent.js";
@@ -604,12 +608,23 @@ export async function processTmediaIncomingMessage({
     25,
     accountId
   ).catch(() => []);
-  const notificationDecision = decideNotification({
-    leadBefore: refreshedContext.lead || {},
-    leadAfter: leadForNotification || {},
-    notificationEvents,
-    chatCompleted: !!closingResult?.chat_completed,
-  });
+  const betaLead = isBetaAccessLead(leadForNotification || {});
+  const betaCompleted = isBetaAccessComplete(leadForNotification || {});
+  const betaNotificationSent = notificationEvents.some(
+    (event) =>
+      event?.payload?.notification_type === "beta_access" &&
+      (event?.payload?.sent_internal === true || event?.payload?.internal?.ok === true)
+  );
+  const notificationDecision = betaLead
+    ? betaCompleted && !betaNotificationSent
+      ? { sendType: "beta_access", changedFields: ["beta_application"] }
+      : { sendType: "none", changedFields: [] }
+    : decideNotification({
+        leadBefore: refreshedContext.lead || {},
+        leadAfter: leadForNotification || {},
+        notificationEvents,
+        chatCompleted: !!closingResult?.chat_completed,
+      });
 
   const forceHandoffNotification = routerResult?.intent === "human_request";
   if (notificationDecision.sendType !== "none" || forceHandoffNotification) {
@@ -621,7 +636,8 @@ export async function processTmediaIncomingMessage({
       closingResult,
       notificationType: forceHandoffNotification ? "handoff" : notificationDecision.sendType,
       changedFields: notificationDecision.changedFields,
-      sendClientConfirmation: forceHandoffNotification ? false : !!closingResult?.chat_completed,
+      sendClientConfirmation:
+        forceHandoffNotification || betaLead ? false : !!closingResult?.chat_completed,
       forceNotification: forceHandoffNotification,
     }).catch((error) => ({
       sent_internal: false,
@@ -703,7 +719,7 @@ export async function processTmediaIncomingMessage({
 
   return {
     ok: true,
-    build: "tmedia-agents-v5-privacy-form",
+    build: "tmedia-agents-v6-beta-crm",
     conversation_id: context.conversationId,
     reply,
     replyText: reply,

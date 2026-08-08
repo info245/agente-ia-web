@@ -111,6 +111,7 @@ test("closing only runs for lead capture, not for conversational requests", () =
   const appConfig = { lead_capture: { fields: { main_goal: true } } };
   for (const intent of [
     "booking_request",
+    "beta_access_request",
     "guided_discovery",
     "loop_complaint",
     "agent_question",

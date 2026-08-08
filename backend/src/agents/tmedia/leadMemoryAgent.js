@@ -10,6 +10,7 @@ import {
 } from "../../lib/leadRequirements.js";
 import { upsertLeadFromConversation } from "../tools/supabaseTools.js";
 import { MEMORY_SCHEMA, compactString } from "../core/agentResponseSchema.js";
+import { isBetaAccessLead } from "../../lib/betaAccessFlow.js";
 
 function cleanPatch(patch = {}) {
   return Object.fromEntries(
@@ -156,6 +157,19 @@ function buildPersistedLeadPatch({ deterministicPatch = {}, currentLead = {} } =
   return sanitizeLeadPatch(cleanPatch(deterministicPatch), currentLead);
 }
 
+function applySelectedBetaPatch({ mergedLead = {}, selectedPatch = {}, currentLead = {} } = {}) {
+  if (!isBetaAccessLead(selectedPatch)) return mergedLead;
+  const safePatch = sanitizeLeadPatch(cleanPatch(selectedPatch), currentLead);
+  return {
+    ...(mergedLead || {}),
+    ...safePatch,
+    custom_fields: {
+      ...(mergedLead?.custom_fields || {}),
+      ...(safePatch?.custom_fields || {}),
+    },
+  };
+}
+
 const TRACKED_LEAD_FIELDS = [
   "name",
   "email",
@@ -172,10 +186,14 @@ const TRACKED_LEAD_FIELDS = [
   "company_name",
   "last_intent",
   "current_step",
+  "consent",
+  "consent_at",
+  "source_platform",
+  "source_form_name",
 ];
 
 function hasNewLeadData(currentLead = {}, patch = {}) {
-  return TRACKED_LEAD_FIELDS.some((field) => {
+  const coreChanged = TRACKED_LEAD_FIELDS.some((field) => {
     if (!Object.prototype.hasOwnProperty.call(patch || {}, field)) return false;
     const next = patch?.[field];
     const current = currentLead?.[field];
@@ -183,6 +201,9 @@ function hasNewLeadData(currentLead = {}, patch = {}) {
     if (next === undefined || next === "") return false;
     return String(next).trim() !== String(current ?? "").trim();
   });
+  if (coreChanged) return true;
+  if (!Object.prototype.hasOwnProperty.call(patch || {}, "custom_fields")) return false;
+  return JSON.stringify(patch?.custom_fields || {}) !== JSON.stringify(currentLead?.custom_fields || {});
 }
 
 function buildSummary({ lead = {}, messages = [], message = "" } = {}) {
@@ -192,10 +213,21 @@ function buildSummary({ lead = {}, messages = [], message = "" } = {}) {
     .join(" | ");
   const parts = [
     lead?.interest_service ? `Servicio: ${lead.interest_service}` : "",
+    lead?.company_name ? `Empresa: ${lead.company_name}` : "",
     lead?.main_goal ? `Objetivo: ${lead.main_goal}` : "",
     lead?.business_type ? `Tipo: ${lead.business_type}` : "",
     lead?.budget_range ? `Presupuesto: ${lead.budget_range}` : "",
     lead?.urgency ? `Urgencia: ${lead.urgency}` : "",
+    lead?.source_form_name ? `Formulario: ${lead.source_form_name}` : "",
+    lead?.custom_fields?.asunto_formulario
+      ? `Asunto: ${lead.custom_fields.asunto_formulario}`
+      : "",
+    lead?.custom_fields?.consentimiento_privacidad
+      ? `Privacidad: ${lead.custom_fields.consentimiento_privacidad}`
+      : "",
+    lead?.custom_fields?.consentimiento_comercial
+      ? `Comunicaciones: ${lead.custom_fields.consentimiento_comercial}`
+      : "",
     message ? `Ultimo mensaje: ${message}` : "",
     recent ? `Contexto reciente: ${recent}` : "",
   ].filter(Boolean);
@@ -232,7 +264,7 @@ export async function runLeadMemoryAgent(context = {}) {
     mergedLead: { ...(context.lead || {}), ...(context.selectedAgentResult?.lead_patch || {}) },
   });
 
-  const merged = mergeLeadData({
+  let merged = mergeLeadData({
     currentLead: context.lead || {},
     extractedLead: {
       ...extracted,
@@ -254,6 +286,12 @@ export async function runLeadMemoryAgent(context = {}) {
     merged.interest_service = context.selectedAgentResult.lead_patch.interest_service;
   }
 
+  merged = applySelectedBetaPatch({
+    mergedLead: merged,
+    selectedPatch: context.selectedAgentResult?.lead_patch || {},
+    currentLead: context.lead || {},
+  });
+
   if (context.lead?.current_step === "completed") {
     const explicitPatch = context.selectedAgentResult?.lead_patch || {};
     if (explicitPatch.budget_range) merged.budget_range = explicitPatch.budget_range;
@@ -269,7 +307,14 @@ export async function runLeadMemoryAgent(context = {}) {
     last_question: context.selectedAgentResult?.lead_patch?.last_question ?? merged.last_question,
     conversation_id: context.conversationId,
     account_id: context.accountId,
-    source_platform: context.metadata?.source_platform || context.metadata?.sourcePlatform || merged.source_platform,
+    consent_at: context.selectedAgentResult?.lead_patch?.consent_at || merged.consent_at,
+    source_platform:
+      context.selectedAgentResult?.lead_patch?.source_platform ||
+      context.metadata?.source_platform ||
+      context.metadata?.sourcePlatform ||
+      merged.source_platform,
+    source_form_name:
+      context.selectedAgentResult?.lead_patch?.source_form_name || merged.source_form_name,
   }), context.lead || {});
 
   // La IA puede redactar el resumen, pero no decide los campos persistidos ni
@@ -359,6 +404,7 @@ export async function runLeadMemoryAgent(context = {}) {
 }
 
 export const __leadMemoryTestables = {
+  applySelectedBetaPatch,
   buildPersistedLeadPatch,
   advanceToNextRequirement,
   hasNewLeadData,

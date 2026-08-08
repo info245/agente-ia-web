@@ -9,6 +9,7 @@ import {
   isHumanRequest,
   isSupportRequest,
 } from "../../lib/conversationIntent.js";
+import { isBetaAccessActive } from "../../lib/betaAccessFlow.js";
 
 const INTENTS = [
   "greeting",
@@ -17,6 +18,7 @@ const INTENTS = [
   "pricing_question",
   "support",
   "human_request",
+  "beta_access_request",
   "booking_request",
   "guided_discovery",
   "loop_complaint",
@@ -86,6 +88,7 @@ function heuristicRoute(context = {}) {
     (/\b(presupuesto|inversion)\b/i.test(t) &&
       /\b(cuanto|que|necesita|recomendada|minima|minimo|para empezar|para probar|trial|plan|precio|cuesta)\b/i.test(t));
   const priorityIntent = detectPriorityIntent(text);
+  const betaFlowActive = isBetaAccessActive(context.lead || {});
   const asksServiceInfo =
     service !== "unknown" ||
     /\b(que haceis|que ofreceis|servicios|como funciona|informacion|explicame|integrar|integracion|conectar|compatible|api|mcp|webhook|caso de uso|asesorame|aplica)\b/.test(t) ||
@@ -95,6 +98,7 @@ function heuristicRoute(context = {}) {
 
   let intent = "unknown";
   if (priorityIntent) intent = priorityIntent;
+  else if (betaFlowActive) intent = "beta_access_request";
   else if (isPricing) intent = "pricing_question";
   else if (asksServiceInfo) intent = "service_question";
   else if (hasLeadData) intent = "lead_capture";
@@ -128,6 +132,7 @@ function enforceSafeRoute(route = {}, fallback = {}) {
     "greeting",
     "support",
     "human_request",
+    "beta_access_request",
     "booking_request",
     "guided_discovery",
     "loop_complaint",

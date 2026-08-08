@@ -58,6 +58,17 @@ export function isBookingRequest(text = "") {
   );
 }
 
+export function isBetaAccessRequest(text = "") {
+  const value = normalizeIntentText(text);
+  const betaTerm = /\b(beta|trial|prueba gratuita|acceso gratuito)\b/;
+  const selection =
+    /\b(quiero|querria|elijo|selecciono|prefiero|activar|activa|solicitar|solicito|apuntarme|probar|empezar|darme acceso|dame acceso)\b/;
+  return (
+    (betaTerm.test(value) && selection.test(value)) ||
+    /^(?:si )?(?:quiero |elijo |prefiero )?(?:la )?(?:beta|trial|prueba gratuita)(?: gratuita)?(?: por favor)?$/.test(value)
+  );
+}
+
 export function isLoopComplaint(text = "") {
   const value = normalizeIntentText(text);
   return (
@@ -117,6 +128,7 @@ export function detectPriorityIntent(text = "") {
   if (isPromptExtractionRequest(text)) return "prompt_injection";
   if (isHumanRequest(text)) return "human_request";
   if (isSupportRequest(text)) return "support";
+  if (isBetaAccessRequest(text)) return "beta_access_request";
   if (isBookingRequest(text)) return "booking_request";
   if (isGuidedDiscoveryRequest(text)) return "guided_discovery";
   if (isLoopComplaint(text)) return "loop_complaint";

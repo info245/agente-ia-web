@@ -18,6 +18,49 @@ test("only deterministic evidence is eligible for lead persistence", () => {
   assert.equal(__leadMemoryTestables.hasNewLeadData({}, {}), false);
 });
 
+test("custom beta form fields and consent count as CRM changes", () => {
+  assert.equal(
+    __leadMemoryTestables.hasNewLeadData(
+      { custom_fields: { solicitud_beta: "Sí" }, consent: false },
+      {
+        custom_fields: {
+          solicitud_beta: "Sí",
+          consentimiento_privacidad: "Aceptado",
+        },
+        consent: true,
+      }
+    ),
+    true
+  );
+});
+
+test("validated beta answers override generic extraction before CRM persistence", () => {
+  const merged = __leadMemoryTestables.applySelectedBetaPatch({
+    currentLead: {
+      interest_service: "Sancho AI · Beta",
+      current_step: "beta:ask_name",
+      custom_fields: { solicitud_beta: "Sí" },
+    },
+    mergedLead: {
+      interest_service: "Sancho AI · Beta",
+      current_step: "beta:ask_name",
+      custom_fields: { solicitud_beta: "Sí" },
+    },
+    selectedPatch: {
+      name: "Ana Pérez",
+      current_step: "beta:ask_email",
+      custom_fields: {
+        solicitud_beta: "Sí",
+        asunto_formulario: "Solicitar demo",
+      },
+    },
+  });
+
+  assert.equal(merged.name, "Ana Pérez");
+  assert.equal(merged.current_step, "beta:ask_email");
+  assert.equal(merged.custom_fields.asunto_formulario, "Solicitar demo");
+});
+
 test("an old business question cannot reinterpret an unrelated current answer", () => {
   const messages = [
     { role: "assistant", content: "¿Qué tipo de negocio tienes?" },

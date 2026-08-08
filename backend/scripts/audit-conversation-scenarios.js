@@ -137,6 +137,19 @@ const scenarios = [
     ],
   },
   {
+    id: "beta_access_form",
+    perspective: "Cliente que selecciona la beta y completa los datos del formulario",
+    turns: [
+      { text: "Quiero acceder a la beta gratuita", intent: "beta_access_request", include: /mismos datos.*formulario.*privacidad.*condiciones/i },
+      { text: "Sí, acepto la política de privacidad y las condiciones", intent: "beta_access_request", include: /nombre/i },
+      { text: "Ana Pérez", intent: "beta_access_request", include: /email profesional/i },
+      { text: "ana.beta@example.com", intent: "beta_access_request", include: /empresa/i },
+      { text: "Acme Analytics", intent: "beta_access_request", include: /canales.*objetivos.*implantaci[oó]n/i },
+      { text: "Queremos conectar Google Ads y CRM para priorizar oportunidades", intent: "beta_access_request", include: /opcional.*comunicaciones comerciales/i },
+      { text: "No, gracias", intent: "beta_access_request", include: /solicitud.*beta.*registrada/i },
+    ],
+  },
+  {
     id: "human_handoff",
     perspective: "Usuario que pide una persona",
     turns: [
