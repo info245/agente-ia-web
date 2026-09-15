@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { extractLeadDataFromText } from "./leadExtractor.js";
+import {
+  extractCompanyNameAnswer,
+  extractCompanyNameFromConversationContext,
+  extractLeadDataFromText,
+} from "./leadExtractor.js";
 import { mergeLeadData } from "./leadMerge.js";
 
 test("interprets beta/free/zero budget replies as the free beta", () => {
@@ -141,6 +145,53 @@ test("separates person, company and industry when users mix them", () => {
   assert.equal(brand.company_name, "Luma Skin");
   assert.equal(brand.interest_service, "Shopify");
   assert.equal(correction.company_name, "FitBox Centro");
+});
+
+test("recovers a company answer when the same message continues with a question", () => {
+  assert.equal(
+    extractCompanyNameAnswer("Tiendas Loles, ¿qué incluyen esos 200€?"),
+    "Tiendas Loles"
+  );
+  assert.equal(
+    extractCompanyNameAnswer("Tiendas Loles, que incluyen esos 200€?"),
+    "Tiendas Loles"
+  );
+  assert.equal(extractCompanyNameAnswer("Acme"), "Acme");
+  assert.equal(extractCompanyNameAnswer("¿Qué incluyen esos 200€?"), null);
+  assert.equal(extractCompanyNameAnswer("Prefiero no decirlo"), null);
+  assert.equal(extractCompanyNameAnswer("Vendemos ropa online"), null);
+
+  const recovered = extractCompanyNameFromConversationContext({
+    text: "quiero un desglose real",
+    messages: [
+      { role: "user", content: "Me gustaría empezar con SEO" },
+      {
+        role: "assistant",
+        content: "¿Cómo se llama tu empresa o proyecto para personalizar la propuesta?",
+      },
+      { role: "user", content: "Tiendas Loles, ¿qué incluyen esos 200€?" },
+      {
+        role: "assistant",
+        content: "Incluye auditoría y optimización. ¿Quieres un desglose más detallado?",
+      },
+      { role: "user", content: "quiero un desglose real" },
+    ],
+    existingLead: { interest_service: "SEO" },
+  });
+
+  assert.equal(recovered, "Tiendas Loles");
+});
+
+test("does not invent a company without a preceding company question", () => {
+  const recovered = extractCompanyNameFromConversationContext({
+    text: "quiero un desglose real",
+    messages: [
+      { role: "assistant", content: "¿Quieres un desglose más detallado?" },
+      { role: "user", content: "quiero un desglose real" },
+    ],
+  });
+
+  assert.equal(recovered, null);
 });
 
 test("handles complex budgets, urgency and consultative service corrections", () => {

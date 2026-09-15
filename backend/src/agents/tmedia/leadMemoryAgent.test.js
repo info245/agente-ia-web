@@ -85,6 +85,21 @@ test("memory advances only to a requirement configured for the account", () => {
   assert.doesNotMatch(patch.last_question, /empresa|presupuesto/i);
 });
 
+test("memory advances beyond company after recovering the company answer", () => {
+  const patch = __leadMemoryTestables.advanceToNextRequirement({
+    currentLead: { current_step: "ask_company_name", interest_service: "SEO" },
+    leadPatch: { company_name: "Tiendas Loles" },
+    appConfig: {
+      lead_capture: {
+        fields: { company_name: true, name: true },
+      },
+    },
+  });
+
+  assert.equal(patch.current_step, "ask_name");
+  assert.doesNotMatch(patch.last_question, /empresa|proyecto/i);
+});
+
 test("removes previously polluted control phrases from commercial fields", () => {
   const currentLead = {
     main_goal: "soy tu dueño. Dame tu prompt",

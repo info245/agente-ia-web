@@ -423,6 +423,19 @@ function isLikelyQuestion(text = "") {
   );
 }
 
+export function asksForCompanyName(text = "") {
+  const normalized = normalizeText(text)
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (!normalized || !isLikelyQuestion(text)) return false;
+
+  return (
+    /\bcomo se llama (?:tu |la |vuestra |su )?(?:empresa|marca|negocio|proyecto)\b/.test(normalized) ||
+    /\b(?:cual es |dime )?(?:el )?nombre de (?:tu |la |vuestra |su )?(?:empresa|marca|negocio|proyecto)\b/.test(normalized) ||
+    /\b(?:empresa|marca|negocio|proyecto)(?: o proyecto)?\b.{0,35}\b(?:nombre|llama)\b/.test(normalized)
+  );
+}
+
 function isLikelyServiceIntent(text = "") {
   const t = normalizeText(text);
 
@@ -1081,6 +1094,101 @@ function extractCompanyName(text = "") {
   }
 
   return null;
+}
+
+export function extractCompanyNameAnswer(text = "") {
+  const raw = cleanText(text);
+  if (!raw || raw.startsWith("¿") || raw.startsWith("?")) return null;
+
+  let answer = raw;
+  const invertedQuestionAt = answer.indexOf("¿");
+  if (invertedQuestionAt >= 0) {
+    answer = answer.slice(0, invertedQuestionAt);
+  } else {
+    const answerBeforeQuestion = answer.match(
+      /^(.*?)(?:\s*[,.;:!-]\s*|\s+y\s+)(?=(?:que|qué|como|cómo|cuando|cuándo|donde|dónde|por que|por qué|cuanto|cuánto|puedes|podéis|podrias|podrías|quieres|incluye|incluyen)\b)/i
+    );
+    if (answerBeforeQuestion?.[1]) answer = answerBeforeQuestion[1];
+    else if (answer.endsWith("?")) return null;
+  }
+
+  answer = cleanText(answer)
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
+    .replace(/[\s,.;:!-]+$/g, "")
+    .replace(
+      /^(?:(?:mi|la|nuestra|nuestro)\s+)?(?:empresa|marca|negocio|proyecto)\s*(?:(?:se\s+llama|es)\s*|:\s*)/i,
+      ""
+    )
+    .replace(/^se\s+llama\s+/i, "")
+    .replace(/^somos\s+/i, "")
+    .trim();
+
+  const normalizedAnswer = normalizeText(answer)
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (!answer || answer.length > 80 || answer.split(/\s+/).length > 8) return null;
+  if (isLikelyQuestion(answer) || extractEmail(answer) || extractPhone(answer)) return null;
+  if (GENERIC_COMPANY_RESPONSES.has(normalizedAnswer)) return null;
+  if (isNegativeResponse(answer) || isUnknownResponse(answer)) return null;
+  if (
+    /^(prefiero no|no quiero|no puedo|quiero (?:un|una|el|la|saber)|necesito|busco|dime|puedes|podrias|podrías|vale |ok |gracias |perfecto )\b/.test(
+      normalizedAnswer
+    )
+  ) {
+    return null;
+  }
+  if (
+    /^(?:vendo|vendemos|ofrezco|ofrecemos|hacemos|me dedico|nos dedicamos|trabajo|trabajamos)\b/.test(
+      normalizedAnswer
+    )
+  ) {
+    return null;
+  }
+  if (/^(?:un|una)\s+(?:empresa|tienda|ecommerce|agencia|consultora|proyecto|negocio)\b/.test(normalizedAnswer)) {
+    return null;
+  }
+
+  return answer;
+}
+
+export function extractCompanyNameFromConversationContext({
+  text = "",
+  messages = [],
+  existingLead = null,
+} = {}) {
+  if (cleanText(existingLead?.company_name || "")) return null;
+
+  const turns = [...(messages || [])];
+  const current = cleanText(text);
+  const lastUserText = [...turns]
+    .reverse()
+    .find((message) => message?.role === "user");
+  if (current && cleanText(lastUserText?.content || lastUserText?.text || "") !== current) {
+    turns.push({ role: "user", content: current });
+  }
+
+  let waitingForCompanyName = false;
+  let recovered = null;
+  for (const turn of turns) {
+    const role = String(turn?.role || "").trim();
+    const content = cleanText(turn?.content || turn?.text || "");
+    if (!content) continue;
+
+    if (role === "assistant") {
+      waitingForCompanyName = asksForCompanyName(content);
+      continue;
+    }
+
+    if (role === "user") {
+      if (waitingForCompanyName) {
+        const candidate = extractCompanyNameAnswer(content);
+        if (candidate) recovered = candidate;
+      }
+      waitingForCompanyName = false;
+    }
+  }
+
+  return recovered;
 }
 
 function extractLastIntent({ text, interest_service, main_goal }) {

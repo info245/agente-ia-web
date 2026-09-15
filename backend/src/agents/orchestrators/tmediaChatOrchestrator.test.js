@@ -68,6 +68,33 @@ test("removes any qualification question whose answer is already known", () => {
   }
 });
 
+test("does not ask for the company again after an answer followed by a pricing question", () => {
+  const reply = repairFinalReply({
+    reply: "Como se llama tu empresa o proyecto?",
+    currentMessage: "quiero un desglose real",
+    lead: { interest_service: "SEO" },
+    messages: [
+      { role: "user", content: "Me gustaría empezar con SEO" },
+      {
+        role: "assistant",
+        content: "¿Cómo se llama tu empresa o proyecto para personalizar la propuesta?",
+      },
+      { role: "user", content: "Tiendas Loles, ¿qué incluyen esos 200€?" },
+      {
+        role: "assistant",
+        content: "Incluye auditoría y optimización. ¿Quieres un desglose más detallado?",
+      },
+      { role: "user", content: "quiero un desglose real" },
+    ],
+    appConfig: {
+      lead_capture: { fields: { company_name: true } },
+    },
+  });
+
+  assert.doesNotMatch(reply, /como se llama tu empresa/i);
+  assert.match(reply, /información necesaria|Ya tengo ese dato/i);
+});
+
 test("support and human requests bypass closing and commercial questions", () => {
   const config = {
     contact: { public_whatsapp_number: "34600000000", support_email: "help@example.com" },

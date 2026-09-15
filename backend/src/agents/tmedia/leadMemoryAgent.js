@@ -1,4 +1,8 @@
-import { extractLeadDataFromText, looksLikeValidName } from "../../lib/leadExtractor.js";
+import {
+  extractCompanyNameFromConversationContext,
+  extractLeadDataFromText,
+  looksLikeValidName,
+} from "../../lib/leadExtractor.js";
 import { mergeLeadData } from "../../lib/leadMerge.js";
 import { buildMemoryPatch } from "../../lib/memoryUtils.js";
 import { shouldBlockLeadExtraction } from "../../lib/conversationIntent.js";
@@ -257,6 +261,16 @@ function advanceToNextRequirement({ leadPatch = {}, currentLead = {}, appConfig 
 export async function runLeadMemoryAgent(context = {}) {
   const blocksLeadExtraction = shouldBlockLeadExtraction(context.message);
   const extracted = extractLeadDataFromText(context.message, context.lead || {});
+  const recoveredCompanyName = blocksLeadExtraction
+    ? null
+    : extractCompanyNameFromConversationContext({
+        text: context.message,
+        messages: context.messages,
+        existingLead: context.lead || {},
+      });
+  if (!extracted.company_name && recoveredCompanyName) {
+    extracted.company_name = recoveredCompanyName;
+  }
   const memoryPatch = buildMemoryPatch({
     text: context.message,
     leadBefore: context.lead || {},
@@ -336,6 +350,17 @@ export async function runLeadMemoryAgent(context = {}) {
   }
 
   if (lead_patch.main_goal && String(lead_patch.current_step || "").trim() === "ask_main_goal") {
+    Object.assign(lead_patch, advanceToNextRequirement({
+      leadPatch: lead_patch,
+      currentLead: context.lead || {},
+      appConfig: context.appConfig,
+    }));
+  }
+
+  if (
+    lead_patch.company_name &&
+    String(lead_patch.current_step || context.lead?.current_step || "").trim() === "ask_company_name"
+  ) {
     Object.assign(lead_patch, advanceToNextRequirement({
       leadPatch: lead_patch,
       currentLead: context.lead || {},

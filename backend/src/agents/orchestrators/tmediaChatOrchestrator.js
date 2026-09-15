@@ -7,7 +7,10 @@ import {
   listConversationEventsByType,
 } from "../tools/supabaseTools.js";
 import { decideEmailSend } from "../../lib/leadEmailPolicy.js";
-import { extractLeadDataFromText } from "../../lib/leadExtractor.js";
+import {
+  extractCompanyNameFromConversationContext,
+  extractLeadDataFromText,
+} from "../../lib/leadExtractor.js";
 import {
   getMissingLeadRequirements,
   getLeadRequirementPrompt,
@@ -287,6 +290,14 @@ function questionField(value = "") {
 
 function enrichLeadFromMessages(lead = {}, messages = [], currentMessage = "") {
   const enriched = { ...(lead || {}) };
+  const recoveredCompanyName = extractCompanyNameFromConversationContext({
+    text: currentMessage,
+    messages,
+    existingLead: enriched,
+  });
+  if (!enriched.company_name && recoveredCompanyName) {
+    enriched.company_name = recoveredCompanyName;
+  }
   for (const text of recentUserTexts(messages, currentMessage, 10).reverse()) {
     const extracted = extractLeadDataFromText(text, enriched);
     for (const field of [
