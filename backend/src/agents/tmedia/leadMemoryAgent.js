@@ -417,11 +417,10 @@ export async function runLeadMemoryAgent(context = {}) {
         summary: output.conversation_summary || output.lead_patch.summary || context.lead?.summary || null,
       });
     } catch (error) {
-      // No dejes que un fallo al guardar el lead tumbe todo el turno de
-      // conversación: sin esto, una excepción aquí impedía generar la
-      // respuesta y el usuario recibía un error sin que el lead quedara
-      // guardado, obligándole a repetir todo el flujo (bucle).
       console.log("[leadMemoryAgent] upsertLeadFromConversation failed:", error.message);
+      throw new Error("No se pudo guardar el lead en el CRM; el turno debe reintentarse.", {
+        cause: error,
+      });
     }
   }
 

@@ -1,3 +1,5 @@
+import { DEFAULT_PIPELINE_STAGES, sanitizePipelineStages } from "./pipelineConfig.js";
+
 export const DEFAULT_APP_CONFIG = {
   product: {
     mode: "full_crm",
@@ -142,7 +144,7 @@ export const DEFAULT_APP_CONFIG = {
   },
   widget: {
     install_mode: "slug",
-    allowed_domains: ["t-mediaglobal.com", "heysancho.com"],
+    allowed_domains: ["t-mediaglobal.com"],
   },
   deployment: {
     status: "published",
@@ -160,6 +162,9 @@ export const DEFAULT_APP_CONFIG = {
       },
     },
   },
+  pipeline: {
+    stages: DEFAULT_PIPELINE_STAGES,
+  },
   integrations: {
     whatsapp: {
       provider: "meta_cloud",
@@ -167,6 +172,8 @@ export const DEFAULT_APP_CONFIG = {
       setup_goal: "Recibir y continuar conversaciones por WhatsApp",
       phone_number_id: "",
       business_account_id: "",
+      intro_template_name: "",
+      intro_template_language: "es",
       status_label: "Pendiente de conectar",
       validation: {
         status: "pending",
@@ -186,6 +193,7 @@ export const DEFAULT_APP_CONFIG = {
         sheet_document: "",
         sheet_tabs: "",
         webhook_url: "",
+        allow_browser_intake: false,
       validation: {
         status: "pending",
         last_validated_at: "",
@@ -523,6 +531,9 @@ export const BLANK_APP_CONFIG = {
     published_at: "",
     readiness_snapshot: null,
   },
+  pipeline: {
+    stages: DEFAULT_PIPELINE_STAGES,
+  },
   integrations: {
     whatsapp: {
       provider: "meta_cloud",
@@ -530,6 +541,8 @@ export const BLANK_APP_CONFIG = {
       setup_goal: "Recibir y continuar conversaciones por WhatsApp",
       phone_number_id: "",
       business_account_id: "",
+      intro_template_name: "",
+      intro_template_language: "es",
       status_label: "Pendiente de conectar",
       validation: {
         status: "pending",
@@ -549,6 +562,7 @@ export const BLANK_APP_CONFIG = {
         sheet_document: "",
         sheet_tabs: "",
         webhook_url: "",
+        allow_browser_intake: false,
       validation: {
         status: "pending",
         last_validated_at: "",
@@ -1210,6 +1224,8 @@ function sanitizeAutomationSteps(steps = []) {
       delay_unit: cleanString(step?.delay_unit) || "hours",
       channel: cleanString(step?.channel) || "whatsapp",
       template_key: cleanString(step?.template_key),
+      whatsapp_template_name: cleanString(step?.whatsapp_template_name),
+      whatsapp_template_language: cleanString(step?.whatsapp_template_language) || "es",
       active: step?.active !== false,
     }))
     .filter((step) => step.template_key);
@@ -1338,7 +1354,10 @@ export function sanitizeAppConfig(input = {}, options = {}) {
       actions_catalog,
       notifications,
       widget,
-      deployment,
+    deployment,
+    pipeline: {
+      stages: sanitizePipelineStages(input?.pipeline?.stages || defaults?.pipeline?.stages),
+    },
       integrations: {
       whatsapp: {
         provider:
@@ -1356,6 +1375,9 @@ export function sanitizeAppConfig(input = {}, options = {}) {
         business_account_id: cleanString(
           input?.integrations?.whatsapp?.business_account_id
         ),
+        intro_template_name: cleanString(input?.integrations?.whatsapp?.intro_template_name),
+        intro_template_language:
+          cleanString(input?.integrations?.whatsapp?.intro_template_language) || "es",
         status_label:
           cleanString(input?.integrations?.whatsapp?.status_label) ||
           defaults.integrations.whatsapp.status_label,
@@ -1394,6 +1416,7 @@ export function sanitizeAppConfig(input = {}, options = {}) {
         ),
         sheet_tabs: cleanString(input?.integrations?.lead_forms?.sheet_tabs),
         webhook_url: cleanString(input?.integrations?.lead_forms?.webhook_url),
+        allow_browser_intake: input?.integrations?.lead_forms?.allow_browser_intake === true,
         validation: sanitizeValidation(
           input?.integrations?.lead_forms?.validation,
           defaults.integrations.lead_forms.validation

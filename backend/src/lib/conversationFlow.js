@@ -101,6 +101,17 @@ function detectService(text) {
 
 function detectBudget(text) {
   const t = String(text || "").trim();
+  const normalized = normalizeText(t);
+
+  if (
+    normalized === "0" ||
+    normalized === "cero" ||
+    /^0\s*(eur|euro|euros)?$/.test(normalized) ||
+    /\b(beta|gratis|gratuito|gratuita|free|trial|prueba gratuita|version gratuita)\b/i.test(normalized) ||
+    /\b(sin presupuesto|sin inversion|presupuesto cero)\b/i.test(normalized)
+  ) {
+    return "beta gratuita / 0 EUR";
+  }
 
   const m1 = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(€|eur)\b/i);
   if (m1) {
@@ -243,9 +254,9 @@ export function getNextStep(lead) {
   if (!hasValue(lead?.business_activity, 4)) return "ask_business_activity";
   if (!hasValue(lead?.interest_service)) return "ask_service";
   if (!hasValue(lead?.main_goal, 4)) return "ask_goal";
-  if (!hasValue(lead?.budget_range)) return "ask_budget";
   if (!hasValue(lead?.urgency)) return "ask_urgency";
   if (!hasValue(lead?.email, 3) && !hasValue(lead?.phone, 6)) return "ask_contact";
+  if (!hasValue(lead?.budget_range)) return "ask_budget";
   return "ready_for_ai";
 }
 
@@ -266,9 +277,7 @@ export function getQuestionForStep(step, lead) {
     case "ask_goal":
       return "Entendido. ¿Cuál sería tu objetivo principal ahora mismo?";
     case "ask_budget":
-      return lead?.interest_service
-        ? `Para ${lead.interest_service}, ¿con qué presupuesto aproximado te gustaría trabajar?`
-        : "¿Con qué presupuesto aproximado te gustaría trabajar?";
+      return "Quieres empezar con la beta gratuita o tienes alguna inversion prevista mas adelante?";
     case "ask_urgency":
       return "Perfecto. ¿Qué prioridad tiene para ti? ¿Te gustaría empezar cuanto antes o lo estás valorando a medio plazo?";
     case "ask_contact":

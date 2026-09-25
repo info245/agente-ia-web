@@ -5,6 +5,7 @@ import {
   saveConversationEvent,
   getLeadByConversationId,
   listConversationEventsByType,
+  updateLeadCrmFields,
 } from "../tools/supabaseTools.js";
 import { decideEmailSend } from "../../lib/leadEmailPolicy.js";
 import {
@@ -27,6 +28,13 @@ import {
   buildDeterministicConversationReply,
   buildPrivacyBoundaryReply,
 } from "../tmedia/conversationAgent.js";
+import {
+  buildSanchoProductOverviewReply,
+  guardSanchoProductClaims,
+} from "../../lib/sanchoUseCases.js";
+import { getNextBestAction } from "../../lib/nextBestAction.js";
+import { executeConfiguredAction } from "../../lib/actionExecutor.js";
+import { updateConversationInboxState } from "../../lib/chatStore.js";
 
 function finalReply({ selectedResult, closingResult, memoryResult, context = {} }) {
   if (closingResult?.chat_completed && closingResult?.closing_message) {
@@ -398,6 +406,11 @@ function repairFinalReply({
     return buildSanchoSupportReply();
   }
   if (priorityIntent === "support") return buildGenericSupportReply();
+  const sanchoProductReply = buildSanchoProductOverviewReply({
+    message: currentMessage,
+    appConfig,
+  });
+  if (sanchoProductReply) return sanitizeCommercialReply(sanchoProductReply);
   const odooReply = buildOdooIntegrationReply({ messages, currentMessage });
   if (odooReply) return odooReply;
   if (
@@ -532,6 +545,7 @@ export async function processTmediaIncomingMessage({
     message,
     metadata,
     accountId,
+    includeKnowledge: false,
   });
 
   await saveMessage({
@@ -552,6 +566,18 @@ export async function processTmediaIncomingMessage({
   }).catch((error) => {
     console.log("[tmediaChatOrchestrator] message_received event skipped:", error.message);
   });
+
+  if (context.conversation?.ai_status === "paused") {
+    return {
+      ok: true,
+      conversation_id: context.conversationId,
+      reply: null,
+      lead: context.lead || null,
+      chat_completed: false,
+      human_takeover: true,
+      mode: "human",
+    };
+  }
 
   const refreshedContext = await buildTmediaAgentContext({
     conversationId: context.conversationId,
@@ -581,6 +607,11 @@ export async function processTmediaIncomingMessage({
   const leadAfterMemory = await getLeadByConversationId(context.conversationId, { accountId }).catch(() => null);
   let handoffRecorded = false;
   if (routerResult?.intent === "human_request") {
+    await updateConversationInboxState(
+      context.conversationId,
+      { ai_status: "paused", inbox_status: "open" },
+      { accountId }
+    );
     const handoffEvent = await saveConversationEvent({
       conversation_id: context.conversationId,
       event_type: "human_handoff_requested",
@@ -676,11 +707,15 @@ export async function processTmediaIncomingMessage({
     handoffRecorded,
     notificationResult,
   });
-  const reply = guardAgainstReplyLoop({
+  const loopSafeReply = guardAgainstReplyLoop({
     reply: repairedReply,
     messages: refreshedContext.messages || [],
     currentMessage: refreshedContext.message,
     lead: leadAfterMemory || refreshedContext.lead || {},
+    appConfig: refreshedContext.appConfig,
+  });
+  const reply = guardSanchoProductClaims({
+    reply: loopSafeReply,
     appConfig: refreshedContext.appConfig,
   });
 
@@ -712,8 +747,42 @@ export async function processTmediaIncomingMessage({
     console.log("[tmediaChatOrchestrator] message_sent event skipped:", error.message);
   });
 
-  const finalLead = await getLeadByConversationId(context.conversationId, { accountId }).catch(() => null);
+  let finalLead = await getLeadByConversationId(context.conversationId, { accountId }).catch(() => null);
   const isCompleted = !!closingResult?.chat_completed || finalLead?.current_step === "completed";
+  const nextBestAction = getNextBestAction({
+    lead: finalLead || leadAfterMemory || refreshedContext.lead || {},
+    text: refreshedContext.message,
+    appConfig: refreshedContext.appConfig,
+    channel: sourceChannel,
+    phase: isCompleted ? "close" : "capture",
+  });
+  const recentActionEvents = await listConversationEventsByType(
+    context.conversationId,
+    "action_executed",
+    25,
+    accountId
+  ).catch(() => []);
+  const actionExecution = await executeConfiguredAction({
+    lead: finalLead || leadAfterMemory || refreshedContext.lead || {},
+    conversationId: context.conversationId,
+    channel: sourceChannel,
+    externalUserId,
+    accountId,
+    nextBestAction,
+    recentActionEvents,
+    updateLeadCrmFields,
+    saveConversationEvent,
+  }).catch((error) => ({
+    executed: false,
+    skipped: false,
+    reason: "execution-error",
+    error: error?.message || String(error),
+  }));
+  if (actionExecution?.executed && finalLead?.id) {
+    finalLead = await getLeadByConversationId(context.conversationId, { accountId }).catch(
+      () => finalLead
+    );
+  }
   const handoffOptions = buildHandoffOptions({
     appConfig: refreshedContext.appConfig,
     conversationId: context.conversationId,
@@ -742,6 +811,8 @@ export async function processTmediaIncomingMessage({
     memory: memoryResult,
     closing: closingResult,
     notification: notificationResult,
+    next_best_action: nextBestAction,
+    action_execution: actionExecution,
     handoff_recorded: handoffRecorded,
     chat_completed: isCompleted,
     handoff_options: handoffOptions,

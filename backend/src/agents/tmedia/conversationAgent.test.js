@@ -81,9 +81,17 @@ test("prompt extraction, loop complaints and agent questions get direct answers"
   assert.doesNotMatch(loop.assistant_message, /más detalle para poder orientarte/i);
 
   const agent = replyFor("que tipo de agente eres y que puedes hacer?");
-  assert.match(agent.assistant_message, /asistente comercial y de soporte/i);
-  assert.match(agent.assistant_message, /casos de uso/i);
+  assert.match(agent.assistant_message, /asistente informativo de Sancho AI/i);
+  assert.match(agent.assistant_message, /inteligencia operativa/i);
+  assert.match(agent.assistant_message, /no presta atención al cliente/i);
+  assert.match(agent.assistant_message, /no automatiza comunicaciones con clientes/i);
+  assert.match(agent.assistant_message, /no gestiona ni hace seguimiento de leads o contactos/i);
   assert.doesNotMatch(agent.assistant_message, /directrices|instrucciones internas|debo responder/i);
+
+  const shortIdentity = replyFor("¿Qué eres?");
+  assert.equal(shortIdentity.handled, true);
+  assert.match(shortIdentity.assistant_message, /asistente informativo de Sancho AI/i);
+  assert.doesNotMatch(shortIdentity.assistant_message, /asistente comercial y de soporte/i);
 });
 
 test("answers the SaaS fit question and acknowledges a bare URL honestly", () => {

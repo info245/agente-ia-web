@@ -9,10 +9,14 @@ import { fileURLToPath } from "url";
 import { extractLeadDataFromText } from "./lib/leadExtractor.js";
 import {
   createConversation,
+  getLatestConversationByExternalUserId,
   saveMessage,
   saveConversationEvent,
   upsertLeadFromConversation,
   getConversationMessages,
+  getCrmLeadById,
+  listInboxConversations,
+  updateConversationInboxState,
   getLeadByConversationId,
   getLatestConversationEvent,
   listConversationEventsByType,
@@ -45,7 +49,13 @@ import {
 
 import { openai } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
-import { getAppConfig, saveAppConfig } from "./lib/appConfigStore.js";
+import { getAppConfig, getPublishedAppConfig, saveAppConfig } from "./lib/appConfigStore.js";
+import {
+  getConfigVersion,
+  listConfigVersions,
+  publishConfigVersion,
+  saveDraftConfigVersion,
+} from "./lib/configVersionStore.js";
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
 import {
@@ -67,9 +77,39 @@ import {
 import { uploadBrandLogo } from "./lib/storageStore.js";
 import {
   getWhatsAppChannelForAccount,
+  getWhatsAppChannelByPhoneNumberId,
+  getWhatsAppChannelSummary,
+  upsertWhatsAppChannelForAccount,
+  disconnectWhatsAppChannelForAccount,
   resolveWhatsAppChannelFromWebhookValue,
 } from "./lib/whatsappChannelsStore.js";
+import {
+  enqueueChannelInboxEvent,
+  claimChannelInboxEvents,
+  completeChannelInboxEvent,
+  failChannelInboxEvent,
+  updateChannelInboxEventResult,
+} from "./lib/channelInboxStore.js";
+import {
+  deriveExternalLeadIdempotencyKey,
+  parseExternalLeadIntake,
+  validateIdempotencyKey,
+} from "./lib/externalLeadIntake.js";
+import {
+  beginExternalLeadIntake,
+  completeExternalLeadIntake,
+  failExternalLeadIntake,
+} from "./lib/externalLeadIntakeStore.js";
 import { processTmediaIncomingMessage } from "./agents/orchestrators/tmediaChatOrchestrator.js";
+import { syncConfiguredKnowledge } from "./lib/knowledgeIngestor.js";
+import { createTokenBucketRateLimiter } from "./lib/rateLimiter.js";
+import {
+  claimAutomationJobs,
+  completeAutomationJob,
+  enqueueAutomationJob,
+  failAutomationJob,
+  updateAutomationJobResult,
+} from "./lib/automationJobStore.js";
 
 import { retrieveWebsiteContext } from "./lib/kbRetriever.js";
 import { buildKnowledgeContext, getServiceFacts, getWebsiteFacts } from "./lib/websiteFacts.js";
@@ -112,11 +152,73 @@ import {
 } from "./lib/lightSiteAnalyzer.js";
 
 const app = express();
+app.set("trust proxy", 1);
 const crmPublicDir = fileURLToPath(new URL("../public-crm", import.meta.url));
 const widgetPublicFile = fileURLToPath(new URL("../../public-widget/widget.js", import.meta.url));
+const CORS_DECISION_TTL_MS = 15_000;
+const CORS_DECISION_CACHE_MAX = 500;
+const corsDecisionCache = new Map();
+const corsDecisionInflight = new Map();
 
-app.use(cors());
-app.options("*", cors());
+async function isConfiguredCorsOrigin(originHost) {
+  const now = Date.now();
+  const cached = corsDecisionCache.get(originHost);
+  if (cached && cached.expiresAt > now) return cached.allowed;
+  if (cached) corsDecisionCache.delete(originHost);
+
+  const pending = corsDecisionInflight.get(originHost);
+  if (pending) return pending;
+
+  const lookup = Promise.resolve()
+    .then(async () => {
+      const accounts = await listAccounts();
+      for (const account of accounts) {
+        const config = await getAppConfig({ accountId: account.id }).catch(() => null);
+        if (getAllowedWidgetDomains(config).some((domain) => domainMatches(originHost, domain))) {
+          return true;
+        }
+      }
+      return false;
+    })
+    .then((allowed) => {
+      if (corsDecisionCache.size >= CORS_DECISION_CACHE_MAX) {
+        for (const [key, entry] of corsDecisionCache.entries()) {
+          if (entry.expiresAt <= now) corsDecisionCache.delete(key);
+        }
+        if (corsDecisionCache.size >= CORS_DECISION_CACHE_MAX) {
+          const oldestKey = corsDecisionCache.keys().next().value;
+          if (oldestKey) corsDecisionCache.delete(oldestKey);
+        }
+      }
+      corsDecisionCache.set(originHost, {
+        allowed: Boolean(allowed),
+        expiresAt: Date.now() + CORS_DECISION_TTL_MS,
+      });
+      return Boolean(allowed);
+    })
+    .finally(() => corsDecisionInflight.delete(originHost));
+
+  corsDecisionInflight.set(originHost, lookup);
+  return lookup;
+}
+
+function dynamicCorsOptions(req, callback) {
+  const origin = String(req.get("origin") || "").trim();
+  if (!origin) return callback(null, { origin: false, credentials: true });
+
+  const originHost = normalizeRequestHost(origin);
+  const requestHost = normalizeRequestHost(req.get("host"));
+  if (originHost && requestHost && originHost === requestHost) {
+    return callback(null, { origin: true, credentials: true });
+  }
+
+  isConfiguredCorsOrigin(originHost)
+    .then((allowed) => callback(null, { origin: allowed, credentials: true }))
+    .catch(() => callback(null, { origin: false, credentials: true }));
+}
+
+app.use(cors(dynamicCorsOptions));
+app.options("/{*splat}", cors(dynamicCorsOptions));
 app.use(
   express.json({
     limit: "5mb",
@@ -140,10 +242,28 @@ app.use("/api/crm", requireCrmAuth());
 const PORT = process.env.PORT || 3000;
 const BUILD_TAG = "conversation-audit-v6-beta-crm";
 const CRM_AUTH_COOKIE = "crm_session";
-const CRM_AUTH_SECRET =
+const CRM_AUTH_SECRET_INPUT = String(
   process.env.CRM_AUTH_SECRET ||
-  process.env.INTEGRATIONS_SECRET ||
-  "tmedia-dev-auth-secret";
+    process.env.INTEGRATIONS_SECRET ||
+    process.env.CRM_INTEGRATIONS_SECRET ||
+    ""
+).trim();
+const KNOWN_INSECURE_CRM_AUTH_SECRETS = new Set([
+  "tmedia-dev-auth-secret",
+  "change-me",
+  "changeme",
+]);
+if (
+  process.env.NODE_ENV === "production" &&
+  (!CRM_AUTH_SECRET_INPUT ||
+    CRM_AUTH_SECRET_INPUT.length < 32 ||
+    KNOWN_INSECURE_CRM_AUTH_SECRETS.has(CRM_AUTH_SECRET_INPUT.toLowerCase()))
+) {
+  throw new Error(
+    "CRM_AUTH_SECRET debe configurarse en produccion con un secreto aleatorio de al menos 32 caracteres."
+  );
+}
+const CRM_AUTH_SECRET = CRM_AUTH_SECRET_INPUT || "tmedia-dev-auth-secret";
 const CRM_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const CRM_PUBLIC_BASE_URL = String(
   process.env.CRM_PUBLIC_BASE_URL || process.env.PUBLIC_APP_URL || "https://tmedia-global-ai.onrender.com"
@@ -159,7 +279,10 @@ const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v25.0";
 const WHATSAPP_APP_SECRET =
   process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET || "";
 const TASK_SECRET = process.env.TASK_SECRET || "";
-const INTEGRATIONS_SECRET = process.env.INTEGRATIONS_SECRET || "";
+const INTEGRATIONS_SECRET =
+  process.env.INTEGRATIONS_SECRET ||
+  process.env.CRM_INTEGRATIONS_SECRET ||
+  "";
 const QUOTE_RESPONSE_SECRET =
   process.env.QUOTE_RESPONSE_SECRET || TASK_SECRET || INTEGRATIONS_SECRET || "";
 const WHATSAPP_FOLLOWUP_HOURS = Number(process.env.WHATSAPP_FOLLOWUP_HOURS || 10);
@@ -177,37 +300,31 @@ const SCHEDULER_STARTUP_DELAY_MS = Math.max(
   1_000,
   Number(process.env.SCHEDULER_STARTUP_DELAY_MS || 15_000)
 );
+const CHANNEL_INBOX_INTERVAL_MS = Math.max(
+  1_000,
+  Number(process.env.CHANNEL_INBOX_INTERVAL_MS || 5_000)
+);
 const lastLeadEmailSent = new Map();
 const clientConfirmationSent = new Map();
-const processedWhatsAppMessages = new Map();
+const publicExternalLeadRequests = new Map();
+const messageRateLimiter = createTokenBucketRateLimiter({
+  capacity: 60,
+  refillPerSecond: 1,
+  maxEntries: 10_000,
+  idleTtlMs: 15 * 60 * 1000,
+});
 const schedulerState = {
   automationRunning: false,
   whatsappRunning: false,
+  inboxRunning: false,
+  automationJobsRunning: false,
 };
 const googleEmailOauthStates = new Map();
-const PROCESSED_MESSAGE_TTL_MS = 1000 * 60 * 60;
 const GOOGLE_EMAIL_OAUTH_TTL_MS = 1000 * 60 * 15;
-
-function cleanupProcessedMessages() {
-  const now = Date.now();
-  for (const [id, ts] of processedWhatsAppMessages.entries()) {
-    if (now - ts > PROCESSED_MESSAGE_TTL_MS) {
-      processedWhatsAppMessages.delete(id);
-    }
-  }
-}
-
-function markWhatsAppMessageProcessed(messageId) {
-  if (!messageId) return;
-  cleanupProcessedMessages();
-  processedWhatsAppMessages.set(messageId, Date.now());
-}
-
-function hasProcessedWhatsAppMessage(messageId) {
-  if (!messageId) return false;
-  cleanupProcessedMessages();
-  return processedWhatsAppMessages.has(messageId);
-}
+const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_RATE_LIMIT_BLOCK_MS = 15 * 60 * 1000;
+const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5;
+const loginRateLimits = new Map();
 
 function norm(v) {
   return String(v || "").trim();
@@ -400,7 +517,7 @@ function getExplicitRequestAccountInput(req) {
   return (
     req.query?.account_id ||
     req.query?.account_slug ||
-    firstPayloadValue(body, ["account_id", "account_slug"]) ||
+    firstPayloadValue(body, ["account_id", "account_slug", "accountId", "accountSlug"]) ||
     null
   );
 }
@@ -432,6 +549,127 @@ async function resolveExplicitRequestAccount(req) {
   }
 
   return match;
+}
+
+function normalizeRequestHost(value = "") {
+  let raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+
+  try {
+    if (!/^https?:\/\//i.test(raw)) raw = `https://${raw}`;
+    raw = new URL(raw).hostname;
+  } catch (_error) {
+    raw = raw.split("/")[0].split(":")[0];
+  }
+
+  return raw.replace(/^www\./, "");
+}
+
+function getRequestOriginHost(req) {
+  return (
+    normalizeRequestHost(req.get("origin")) ||
+    normalizeRequestHost(req.get("referer")) ||
+    ""
+  );
+}
+
+function domainMatches(host, allowedDomain) {
+  const safeHost = normalizeRequestHost(host);
+  const safeAllowed = normalizeRequestHost(allowedDomain);
+  if (!safeHost || !safeAllowed) return false;
+  return safeHost === safeAllowed || safeHost.endsWith(`.${safeAllowed}`);
+}
+
+function getAllowedWidgetDomains(appConfig = {}) {
+  const domains = appConfig?.widget?.allowed_domains;
+  if (Array.isArray(domains)) return domains;
+  return String(domains || "")
+    .split(/[,\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function isRequestFromAllowedDomain(req, appConfig = {}) {
+  const host = getRequestOriginHost(req);
+  if (!host) return false;
+  return getAllowedWidgetDomains(appConfig).some((domain) => domainMatches(host, domain));
+}
+
+function isPublicExternalLeadRateLimited(req) {
+  const forwardedFor = String(req.get("x-forwarded-for") || "").split(",")[0].trim();
+  const ip = forwardedFor || req.ip || req.socket?.remoteAddress || "unknown";
+  const host = getRequestOriginHost(req) || "unknown";
+  const key = `${ip}:${host}`;
+  const now = Date.now();
+  const windowMs = 10 * 60 * 1000;
+  const maxRequests = 20;
+  const entry = publicExternalLeadRequests.get(key) || { count: 0, resetAt: now + windowMs };
+
+  if (entry.resetAt <= now) {
+    publicExternalLeadRequests.set(key, { count: 1, resetAt: now + windowMs });
+    return false;
+  }
+
+  entry.count += 1;
+  publicExternalLeadRequests.set(key, entry);
+
+  if (publicExternalLeadRequests.size > 500) {
+    for (const [entryKey, value] of publicExternalLeadRequests.entries()) {
+      if (value.resetAt <= now) publicExternalLeadRequests.delete(entryKey);
+    }
+  }
+
+  return entry.count > maxRequests;
+}
+
+async function resolveExternalLeadAccount(req, payload = {}, { allowDefault = false } = {}) {
+  if (req.crmUser?.role && req.crmUser.role !== "super_admin") {
+    const account = await resolveAccount(req.crmUser.account_id);
+    const accountConfig = await getPublishedAppConfig({ accountId: account.id }).catch(() => null);
+    return { account, accountConfig, matchedBy: "crm_user" };
+  }
+
+  const explicitInput = String(
+    req.query?.account_id ||
+      req.query?.account_slug ||
+      firstPayloadValue(payload, ["account_id", "account_slug", "accountId", "accountSlug"]) ||
+      ""
+  ).trim();
+  const accounts = await listAccounts();
+
+  if (explicitInput) {
+    const account =
+      accounts.find(
+        (item) =>
+          String(item.id || "").trim() === explicitInput ||
+          String(item.slug || "").trim() === explicitInput
+      ) || null;
+    if (!account) {
+      throw new Error(`No se encontro la cuenta indicada (${explicitInput}) para esta integracion.`);
+    }
+    const accountConfig = await getPublishedAppConfig({ accountId: account.id }).catch(() => null);
+    return { account, accountConfig, matchedBy: "explicit" };
+  }
+
+  const host = getRequestOriginHost(req);
+  if (host) {
+    for (const account of accounts) {
+      const accountConfig = await getPublishedAppConfig({ accountId: account.id }).catch(() => null);
+      if (isRequestFromAllowedDomain(req, accountConfig)) {
+        return { account, accountConfig, matchedBy: "domain" };
+      }
+    }
+  }
+
+  if (allowDefault) {
+    const account = await resolveAccount(null);
+    const accountConfig = await getPublishedAppConfig({ accountId: account.id }).catch(() => null);
+    return { account, accountConfig, matchedBy: "secret_default" };
+  }
+
+  throw new Error(
+    "Falta account_slug o account_id en esta integracion y el dominio de origen no coincide con ninguna cuenta publicada."
+  );
 }
 
 function getLogoDataUrl() {
@@ -987,7 +1225,7 @@ function normalizeBudget(text, lead = null) {
   const t = String(text || "").trim();
   if (!looksLikeExplicitBudgetMessage(t, lead)) return null;
 
-  const m1 = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(â‚¬|eur)\b/i);
+  const m1 = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(€|eur)\b/i);
   if (m1) {
     const n = Number(String(m1[1]).replace(/[.,](?=\d{3}\b)/g, ""));
     if (Number.isFinite(n) && n >= 10) return `${n} EUR`;
@@ -1362,7 +1600,9 @@ function looksLikeUsefulFreeTextAnswer(text) {
 
 function validateMetaSignature(req) {
   if (!WHATSAPP_APP_SECRET) {
-    return { ok: true, skipped: true };
+    return process.env.NODE_ENV === "production"
+      ? { ok: false, reason: "missing-app-secret" }
+      : { ok: true, skipped: true };
   }
 
   const signatureHeader =
@@ -1394,10 +1634,6 @@ function validateMetaSignature(req) {
 }
 
 function getCurrentStep(lead, appConfig = null) {
-  if (isCaptureFieldEnabled(appConfig, "name") && !hasName(lead)) return "ask_name";
-  if (isCaptureFieldEnabled(appConfig, "company_name") && !norm(lead?.company_name)) {
-    return "ask_company_name";
-  }
   if (isCaptureFieldEnabled(appConfig, "business_type") && !hasBusinessType(lead)) {
     return "ask_business_type";
   }
@@ -1408,6 +1644,10 @@ function getCurrentStep(lead, appConfig = null) {
   if (isCaptureFieldEnabled(appConfig, "main_goal") && !hasMainGoal(lead)) return "ask_goal";
   if (isCaptureFieldEnabled(appConfig, "budget_range") && !hasBudget(lead)) return "ask_budget";
   if (isCaptureFieldEnabled(appConfig, "urgency") && !hasUrgency(lead)) return "ask_urgency";
+  if (isCaptureFieldEnabled(appConfig, "company_name") && !norm(lead?.company_name)) {
+    return "ask_company_name";
+  }
+  if (isCaptureFieldEnabled(appConfig, "name") && !hasName(lead)) return "ask_name";
   if (
     isCaptureFieldEnabled(appConfig, "preferred_contact_channel") &&
     !getSingleConfiguredChannel(appConfig) &&
@@ -1544,6 +1784,43 @@ function cleanReply(reply) {
   if (paragraphs.length <= 2) return text;
 
   return paragraphs.slice(0, 2).join("\n\n");
+}
+
+function asksForMainGoalAgain(reply = "") {
+  const text = normalizeText(reply);
+  return /\b(objetivo principal|objetivo quieres conseguir|quieres conseguir|objetivo ahora mismo)\b/.test(text);
+}
+
+function getQuestionAfterKnownMainGoal(lead = {}, appConfig = null) {
+  const goal = norm(lead?.main_goal);
+  if (!goal) return null;
+
+  if (isCaptureFieldEnabled(appConfig, "business_type") && !hasBusinessType(lead)) {
+    return `Perfecto, ya tengo claro que quieres ${goal}. ¿A qué se dedica tu negocio o proyecto?`;
+  }
+
+  if (isCaptureFieldEnabled(appConfig, "business_activity") && !hasBusinessActivity(lead)) {
+    return `Perfecto, ya tengo claro que quieres ${goal}. ¿A qué os dedicáis exactamente?`;
+  }
+
+  if (isCaptureFieldEnabled(appConfig, "company_name") && !norm(lead?.company_name)) {
+    return `Perfecto, ya tengo claro que quieres ${goal}. ¿Cómo se llama tu empresa o proyecto?`;
+  }
+
+  if (isCaptureFieldEnabled(appConfig, "name") && !hasName(lead)) {
+    return `Perfecto, ya tengo claro que quieres ${goal}. ¿Cómo te llamas?`;
+  }
+
+  if (isCaptureFieldEnabled(appConfig, "email") && !norm(lead?.email)) {
+    return `Perfecto, ya tengo claro que quieres ${goal}. ¿Me dejas tu email para poder seguir con la demo?`;
+  }
+
+  return null;
+}
+
+function preventRepeatedLeadQuestion(reply, { lead = {}, appConfig = null } = {}) {
+  if (!asksForMainGoalAgain(reply) || !hasMainGoal(lead)) return reply;
+  return getQuestionAfterKnownMainGoal(lead, appConfig) || reply;
 }
 
 function buildOpenAIInput(systemPrompt, history) {
@@ -2035,9 +2312,10 @@ function isAuthorizedIntegrationRequest(req) {
   if (!INTEGRATIONS_SECRET) return false;
   const headerSecret =
     req.get("x-integrations-secret") ||
-    req.get("x-integration-secret") ||
-    req.query?.secret;
-  return String(headerSecret || "") === String(INTEGRATIONS_SECRET);
+    req.get("x-integration-secret");
+  const supplied = Buffer.from(String(headerSecret || ""));
+  const expected = Buffer.from(String(INTEGRATIONS_SECRET));
+  return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
 }
 
 function getPayloadKeyVariants(value = "") {
@@ -3060,7 +3338,7 @@ async function sendWhatsAppText(to, bodyText, options = {}) {
     },
   };
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
     {
       method: "POST",
@@ -3069,7 +3347,8 @@ async function sendWhatsAppText(to, bodyText, options = {}) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
-    }
+    },
+    10_000
   );
 
   const data = await response.json();
@@ -3080,6 +3359,50 @@ async function sendWhatsAppText(to, bodyText, options = {}) {
   }
 
   return data;
+}
+
+async function sendWhatsAppTemplate(to, templateName, languageCode = "es", options = {}) {
+  const channel = options?.phone_number_id
+    ? options
+    : await getWhatsAppChannelForAccount(options?.accountId || options?.account_id || null);
+  const accessToken = channel?.access_token || WHATSAPP_TOKEN;
+  const phoneNumberId = channel?.phone_number_id || WHATSAPP_PHONE_NUMBER_ID;
+  const apiVersion = channel?.api_version || WHATSAPP_API_VERSION;
+  if (!accessToken || !phoneNumberId) throw new Error("Falta configuración WhatsApp para enviar.");
+  if (!String(templateName || "").trim()) throw new Error("Falta una plantilla aprobada de WhatsApp.");
+
+  const response = await fetchWithTimeout(
+    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: {
+          name: String(templateName).trim(),
+          language: { code: String(languageCode || "es").trim() || "es" },
+        },
+      }),
+    },
+    10_000
+  );
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error?.message || "Error enviando plantilla por WhatsApp");
+  }
+  return data;
+}
+
+async function isWhatsAppCustomerWindowOpen(conversationId) {
+  if (!conversationId) return false;
+  const messages = await getConversationMessages(conversationId, 100).catch(() => []);
+  const lastUserAt = getLastUserMessageTimestamp(messages);
+  return lastUserAt > 0 && Date.now() - lastUserAt < 24 * 60 * 60 * 1000;
 }
 
 function normalizeLeadPhoneForWhatsApp(lead = {}) {
@@ -3268,7 +3591,19 @@ async function sendAutomationStep({
       return { skipped: true, reason: "no-whatsapp-phone" };
     }
 
-    const sendResult = await sendWhatsAppText(phone, body, { accountId });
+    const customerWindowOpen = await isWhatsAppCustomerWindowOpen(conversationId);
+    const templateName = String(step?.whatsapp_template_name || "").trim();
+    if (!customerWindowOpen && !templateName) {
+      return { skipped: true, reason: "whatsapp-template-required-outside-24h" };
+    }
+    const sendResult = customerWindowOpen
+      ? await sendWhatsAppText(phone, body, { accountId })
+      : await sendWhatsAppTemplate(
+          phone,
+          templateName,
+          step?.whatsapp_template_language || "es",
+          { accountId }
+        );
     await saveMessage({
       conversation_id: conversationId,
       role: "assistant",
@@ -3282,8 +3617,9 @@ async function sendAutomationStep({
       external_user_id: phone,
       provider_message_id:
         sendResult?.messages?.[0]?.id || sendResult?.contacts?.[0]?.wa_id || null,
-      body,
+      body: customerWindowOpen ? body : `[Plantilla WhatsApp: ${templateName}]`,
       subject: "",
+      template_name: customerWindowOpen ? null : templateName,
     };
   }
 
@@ -3580,7 +3916,14 @@ function verifySessionToken(token) {
     .update(encodedPayload)
     .digest("base64url");
 
-  if (signature !== expectedSignature) return null;
+  const signatureBuffer = Buffer.from(signature, "utf8");
+  const expectedBuffer = Buffer.from(expectedSignature, "utf8");
+  if (
+    signatureBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
+  ) {
+    return null;
+  }
 
   try {
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
@@ -3589,6 +3932,65 @@ function verifySessionToken(token) {
   } catch (_error) {
     return null;
   }
+}
+
+function getLoginRateLimitKey(req) {
+  return String(req.ip || req.socket?.remoteAddress || "unknown")
+    .trim()
+    .toLowerCase();
+}
+
+function pruneLoginRateLimits(now = Date.now()) {
+  if (loginRateLimits.size < 1_000) return;
+  for (const [key, entry] of loginRateLimits.entries()) {
+    const expiresAt = Math.max(
+      Number(entry?.window_started_at || 0) + LOGIN_RATE_LIMIT_WINDOW_MS,
+      Number(entry?.blocked_until || 0)
+    );
+    if (expiresAt <= now) loginRateLimits.delete(key);
+  }
+  while (loginRateLimits.size > 10_000) {
+    const oldestKey = loginRateLimits.keys().next().value;
+    if (!oldestKey) break;
+    loginRateLimits.delete(oldestKey);
+  }
+}
+
+function inspectLoginRateLimit(req, _email, now = Date.now()) {
+  pruneLoginRateLimits(now);
+  const key = getLoginRateLimitKey(req);
+  const entry = loginRateLimits.get(key);
+  if (!entry) return { key, blocked: false, retryAfterSeconds: 0 };
+
+  if (Number(entry.blocked_until || 0) > now) {
+    return {
+      key,
+      blocked: true,
+      retryAfterSeconds: Math.max(1, Math.ceil((entry.blocked_until - now) / 1000)),
+    };
+  }
+
+  if (now - Number(entry.window_started_at || 0) >= LOGIN_RATE_LIMIT_WINDOW_MS) {
+    loginRateLimits.delete(key);
+  }
+  return { key, blocked: false, retryAfterSeconds: 0 };
+}
+
+function recordFailedLogin(key, now = Date.now()) {
+  const current = loginRateLimits.get(key);
+  const withinWindow =
+    current && now - Number(current.window_started_at || 0) < LOGIN_RATE_LIMIT_WINDOW_MS;
+  const attempts = withinWindow ? Number(current.attempts || 0) + 1 : 1;
+  const blockedUntil =
+    attempts >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS ? now + LOGIN_RATE_LIMIT_BLOCK_MS : 0;
+  loginRateLimits.set(key, {
+    attempts,
+    window_started_at: withinWindow ? current.window_started_at : now,
+    blocked_until: blockedUntil,
+  });
+  return blockedUntil > now
+    ? Math.max(1, Math.ceil((blockedUntil - now) / 1000))
+    : 0;
 }
 
 function writeSessionCookie(res, token) {
@@ -4437,8 +4839,8 @@ async function processIncomingMessage({
     business_activity:
       mergedLead?.business_activity ?? leadContext?.business_activity ?? null,
     company_name: mergedLead?.company_name ?? leadContext?.company_name ?? null,
-    current_step: leadContext?.current_step ?? null,
-    last_question: leadContext?.last_question ?? null,
+    current_step: mergedLead?.current_step ?? leadContext?.current_step ?? null,
+    last_question: mergedLead?.last_question ?? leadContext?.last_question ?? null,
   });
 
   let leadAfter = await loadLeadForConversation();
@@ -4770,7 +5172,8 @@ Presupuesto: ${leadForAi.budget_range || ""}
 Objetivo: ${leadForAi.main_goal || ""}
 Negocio: ${leadForAi.business_type || ""}
 Actividad: ${leadForAi.business_activity || ""}
-`
+`,
+          { accountId: scopedAccountId }
         );
 
         ragContext = docs
@@ -4889,6 +5292,10 @@ ${ragContext}
     reply = cleanReplyForWebHandoff(reply, {
       handoffAvailable: !!handoffCandidate,
       channel: channel || "web",
+    });
+    reply = preventRepeatedLeadQuestion(reply, {
+      lead: leadAfter || {},
+      appConfig,
     });
   }
 
@@ -5085,7 +5492,7 @@ ${ragContext}
       chatCompleted &&
       !clientConfirmationSent.get(currentConversationId)
     ) {
-      await sendClientConfirmationEmail({
+      const emailResult = await sendClientConfirmationEmail({
         lead: latestLead,
         conversation_id: currentConversationId,
         emailConfig: appConfig?.integrations?.email || null,
@@ -5139,7 +5546,7 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.get("/debug/extract", async (req, res) => {
+app.get("/debug/extract", requireCrmAuth(), async (req, res) => {
   try {
     const text = String(req.query.text || "");
     const existingLead = null;
@@ -5159,7 +5566,7 @@ app.get("/debug/extract", async (req, res) => {
   }
 });
 
-app.get("/debug/lead/:conversationId", async (req, res) => {
+app.get("/debug/lead/:conversationId", requireCrmAuth(), async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
     const lead = await getLeadByConversationId(req.params.conversationId, {
@@ -5181,10 +5588,14 @@ app.get("/debug/lead/:conversationId", async (req, res) => {
 app.get("/api/crm/leads", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-    const leads = await listCrmLeads({ limit: 200, accountId: account.id });
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 200));
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const leads = await listCrmLeads({ limit: limit + 1, offset, accountId: account.id });
+    const hasMore = leads.length > limit;
+    const page = hasMore ? leads.slice(0, limit) : leads;
 
     const enriched = await Promise.all(
-      leads.map(async (lead) => {
+      page.map(async (lead) => {
         const conversationId = lead?.conversation_id;
         let lastMessage = null;
 
@@ -5198,12 +5609,24 @@ app.get("/api/crm/leads", async (req, res) => {
           channel: lead?.conversations?.channel || "web",
           external_user_id: lead?.conversations?.external_user_id || null,
           conversation_created_at: lead?.conversations?.created_at || null,
+          inbox_status: lead?.conversations?.inbox_status || "new",
+          ai_status: lead?.conversations?.ai_status || "active",
+          conversation_assigned_to: lead?.conversations?.assigned_to || null,
           last_message: lastMessage,
         };
       })
     );
 
-    res.json({ ok: true, leads: enriched });
+    res.json({
+      ok: true,
+      leads: enriched,
+      pagination: {
+        limit,
+        offset,
+        has_more: hasMore,
+        next_offset: hasMore ? offset + limit : null,
+      },
+    });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -5280,10 +5703,29 @@ app.post("/api/auth/bootstrap-admin", async (req, res) => {
 
 app.post("/api/auth/login", async (req, res) => {
   try {
+    const rateLimit = inspectLoginRateLimit(req, req.body?.email);
+    if (rateLimit.blocked) {
+      res.setHeader("Retry-After", String(rateLimit.retryAfterSeconds));
+      return res.status(429).json({
+        ok: false,
+        error: "Demasiados intentos. Espera antes de volver a intentarlo.",
+      });
+    }
+
     const user = await verifyCrmUserCredentials(req.body?.email, req.body?.password);
     if (!user) {
+      const retryAfterSeconds = recordFailedLogin(rateLimit.key);
+      if (retryAfterSeconds) {
+        res.setHeader("Retry-After", String(retryAfterSeconds));
+        return res.status(429).json({
+          ok: false,
+          error: "Demasiados intentos. Espera antes de volver a intentarlo.",
+        });
+      }
       return res.status(401).json({ ok: false, error: "Credenciales invalidas" });
     }
+
+    loginRateLimits.delete(rateLimit.key);
 
     const token = signSessionToken({
       user_id: user.id,
@@ -5570,11 +6012,24 @@ app.get("/api/admin/overview", requireCrmAuth("super_admin"), async (req, res) =
   }
 });
 
+function redactAppConfigForClient(config = {}) {
+  const safe = JSON.parse(JSON.stringify(config || {}));
+  const email = safe?.integrations?.email;
+  const originalEmail = config?.integrations?.email || {};
+  if (email) {
+    for (const key of ["smtp_pass", "google_client_secret", "google_refresh_token", "google_access_token"]) {
+      email[`${key}_configured`] = Boolean(String(originalEmail?.[key] || "").trim());
+      email[key] = "";
+    }
+  }
+  return safe;
+}
+
 app.get("/api/crm/config", async (_req, res) => {
   try {
     const account = await resolveRequestAccount(_req);
     const config = await getAppConfig({ accountId: account.id });
-    res.json({ ok: true, config, account });
+    res.json({ ok: true, config: redactAppConfigForClient(config), account });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -5742,7 +6197,7 @@ app.post("/api/crm/config/apply-industry-preset", async (req, res) => {
     };
 
     const config = await saveAppConfig(nextConfig, { accountId: account.id });
-    res.json({ ok: true, config, account, preset_key: presetKey });
+    res.json({ ok: true, config: redactAppConfigForClient(config), account, preset_key: presetKey });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -5901,12 +6356,25 @@ app.post("/api/crm/config/publish-agent", async (req, res) => {
       { accountId: account.id }
     );
 
+    const version = await publishConfigVersion({
+      accountId: account.id,
+      config,
+      createdBy: req.crmUser?.id || null,
+      changeSummary: req.body?.change_summary || "Publicación desde Agent Studio",
+    });
+
     res.json({
       ok: true,
       account,
-      config,
+      config: redactAppConfigForClient(config),
       deployment: config.deployment || {},
       readiness,
+      version: {
+        id: version.id,
+        version: version.version,
+        status: version.status,
+        published_at: version.published_at,
+      },
     });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -6004,12 +6472,14 @@ app.post("/api/crm/integrations/email/google/connect-url", async (req, res) => {
 app.get("/api/widget/config", async (req, res) => {
   try {
     const account = await resolveExplicitRequestAccount(req);
-    const config = await getAppConfig({ accountId: account.id });
+    const config = await getPublishedAppConfig({ accountId: account.id });
+    const whatsappChannel = await getWhatsAppChannelSummary(account.id).catch(() => null);
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const availableChannels = [];
-    if (hasConfiguredWhatsApp(config)) availableChannels.push("whatsapp");
+    const whatsappReady = Boolean(whatsappChannel?.configured);
+    if (whatsappReady) availableChannels.push("whatsapp");
     if (hasConfiguredEmail(config)) availableChannels.push("email");
-    const defaultCtaLabel = hasConfiguredWhatsApp(config)
+    const defaultCtaLabel = whatsappReady
       ? "Continuar en WhatsApp"
       : hasConfiguredEmail(config)
       ? "Continuar por email"
@@ -6027,14 +6497,23 @@ app.get("/api/widget/config", async (req, res) => {
           accent_color: config?.brand?.accent_color || "#2563eb",
         },
         contact: {
-          public_whatsapp_number: config?.contact?.public_whatsapp_number || "",
+          public_whatsapp_number: whatsappReady
+            ? config?.contact?.public_whatsapp_number || whatsappChannel?.display_phone_number || ""
+            : "",
           support_email: config?.contact?.support_email || "",
           available_channels: availableChannels,
         },
         agent: {
           initial_message: config?.agent?.initial_message || "",
-          final_cta_label: config?.agent?.final_cta_label || defaultCtaLabel,
-          handoff_target_channel: config?.agent?.handoff_target_channel || "",
+          final_cta_label:
+            whatsappReady || hasConfiguredEmail(config)
+              ? config?.agent?.final_cta_label || defaultCtaLabel
+              : defaultCtaLabel,
+          handoff_target_channel: whatsappReady
+            ? config?.agent?.handoff_target_channel || "whatsapp"
+            : hasConfiguredEmail(config)
+              ? "email"
+              : "",
         },
       };
 
@@ -6140,9 +6619,58 @@ app.post("/api/crm/config", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
     const config = await saveAppConfig(req.body || {}, { accountId: account.id });
-    res.json({ ok: true, config, account });
+    const version = await saveDraftConfigVersion({
+      accountId: account.id,
+      config,
+      createdBy: req.crmUser?.id || null,
+      changeSummary: req.body?.change_summary || "Borrador actualizado",
+    });
+    res.json({
+      ok: true,
+      config,
+      account,
+      version: { id: version.id, version: version.version, status: version.status },
+    });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/crm/config/versions", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const versions = await listConfigVersions(account.id, req.query.limit || 30);
+    return res.json({ ok: true, account, versions });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/config/versions/:version/restore", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const source = await getConfigVersion(account.id, req.params.version);
+    if (!source?.config) return res.status(404).json({ ok: false, error: "Versión no encontrada." });
+    const config = await saveAppConfig(
+      {
+        ...source.config,
+        deployment: {
+          ...(source.config.deployment || {}),
+          status: "draft",
+          published_at: "",
+        },
+      },
+      { accountId: account.id }
+    );
+    const version = await saveDraftConfigVersion({
+      accountId: account.id,
+      config,
+      createdBy: req.crmUser?.id || null,
+      changeSummary: `Restaurado desde versión ${source.version}`,
+    });
+    return res.json({ ok: true, account, config: redactAppConfigForClient(config), version });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
   }
 });
 
@@ -6314,11 +6842,132 @@ app.post("/api/crm/integrations/validate", async (req, res) => {
   }
 });
 
+app.get("/api/crm/integrations/whatsapp/channel", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const channel = await getWhatsAppChannelSummary(account.id);
+    return res.json({ ok: true, account, channel });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.put("/api/crm/integrations/whatsapp/channel", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const channel = await upsertWhatsAppChannelForAccount(account.id, req.body || {});
+    const currentConfig = await getAppConfig({ accountId: account.id });
+    const config = await saveAppConfig(
+      {
+        ...currentConfig,
+        contact: {
+          ...(currentConfig.contact || {}),
+          public_whatsapp_number:
+            req.body?.display_phone_number || currentConfig?.contact?.public_whatsapp_number || "",
+        },
+        integrations: {
+          ...(currentConfig.integrations || {}),
+          whatsapp: {
+            ...(currentConfig?.integrations?.whatsapp || {}),
+            provider: "meta_cloud",
+            phone_number_id: channel.phone_number_id,
+            business_account_id: channel.waba_id,
+            status_label: "Conectado",
+            validation: buildValidationResult(
+              "connected",
+              `Canal operativo guardado para ${channel.display_phone_number || channel.phone_number_id}.`
+            ),
+          },
+        },
+      },
+      { accountId: account.id }
+    );
+    return res.json({ ok: true, account, channel, config });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.delete("/api/crm/integrations/whatsapp/channel", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const result = await disconnectWhatsAppChannelForAccount(account.id);
+    return res.json({ ok: true, account, ...result });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/integrations/whatsapp/test", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const channel = await getWhatsAppChannelForAccount(account.id);
+    if (!channel?.phone_number_id || !channel?.access_token) {
+      return res.status(400).json({ ok: false, error: "WhatsApp no esta conectado para esta cuenta." });
+    }
+    const probe = await fetchWithTimeout(
+      `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${channel.phone_number_id}?fields=id,display_phone_number,verified_name`,
+      { headers: { Authorization: `Bearer ${channel.access_token}` } },
+      7000
+    );
+    const details = await probe.json().catch(() => ({}));
+    if (!probe.ok) {
+      return res.status(400).json({
+        ok: false,
+        error: details?.error?.message || `Meta respondio HTTP ${probe.status}.`,
+      });
+    }
+    let delivery = null;
+    const testTo = normalizeWhatsAppPhone(req.body?.test_to || "");
+    if (testTo) {
+      delivery = await sendWhatsAppText(
+        testTo,
+        String(req.body?.message || "Prueba de conexion WhatsApp completada correctamente."),
+        channel
+      );
+    }
+    return res.json({
+      ok: true,
+      connected: true,
+      channel: {
+        phone_number_id: channel.phone_number_id,
+        display_phone_number: details.display_phone_number || channel.display_phone_number || "",
+        verified_name: details.verified_name || channel.verified_name || "",
+      },
+      provider_message_id: delivery?.messages?.[0]?.id || null,
+    });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/knowledge/sync", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const appConfig = await getAppConfig({ accountId: account.id });
+    const requestedUrls = Array.isArray(req.body?.urls)
+      ? req.body.urls
+      : appConfig?.knowledge_sources?.website_urls || [];
+    const results = await syncConfiguredKnowledge(requestedUrls, { accountId: account.id });
+    return res.status(results.some((result) => !result.ok) ? 207 : 200).json({
+      ok: results.length > 0 && results.every((result) => result.ok),
+      results,
+    });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-    const messages = await getConversationMessages(req.params.conversationId, 200);
     const lead = await getLeadByConversationId(req.params.conversationId, {
+      accountId: account.id,
+    });
+    if (!lead) {
+      return res.status(404).json({ ok: false, error: "Conversacion no encontrada" });
+    }
+    const messages = await getConversationMessages(req.params.conversationId, 200, {
       accountId: account.id,
     });
     res.json({ ok: true, messages, lead });
@@ -6330,6 +6979,16 @@ app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
 async function handleCrmLeadUpdate(req, res) {
   try {
     const account = await resolveRequestAccount(req);
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "crm_status")) {
+      const config = await getAppConfig({ accountId: account.id });
+      const requestedStatus = String(req.body?.crm_status || "").trim();
+      const validStatus = (config?.pipeline?.stages || []).some(
+        (stage) => stage?.is_active !== false && String(stage?.key || "") === requestedStatus
+      );
+      if (!validStatus) {
+        return res.status(400).json({ ok: false, error: "El estado no pertenece al pipeline activo." });
+      }
+    }
     const updated = await updateLeadCrmFields(req.params.leadId, req.body || {}, {
       accountId: account.id,
     });
@@ -6381,6 +7040,11 @@ app.delete("/api/crm/leads/:leadId", async (req, res) => {
 
 app.get("/api/crm/leads/:leadId/quote", async (req, res) => {
   try {
+    const account = await resolveRequestAccount(req);
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
+    if (!lead) {
+      return res.status(404).json({ ok: false, error: "Lead no encontrado" });
+    }
     const quote = await getLatestQuoteByLeadId(req.params.leadId);
     res.json({ ok: true, quote });
   } catch (error) {
@@ -6391,9 +7055,7 @@ app.get("/api/crm/leads/:leadId/quote", async (req, res) => {
 app.get("/api/crm/leads/:leadId/analysis", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
-    const lead =
-      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
 
     if (!lead) {
       return res.status(404).json({ ok: false, error: "Lead no encontrado" });
@@ -6689,10 +7351,8 @@ app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
 
 async function handleCrmQuoteUpsert(req, res) {
   try {
-      const account = await resolveRequestAccount(req);
-      const leads = await listCrmLeads({ limit: 500, accountId: account.id });
-    const lead =
-      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+    const account = await resolveRequestAccount(req);
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
 
     if (!lead) {
       return res.status(404).json({ ok: false, error: "Lead no encontrado" });
@@ -6711,9 +7371,7 @@ app.post("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
 app.post("/api/crm/leads/:leadId/analysis/generate", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
-    const lead =
-      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
 
     if (!lead) {
       return res.status(404).json({ ok: false, error: "Lead no encontrado" });
@@ -6758,9 +7416,7 @@ app.post("/api/crm/leads/:leadId/analysis/generate", async (req, res) => {
 app.put("/api/crm/leads/:leadId/analysis", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
-    const lead =
-      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
 
     if (!lead) {
       return res.status(404).json({ ok: false, error: "Lead no encontrado" });
@@ -6798,11 +7454,9 @@ app.put("/api/crm/leads/:leadId/analysis", async (req, res) => {
 
 app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
   try {
-      const account = await resolveRequestAccount(req);
-      const appConfig = await getAppConfig({ accountId: account.id });
-      const leads = await listCrmLeads({ limit: 500, accountId: account.id });
-    const lead =
-      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+    const account = await resolveRequestAccount(req);
+    const appConfig = await getAppConfig({ accountId: account.id });
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
 
     if (!lead) {
       return res.status(404).json({ ok: false, error: "Lead no encontrado" });
@@ -6899,9 +7553,7 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
     const appConfig = await getAppConfig({ accountId: account.id });
-    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
-    const lead =
-      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
 
     if (!lead) {
       return res.status(404).json({ ok: false, error: "Lead no encontrado" });
@@ -7027,6 +7679,19 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
 app.post("/messages", async (req, res) => {
   try {
     const account = await resolveExplicitRequestAccount(req);
+    const clientIp = String(req.ip || req.socket?.remoteAddress || "unknown").trim() || "unknown";
+    const rateLimit = messageRateLimiter.consume(`${account.id}:${clientIp}`);
+    res.setHeader("X-RateLimit-Limit", "60");
+    res.setHeader("X-RateLimit-Remaining", String(rateLimit.remaining));
+    if (!rateLimit.allowed) {
+      res.setHeader("Retry-After", String(rateLimit.retryAfterSeconds));
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(429).json({
+        ok: false,
+        error: "Demasiados mensajes. Espera un momento antes de volver a intentarlo.",
+        retry_after_seconds: rateLimit.retryAfterSeconds,
+      });
+    }
     const { text, message, conversation_id, external_user_id, channel, metadata } = req.body || {};
 
     const result = await processTmediaIncomingMessage({
@@ -7050,18 +7715,72 @@ app.post("/messages", async (req, res) => {
 });
 
 app.post("/api/integrations/external-lead", async (req, res) => {
+  let intakeEvent = null;
   try {
-    if (!isAuthorizedIntegrationRequest(req)) {
+    const parsedIntake = parseExternalLeadIntake(req.body || {});
+    if (!parsedIntake.valid) {
+      return res.status(400).json({
+        ok: false,
+        error: "El formulario contiene datos no válidos.",
+        validation_errors: parsedIntake.errors,
+      });
+    }
+    const payload = {
+      ...normalizeExternalPayload(req.body || {}),
+      ...parsedIntake.value,
+      custom_fields: {
+        ...(normalizeExternalPayload(req.body || {})?.custom_fields || {}),
+        ...(parsedIntake.value.custom_fields || {}),
+      },
+    };
+    const authorizedBySecret = isAuthorizedIntegrationRequest(req);
+    const { account, accountConfig, matchedBy } = await resolveExternalLeadAccount(req, payload, {
+      allowDefault: authorizedBySecret,
+    });
+    if (!authorizedBySecret) {
       return res.status(401).json({ ok: false, error: "Unauthorized integration request" });
     }
 
-    const account = await resolveExplicitRequestAccount(req);
-    const accountConfig = await getAppConfig({ accountId: account.id }).catch(() => null);
-    const payload = normalizeExternalPayload(req.body || {});
     const brandName = norm(accountConfig?.brand?.name || account.name || "TMedia Global");
     const sourcePlatform = normalizeSourcePlatform(
       firstPayloadValue(payload, ["source_platform", "platform", "source", "publisher_platform"])
     );
+    const suppliedIdempotencyKey = String(req.get("idempotency-key") || "").trim();
+    if (suppliedIdempotencyKey && !validateIdempotencyKey(suppliedIdempotencyKey)) {
+      return res.status(400).json({ ok: false, error: "Idempotency-Key no es válido." });
+    }
+    const idempotencyKey = suppliedIdempotencyKey || deriveExternalLeadIdempotencyKey({
+      accountId: account.id,
+      sourcePlatform,
+      externalUserId: parsedIntake.value.external_user_id,
+      payload: parsedIntake.value,
+    });
+    const intakeResult = await beginExternalLeadIntake({
+      accountId: account.id,
+      source: sourcePlatform,
+      idempotencyKey,
+      externalEventId: parsedIntake.value.external_user_id,
+      rawPayload: req.body || {},
+      normalizedPayload: parsedIntake.value,
+    });
+    intakeEvent = intakeResult.event;
+    if (intakeResult.duplicate) {
+      if (intakeEvent?.status === "completed") {
+        return res.status(200).json({
+          ok: true,
+          duplicate: true,
+          conversation_id: intakeEvent.conversation_id,
+          lead_id: intakeEvent.lead_id,
+          account_id: account.id,
+        });
+      }
+      return res.status(intakeEvent?.status === "rejected" ? 409 : 202).json({
+        ok: intakeEvent?.status !== "rejected",
+        duplicate: true,
+        status: intakeEvent?.status || "processing",
+        account_id: account.id,
+      });
+    }
     const sourceCampaign = norm(
       firstPayloadValue(payload, ["source_campaign", "campaign", "campaign_name", "campaignName"])
     );
@@ -7285,32 +8004,38 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       });
 
       if (phone) {
-        const introMessage = buildExternalLeadIntroMessage(
-          {
-            ...lead,
-            ...leadPayload,
-          },
-          brandName
-        );
-        await sendWhatsAppText(phone, introMessage, { accountId: account.id });
-        await saveMessage({
-          conversation_id: conversation.id,
-          role: "assistant",
-          content: introMessage,
-          account_id: account.id,
-        });
-        await trackConversationEvent({
-          conversation_id: conversation.id,
-          event_type: "external_lead_autostart",
-          channel: "whatsapp",
-          external_user_id: phone,
-          account_id: account.id,
-          payload: {
-            via: "whatsapp",
-            source_platform: sourcePlatform,
-          },
-        });
-        autoContact = "whatsapp";
+        const introTemplateName = String(
+          accountConfig?.integrations?.whatsapp?.intro_template_name || ""
+        ).trim();
+        if (introTemplateName) {
+          await sendWhatsAppTemplate(
+            phone,
+            introTemplateName,
+            accountConfig?.integrations?.whatsapp?.intro_template_language || "es",
+            { accountId: account.id }
+          );
+          await saveMessage({
+            conversation_id: conversation.id,
+            role: "assistant",
+            content: `[Plantilla WhatsApp: ${introTemplateName}]`,
+            account_id: account.id,
+          });
+          await trackConversationEvent({
+            conversation_id: conversation.id,
+            event_type: "external_lead_autostart",
+            channel: "whatsapp",
+            external_user_id: phone,
+            account_id: account.id,
+            payload: {
+              via: "whatsapp",
+              source_platform: sourcePlatform,
+              template_name: introTemplateName,
+            },
+          });
+          autoContact = "whatsapp";
+        } else {
+          autoContact = "whatsapp_template_required";
+        }
       }
     } else if (shouldAutoStart && preferredContactChannel.includes("email")) {
       await sendClientConfirmationEmail({
@@ -7323,31 +8048,54 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         brandName,
       }).catch((error) => {
         console.log("external lead client email error", error.message);
+        return { ok: false, error: error.message };
       });
-      await trackConversationEvent({
-        conversation_id: conversation.id,
-        event_type: "external_lead_autostart",
-        channel: "email",
-        external_user_id: lead.email || payload.email || null,
-        account_id: account.id,
-        payload: {
-          via: "email",
-          source_platform: sourcePlatform,
-        },
-      });
-      autoContact = "email";
+      if (emailResult?.ok) {
+        await trackConversationEvent({
+          conversation_id: conversation.id,
+          event_type: "external_lead_autostart",
+          channel: "email",
+          external_user_id: lead.email || payload.email || null,
+          account_id: account.id,
+          payload: {
+            via: "email",
+            source_platform: sourcePlatform,
+            provider_message_id: emailResult.messageId || null,
+          },
+        });
+        autoContact = "email";
+      } else {
+        autoContact = emailResult?.skipped
+          ? `email_skipped:${emailResult.reason || "unknown"}`
+          : "email_failed";
+      }
     }
+
+    await completeExternalLeadIntake(intakeEvent.id, {
+      conversationId: conversation.id,
+      leadId: lead.id,
+    });
 
     return res.json({
       ok: true,
       conversation_id: conversation.id,
       lead_id: lead.id,
+      account_id: account.id,
+      intake_mode: authorizedBySecret ? "secret" : matchedBy,
       auto_contact: autoContact,
       notification: internalNotification,
     });
   } catch (error) {
     console.log("external lead intake error", error);
-    return res.status(500).json({ ok: false, error: error.message });
+    if (intakeEvent?.id) {
+      await failExternalLeadIntake(intakeEvent.id, error).catch((storeError) => {
+        console.log("external lead intake failure persistence error", storeError.message);
+      });
+    }
+    return res.status(500).json({
+      ok: false,
+      error: "No se pudo registrar la solicitud. Revisaremos la configuracion de la integracion.",
+    });
   }
 });
 
@@ -7441,56 +8189,38 @@ async function runAutomationFlowsForAccount({
         const template = appConfig?.message_templates?.[step.template_key] || null;
         if (!template) continue;
 
-        const sendResult = await sendAutomationStep({
-          lead,
-          step,
-          template,
-          vars,
-          emailConfig: appConfig?.integrations?.email || null,
+        const queued = await enqueueAutomationJob({
           accountId: account.id,
-          conversationId,
-          flowKey,
-        });
-
-        if (sendResult?.ok) {
-          const eventPayload = {
-            flow_key: flowKey,
-            flow_label: flow?.label || flowKey,
-            step_index: index,
-            step_signature: getFlowStepSignature(flowKey, index),
-            template_key: step.template_key,
-            channel: sendResult.via,
-            provider_message_id: sendResult.provider_message_id || null,
-            scheduled_from: baseDate.toISOString(),
-            delay_value: step.delay_value,
-            delay_unit: step.delay_unit,
-            subject: sendResult.subject || null,
-            body_preview: String(sendResult.body || "").slice(0, 500),
-          };
-
-          await trackConversationEvent({
-            conversation_id: conversationId,
-            event_type: "automation_step_sent",
-            channel: sendResult.via,
-            external_user_id: sendResult.external_user_id,
-            account_id: account.id,
-            payload: eventPayload,
-          });
-
-          processed.push({
-            account_id: account.id,
+          jobType: "automation_step",
+          dedupeKey: `automation:${conversationId}:${flowKey}:${index}:${baseDate.toISOString()}`,
+          payload: {
             lead_id: lead.id,
             conversation_id: conversationId,
             flow_key: flowKey,
+            flow_label: flow?.label || flowKey,
             step_index: index,
-            via: sendResult.via,
-          });
+            template_key: step.template_key,
+            step,
+            template,
+            scheduled_from: baseDate.toISOString(),
+            vars,
+          },
+          availableAt: new Date(dueAt).toISOString(),
+        });
 
-          // Nunca mandamos dos pasos de una secuencia en la misma ejecución.
-          // Si el servicio estuvo parado, el siguiente conserva su separación
-          // respecto al envío real anterior en vez de salir inmediatamente.
-          break;
-        }
+        processed.push({
+          account_id: account.id,
+          lead_id: lead.id,
+          conversation_id: conversationId,
+          flow_key: flowKey,
+          step_index: index,
+          queued: true,
+          duplicate: queued.duplicate,
+          job_id: queued.job?.id || null,
+        });
+
+        // El worker durable ejecuta el efecto y registra el resultado.
+        break;
       }
     }
   }
@@ -7510,7 +8240,7 @@ async function runAutomationFlowsTask({
   const processed = [];
   for (const account of accounts) {
     if (!account?.id) continue;
-    const appConfig = await getAppConfig({ accountId: account.id });
+    const appConfig = await getPublishedAppConfig({ accountId: account.id });
     const accountProcessed = await runAutomationFlowsForAccount({
       account,
       appConfig,
@@ -7526,6 +8256,81 @@ async function runAutomationFlowsTask({
     processed,
     accounts_checked: accounts.map((account) => account.id),
   };
+}
+
+async function runAutomationJobsTask({ limit = 20 } = {}) {
+  const jobs = await claimAutomationJobs(limit);
+  const processed = [];
+  for (const job of jobs) {
+    try {
+      if (job.job_type !== "automation_step") {
+        throw new Error(`Tipo de automatización no soportado: ${job.job_type}`);
+      }
+      if (job?.result?.send_started_at) {
+        const reconciliation = {
+          ...job.result,
+          reconciliation_required: !job.result.provider_message_id,
+        };
+        await completeAutomationJob(job.id, reconciliation);
+        processed.push({ id: job.id, ok: true, ...reconciliation });
+        continue;
+      }
+
+      const payload = job.payload || {};
+      const lead = await getCrmLeadById(payload.lead_id, { accountId: job.account_id });
+      if (!lead) throw new Error("El lead de la automatización ya no existe.");
+      const appConfig = await getPublishedAppConfig({ accountId: job.account_id });
+      const step = payload.step || {};
+      const template = payload.template || appConfig?.message_templates?.[payload.template_key] || null;
+      if (!template) throw new Error("La plantilla de automatización ya no está disponible.");
+
+      const startedAt = new Date().toISOString();
+      await updateAutomationJobResult(job.id, { send_started_at: startedAt });
+      const sendResult = await sendAutomationStep({
+        lead,
+        step,
+        template,
+        vars: payload.vars || {},
+        emailConfig: appConfig?.integrations?.email || null,
+        accountId: job.account_id,
+        conversationId: payload.conversation_id,
+        flowKey: payload.flow_key,
+      });
+      const result = {
+        send_started_at: startedAt,
+        completed_at: new Date().toISOString(),
+        skipped: Boolean(sendResult?.skipped),
+        reason: sendResult?.reason || null,
+        via: sendResult?.via || step.channel || template.channel || null,
+        provider_message_id: sendResult?.provider_message_id || null,
+      };
+
+      await trackConversationEvent({
+        conversation_id: payload.conversation_id,
+        event_type: sendResult?.ok ? "automation_step_sent" : "automation_step_skipped",
+        channel: result.via,
+        external_user_id: sendResult?.external_user_id || null,
+        account_id: job.account_id,
+        payload: {
+          flow_key: payload.flow_key,
+          flow_label: payload.flow_label,
+          step_index: payload.step_index,
+          step_signature: getFlowStepSignature(payload.flow_key, payload.step_index),
+          template_key: payload.template_key,
+          provider_message_id: result.provider_message_id,
+          scheduled_from: payload.scheduled_from,
+          reason: result.reason,
+          body_preview: String(sendResult?.body || "").slice(0, 500),
+        },
+      });
+      await completeAutomationJob(job.id, result);
+      processed.push({ id: job.id, ok: true, ...result });
+    } catch (error) {
+      await failAutomationJob(job, error).catch(() => null);
+      processed.push({ id: job.id, ok: false, error: error.message });
+    }
+  }
+  return { ok: true, processed_count: processed.length, processed };
 }
 
 async function runWhatsAppFollowupsTask() {
@@ -7544,6 +8349,9 @@ async function runWhatsAppFollowupsTask() {
     if (!canRecoverLead({ lead, messages })) continue;
 
     const lastUserMessageAt = getLastUserMessageTimestamp(messages);
+    if (!lastUserMessageAt || now - lastUserMessageAt >= 24 * 60 * 60 * 1000) {
+      continue;
+    }
 
     const lastMessageAt = new Date(lastMessage.created_at).getTime();
     if (!Number.isFinite(lastMessageAt)) continue;
@@ -7610,8 +8418,166 @@ async function runWhatsAppFollowupsTask() {
   };
 }
 
+async function processWhatsAppInboxEvent(event) {
+  const payload = event?.payload && typeof event.payload === "object" ? event.payload : {};
+  const eventKind = String(payload.kind || "message").trim();
+  const phoneNumberId = String(payload.phone_number_id || "").trim();
+  const whatsappChannel = await getWhatsAppChannelByPhoneNumberId(phoneNumberId);
+
+  if (!whatsappChannel || String(whatsappChannel.account_id) !== String(event.account_id)) {
+    throw new Error(`Canal WhatsApp no registrado para phone_number_id=${phoneNumberId || "missing"}`);
+  }
+
+  if (eventKind === "status") {
+    const status = payload.status || {};
+    const recipient = String(status.recipient_id || "").trim();
+    const conversation = recipient
+      ? await getLatestConversationByExternalUserId({
+          channel: "whatsapp",
+          external_user_id: recipient,
+          account_id: event.account_id,
+        }).catch(() => null)
+      : null;
+    if (conversation?.id) {
+      await trackConversationEvent({
+        conversation_id: conversation.id,
+        event_type: "whatsapp_delivery_status",
+        channel: "whatsapp",
+        external_user_id: recipient || null,
+        account_id: event.account_id,
+        payload: {
+          provider_message_id: status.id || null,
+          status: status.status || "unknown",
+          timestamp: status.timestamp || null,
+          errors: status.errors || [],
+          conversation: status.conversation || null,
+          pricing: status.pricing || null,
+        },
+      });
+    }
+    return {
+      kind: "status",
+      provider_message_id: status.id || null,
+      status: status.status || "unknown",
+    };
+  }
+
+  const message = payload.message || {};
+  const from = String(message.from || "").trim();
+  if (!from || !message.id) throw new Error("Mensaje WhatsApp sin from o id");
+  const text = getWhatsAppTextFromMessage(message);
+
+  if (!text) {
+    return { kind: "message", unsupported_type: message.type || "unknown" };
+  }
+
+  const checkpoint = event?.result && typeof event.result === "object" ? event.result : {};
+  if (checkpoint.send_started_at) {
+    return {
+      kind: "message",
+      conversation_id: checkpoint.conversation_id || null,
+      provider_message_id: checkpoint.provider_message_id || null,
+      delivery_reconciliation_required: !checkpoint.provider_message_id,
+    };
+  }
+
+  let result = checkpoint.agent_reply_generated
+    ? {
+        conversation_id: checkpoint.conversation_id || null,
+        reply: checkpoint.reply || null,
+        chat_completed: Boolean(checkpoint.chat_completed),
+      }
+    : null;
+  if (!result) {
+    result = await processTmediaIncomingMessage({
+      conversationId: null,
+      externalUserId: from,
+      sourceChannel: "whatsapp",
+      message: text,
+      metadata: {
+        whatsappMessageId: message.id,
+        whatsappPhoneNumberId: phoneNumberId,
+        whatsappBusinessAccountId: whatsappChannel.waba_id || null,
+        whatsappProfileName: payload.profile_name || null,
+        raw: message,
+      },
+      accountId: event.account_id,
+    });
+    await updateChannelInboxEventResult(event.id, {
+      agent_reply_generated: true,
+      conversation_id: result?.conversation_id || null,
+      reply: result?.reply || null,
+      chat_completed: Boolean(result?.chat_completed),
+      agent_processed_at: new Date().toISOString(),
+    });
+  }
+
+  let providerMessageId = null;
+  if (result?.reply) {
+    await updateChannelInboxEventResult(event.id, {
+      agent_reply_generated: true,
+      conversation_id: result?.conversation_id || null,
+      reply: result.reply,
+      chat_completed: Boolean(result?.chat_completed),
+      send_started_at: new Date().toISOString(),
+    });
+    const sendResult = await sendWhatsAppText(from, result.reply, whatsappChannel);
+    providerMessageId = sendResult?.messages?.[0]?.id || null;
+    await updateChannelInboxEventResult(event.id, {
+      agent_reply_generated: true,
+      conversation_id: result?.conversation_id || null,
+      reply: result.reply,
+      chat_completed: Boolean(result?.chat_completed),
+      send_started_at: new Date().toISOString(),
+      send_completed_at: new Date().toISOString(),
+      provider_message_id: providerMessageId,
+    });
+  }
+
+  return {
+    kind: "message",
+    conversation_id: result?.conversation_id || null,
+    provider_message_id: providerMessageId,
+    chat_completed: Boolean(result?.chat_completed),
+  };
+}
+
+async function runChannelInboxTask({ limit = 20 } = {}) {
+  const events = await claimChannelInboxEvents(limit);
+  const processed = [];
+
+  for (const event of events) {
+    try {
+      if (event.provider !== "meta_whatsapp") {
+        throw new Error(`Proveedor de inbox no soportado: ${event.provider}`);
+      }
+      const result = await processWhatsAppInboxEvent(event);
+      await completeChannelInboxEvent(event.id, result);
+      processed.push({ id: event.id, ok: true, result });
+    } catch (error) {
+      await failChannelInboxEvent(event, error).catch((updateError) => {
+        console.log("channel inbox failure update error", updateError);
+      });
+      processed.push({ id: event.id, ok: false, error: error?.message || String(error) });
+    }
+  }
+
+  return {
+    ok: true,
+    processed_count: processed.length,
+    processed,
+  };
+}
+
 async function runSchedulerJob(jobName, fn) {
-  const runningKey = jobName === "automation" ? "automationRunning" : "whatsappRunning";
+  const runningKey =
+    jobName === "automation"
+      ? "automationRunning"
+      : jobName === "automation-jobs"
+        ? "automationJobsRunning"
+      : jobName === "inbox"
+        ? "inboxRunning"
+        : "whatsappRunning";
   if (schedulerState[runningKey]) {
     console.log(`[scheduler] skip ${jobName}: previous run still active`);
     return;
@@ -7669,6 +8635,20 @@ function startInternalScheduler() {
   }, SCHEDULER_WHATSAPP_INTERVAL_MINUTES * 60 * 1000);
 }
 
+function startChannelInboxWorker() {
+  console.log("[channel-inbox] durable worker enabled", {
+    interval_ms: CHANNEL_INBOX_INTERVAL_MS,
+  });
+  setTimeout(() => {
+    runSchedulerJob("inbox", () => runChannelInboxTask());
+    runSchedulerJob("automation-jobs", () => runAutomationJobsTask());
+  }, 1_000);
+  setInterval(() => {
+    runSchedulerJob("inbox", () => runChannelInboxTask());
+    runSchedulerJob("automation-jobs", () => runAutomationJobsTask());
+  }, CHANNEL_INBOX_INTERVAL_MS);
+}
+
 app.post("/tasks/automation-flows", async (req, res) => {
   try {
     if (!isAuthorizedTaskRequest(req)) {
@@ -7702,6 +8682,79 @@ app.post("/tasks/whatsapp-followups", async (req, res) => {
   }
 });
 
+app.get("/api/crm/inbox", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const conversations = await listInboxConversations({
+      accountId: account.id,
+      status: req.query.status || null,
+      limit: req.query.limit || 100,
+    });
+    return res.json({ ok: true, conversations });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.patch("/api/crm/conversations/:conversationId/state", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const conversation = await updateConversationInboxState(
+      req.params.conversationId,
+      {
+        inbox_status: req.body?.inbox_status,
+        ai_status: req.body?.ai_status,
+        assigned_to: req.body?.assigned_to,
+        snoozed_until: req.body?.snoozed_until,
+      },
+      { accountId: account.id }
+    );
+    await trackConversationEvent({
+      conversation_id: conversation.id,
+      event_type: conversation.ai_status === "paused" ? "human_takeover" : "inbox_state_changed",
+      channel: conversation.channel,
+      external_user_id: conversation.external_user_id,
+      account_id: account.id,
+      payload: {
+        inbox_status: conversation.inbox_status,
+        ai_status: conversation.ai_status,
+        assigned_to: conversation.assigned_to,
+        snoozed_until: conversation.snoozed_until,
+      },
+    });
+    return res.json({ ok: true, conversation });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/tasks/channel-inbox", async (req, res) => {
+  try {
+    if (!isAuthorizedTaskRequest(req)) {
+      return res.status(401).json({ ok: false, error: "Unauthorized task request" });
+    }
+    const result = await runChannelInboxTask({
+      limit: Number(req.body?.limit || req.query?.limit || 20),
+    });
+    return res.json(result);
+  } catch (error) {
+    console.log("channel inbox task error", error);
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/tasks/automation-jobs", async (req, res) => {
+  try {
+    if (!isAuthorizedTaskRequest(req)) {
+      return res.status(401).json({ ok: false, error: "Unauthorized task request" });
+    }
+    const result = await runAutomationJobsTask({ limit: req.body?.limit || 50 });
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/webhooks/whatsapp", (req, res) => {
   try {
     const mode = req.query["hub.mode"];
@@ -7728,108 +8781,82 @@ app.post("/webhooks/whatsapp", async (req, res) => {
       return res.sendStatus(401);
     }
 
-    res.sendStatus(200);
-
     const entries = req.body?.entry || [];
+    let enqueued = 0;
+    let duplicates = 0;
 
     for (const entry of entries) {
       const changes = entry?.changes || [];
 
       for (const change of changes) {
         const value = change?.value || {};
+        const whatsappChannel = await resolveWhatsAppChannelFromWebhookValue(value);
+        if (!whatsappChannel?.account_id) {
+          return res.status(422).json({
+            ok: false,
+            error: "El phone_number_id del webhook no esta vinculado a una cuenta activa.",
+          });
+        }
+        const webhookAccountId = whatsappChannel.account_id;
+        const phoneNumberId = String(value?.metadata?.phone_number_id || "").trim();
 
-        if (Array.isArray(value?.statuses) && value.statuses.length > 0) {
-          continue;
+        for (const status of value?.statuses || []) {
+          if (!status?.id || !status?.status) continue;
+          const queued = await enqueueChannelInboxEvent({
+            accountId: webhookAccountId,
+            provider: "meta_whatsapp",
+            providerEventId: `${status.id}:${status.status}:${status.timestamp || ""}`,
+            channel: "whatsapp",
+            payload: {
+              kind: "status",
+              phone_number_id: phoneNumberId,
+              status,
+            },
+          });
+          if (queued.duplicate) duplicates += 1;
+          else enqueued += 1;
         }
 
-        const messages = value?.messages || [];
-        if (!messages.length) continue;
-
-        const whatsappChannel = await resolveWhatsAppChannelFromWebhookValue(value);
-        const webhookAccountId = whatsappChannel?.account_id || getDefaultAccount().id;
-
-        for (const message of messages) {
-          const messageId = message?.id;
-
-          if (hasProcessedWhatsAppMessage(messageId)) {
-            console.log("whatsapp duplicate skipped", { messageId });
-            continue;
-          }
-
-          markWhatsAppMessageProcessed(messageId);
-
-          const from = message?.from;
-          const text = getWhatsAppTextFromMessage(message);
-
-          if (!from) continue;
-
-          if (!text) {
-            try {
-              await sendWhatsAppText(
-                from,
-                "Ahora mismo solo puedo procesar mensajes de texto.",
-                whatsappChannel
-              );
-            } catch (e) {
-              console.log("non-text reply error", e.message);
-            }
-            continue;
-          }
-
-          console.log("incoming whatsapp", {
-            from,
-            text,
-            messageId,
-            type: message?.type,
-          });
-
-          const result = await processTmediaIncomingMessage({
-            conversationId: null,
-            externalUserId: from,
-            sourceChannel: "whatsapp",
-            message: text,
-            metadata: {
-              whatsappMessageId: messageId,
-              whatsappPhoneNumberId: whatsappChannel?.phone_number_id || null,
-              whatsappBusinessAccountId: whatsappChannel?.waba_id || null,
-              raw: message,
-            },
+        for (const message of value?.messages || []) {
+          if (!message?.id || !message?.from) continue;
+          const contact = (value?.contacts || []).find(
+            (item) => String(item?.wa_id || "") === String(message.from)
+          );
+          const queued = await enqueueChannelInboxEvent({
             accountId: webhookAccountId,
+            provider: "meta_whatsapp",
+            providerEventId: message.id,
+            channel: "whatsapp",
+            payload: {
+              kind: "message",
+              phone_number_id: phoneNumberId,
+              profile_name: contact?.profile?.name || null,
+              message,
+            },
           });
-
-          console.log("whatsapp processed result", {
-            from,
-            conversation_id: result?.conversation_id || null,
-            hasReply: !!result?.reply,
-            chat_completed: result?.chat_completed || false,
-          });
-
-          if (result?.reply) {
-            try {
-              const sendResult = await sendWhatsAppText(from, result.reply, whatsappChannel);
-              console.log("whatsapp send ok", {
-                from,
-                messageId: sendResult?.messages?.[0]?.id || null,
-              });
-            } catch (e) {
-              console.log("whatsapp send failure", {
-                from,
-                error: e.message,
-              });
-            }
-          } else {
-            console.log("whatsapp empty reply skipped", { from });
-          }
+          if (queued.duplicate) duplicates += 1;
+          else enqueued += 1;
         }
       }
     }
+
+    const response = { ok: true, received: true, enqueued, duplicates };
+    res.status(200).json(response);
+    setImmediate(() => {
+      runSchedulerJob("inbox", () => runChannelInboxTask()).catch((error) => {
+        console.log("channel inbox immediate run error", error);
+      });
+    });
+    return undefined;
   } catch (error) {
     console.log("whatsapp webhook error", error);
+    return res.status(503).json({ ok: false, error: "Webhook no persistido; reintentar." });
   }
 });
 
 app.listen(PORT, () => {
   console.log("Server running on port", PORT);
   startInternalScheduler();
+  startChannelInboxWorker();
 });
 

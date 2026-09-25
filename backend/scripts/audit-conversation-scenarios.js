@@ -25,7 +25,16 @@ const scenarios = [
     id: "product_explainer",
     perspective: "Responsable comercial que no conoce el producto",
     turns: [
-      { text: "¿Qué es Sancho AI y cómo funciona?", include: /datos|señales|contexto/i },
+      {
+        text: "¿Qué es Sancho AI y cómo funciona?",
+        include: /datos|señales|contexto/i,
+        exclude: /atención al cliente|automatiz.*comunicaci[oó]n.*clientes|seguimiento de (?:tus )?leads|gesti[oó]n de contactos/i,
+      },
+      {
+        text: "¿Qué aporta tu plataforma?",
+        include: /inteligencia operativa|prioriz.*decisiones/i,
+        exclude: /atención al cliente|automatiz.*comunicaci[oó]n.*clientes|seguimiento de (?:tus )?leads|gesti[oó]n de contactos/i,
+      },
       { text: "Vale, pero dime qué haría en el día a día", include: /prioriz|recomend|acción|decisi/i },
     ],
   },

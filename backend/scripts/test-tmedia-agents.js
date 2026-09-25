@@ -6,7 +6,7 @@ const ACCOUNT_SLUG =
   process.env.TEST_ACCOUNT_SLUG ||
   process.env.ACCOUNT_SLUG ||
   process.env.DEFAULT_ACCOUNT_SLUG ||
-  "";
+  "tmedia-global";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -71,18 +71,22 @@ async function main() {
     externalUserId: `test-web-ads-${runId}`,
     steps: [
       "Quiero Google Ads",
+      "La empresa se llama Clinica Laura",
+      "Prefiero email",
       "Tengo una clínica dental",
       "Mi objetivo es conseguir más solicitudes de cita",
       "Presupuesto 900€ al mes",
       "Urgencia alta",
       "Me llamo Laura",
       `mi email es qa+${runId}@example.com`,
+      "mi telefono es 600000000",
     ],
   });
   assert(/google/i.test(googleAds.lead?.interest_service || ""), "usuario pide Google Ads: no se detecto");
   assert(googleAds.lead?.budget_range, "usuario da presupuesto: no se extrajo");
   assert(String(googleAds.lead?.urgency || "").toLowerCase() === "alta", "usuario da urgencia: no se extrajo");
   assert(googleAds.lead?.email, "usuario da email: no se extrajo");
+  assert(googleAds.lead?.company_name, "usuario da empresa: no se extrajo");
   assert(googleAds.chat_completed === true, "se completa lead: chat_completed no es true");
 
   const duplicate = await postMessage({

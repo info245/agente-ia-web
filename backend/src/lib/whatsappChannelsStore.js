@@ -1,5 +1,6 @@
 import { supabase } from "./supabase.js";
 import { getDefaultAccount } from "./accountStore.js";
+import { decryptSecret, encryptSecret, maskSecret } from "./secretCrypto.js";
 
 const tableSupportCache = {
   checked: false,
@@ -22,7 +23,7 @@ function normalizeChannel(row = {}) {
     phone_number_id: clean(row.phone_number_id) || "",
     display_phone_number: clean(row.display_phone_number) || "",
     verified_name: clean(row.verified_name) || "",
-    access_token: clean(row.access_token) || "",
+    access_token: decryptSecret(clean(row.access_token)) || "",
     token_label: clean(row.token_label) || "",
     metadata: row.metadata && typeof row.metadata === "object" ? row.metadata : {},
   };
@@ -124,5 +125,74 @@ export async function resolveWhatsAppChannelFromWebhookValue(value = {}) {
     clean(value?.metadata?.phone_number?.id) ||
     clean(value?.phone_number_id);
 
-  return (await getWhatsAppChannelByPhoneNumberId(phoneNumberId)) || getFallbackWhatsAppChannel();
+  if (!phoneNumberId) return null;
+  return getWhatsAppChannelByPhoneNumberId(phoneNumberId);
+}
+
+export async function getWhatsAppChannelSummary(accountId = null) {
+  const channel = await getWhatsAppChannelForAccount(accountId);
+  return {
+    id: channel?.id || null,
+    account_id: channel?.account_id || clean(accountId) || null,
+    provider: channel?.provider || "meta_cloud",
+    status: channel?.status || "inactive",
+    waba_id: channel?.waba_id || "",
+    phone_number_id: channel?.phone_number_id || "",
+    display_phone_number: channel?.display_phone_number || "",
+    verified_name: channel?.verified_name || "",
+    token_label: channel?.token_label || "",
+    access_token_masked: maskSecret(channel?.access_token),
+    configured: Boolean(channel?.phone_number_id && channel?.access_token),
+  };
+}
+
+export async function upsertWhatsAppChannelForAccount(accountId, input = {}) {
+  if (!(await hasWhatsAppChannelsTable())) {
+    throw new Error("Falta la tabla whatsapp_channels. Ejecuta sql/010_whatsapp_channels.sql.");
+  }
+  const safeAccountId = clean(accountId);
+  const phoneNumberId = clean(input.phone_number_id);
+  const wabaId = clean(input.waba_id || input.business_account_id);
+  const accessToken = clean(input.access_token);
+  if (!safeAccountId || !phoneNumberId || !wabaId) {
+    throw new Error("account_id, phone_number_id y business_account_id son obligatorios.");
+  }
+
+  const existing = await getWhatsAppChannelForAccount(safeAccountId).catch(() => null);
+  const payload = {
+    account_id: safeAccountId,
+    provider: "meta_cloud",
+    status: clean(input.status) || "active",
+    waba_id: wabaId,
+    phone_number_id: phoneNumberId,
+    display_phone_number: clean(input.display_phone_number),
+    verified_name: clean(input.verified_name),
+    token_label: clean(input.token_label) || "crm",
+    connected_at: new Date().toISOString(),
+    metadata: input.metadata && typeof input.metadata === "object" ? input.metadata : {},
+  };
+  if (accessToken) payload.access_token = encryptSecret(accessToken);
+  else if (!existing?.id || !existing?.access_token) {
+    throw new Error("access_token es obligatorio para conectar el canal.");
+  }
+
+  const query = existing?.id
+    ? supabase.from("whatsapp_channels").update(payload).eq("id", existing.id)
+    : supabase.from("whatsapp_channels").insert(payload);
+  const { data, error } = await query.select("*").single();
+  if (error) throw error;
+  return getWhatsAppChannelSummary(data.account_id);
+}
+
+export async function disconnectWhatsAppChannelForAccount(accountId) {
+  const safeAccountId = clean(accountId);
+  if (!safeAccountId) throw new Error("account_id es obligatorio.");
+  const { data, error } = await supabase
+    .from("whatsapp_channels")
+    .update({ status: "inactive", updated_at: new Date().toISOString() })
+    .eq("account_id", safeAccountId)
+    .eq("status", "active")
+    .select("id");
+  if (error) throw error;
+  return { ok: true, disconnected_count: data?.length || 0 };
 }

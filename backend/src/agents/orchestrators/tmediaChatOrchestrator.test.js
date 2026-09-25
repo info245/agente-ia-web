@@ -22,6 +22,23 @@ test("recognizes a complaint about Sancho itself and leaves the sales questionna
   assert.doesNotMatch(reply, /qué objetivo buscas|objetivo principal/i);
 });
 
+test("replaces invented Sancho product claims with the approved product definition", () => {
+  const reply = repairFinalReply({
+    reply: "Automatizo la comunicación con clientes y mejoro el seguimiento de leads y contactos.",
+    currentMessage: "¿Qué aporta tu plataforma?",
+    appConfig: {
+      brand: { name: "Sancho AI" },
+      offers: { "Sancho AI": {} },
+    },
+  });
+
+  assert.match(reply, /inteligencia operativa/i);
+  assert.match(reply, /no presta atención al cliente/i);
+  assert.match(reply, /no automatiza comunicaciones con clientes/i);
+  assert.match(reply, /no gestiona ni hace seguimiento de leads o contactos/i);
+  assert.doesNotMatch(reply, /^Automatizo la comunicación/i);
+});
+
 test("answers how Odoo is integrated without pretending MCP is automatic", () => {
   const reply = repairFinalReply({
     reply: "La integración por API o MCP es posible. ¿Qué objetivo quieres conseguir?",

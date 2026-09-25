@@ -6,6 +6,7 @@ import {
   getConversationMessages,
   getLeadByConversationId,
   listConversationEventsByType,
+  updateLeadCrmFields,
 } from "../../lib/chatStore.js";
 
 export {
@@ -16,6 +17,7 @@ export {
   getConversationMessages,
   getLeadByConversationId,
   listConversationEventsByType,
+  updateLeadCrmFields,
 };
 
 export async function getRecentNotificationEvents(conversationId, limit = 20) {

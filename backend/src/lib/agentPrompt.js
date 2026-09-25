@@ -1,5 +1,6 @@
 // backend/src/lib/agentPrompt.js
 import { buildKnowledgeContext } from "./websiteFacts.js";
+import { buildSanchoProductPolicyPrompt } from "./sanchoUseCases.js";
 
 export function getAgentSystemPrompt(appConfig = null) {
   const brandName = String(appConfig?.brand?.name || "la empresa").trim();
@@ -20,6 +21,7 @@ export function getAgentSystemPrompt(appConfig = null) {
   ).trim();
   const promptAdditions = String(appConfig?.agent?.prompt_additions || "").trim();
   const knowledgeContext = buildKnowledgeContext(appConfig);
+  const sanchoProductPolicy = buildSanchoProductPolicyPrompt(appConfig);
   const offersSource = Object.keys(appConfig?.offers || {}).length
     ? appConfig.offers
     : appConfig?.services || {};
@@ -130,6 +132,8 @@ ${customFieldsBlock}
 ${qualificationSchemaBlock}
 
 ${personalizationRulesBlock}
+
+${sanchoProductPolicy}
 
 FORMATO:
 - Respuestas cortas, claras y profesionales.

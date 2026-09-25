@@ -8,16 +8,18 @@
     "postinstall": "npx puppeteer browsers install chrome",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "test": "node --test --test-isolation=none \"src/**/*.test.js\"",
+    "check": "node --check src/server.js && node --check public-crm/app.js",
     "test:tmedia-agents": "node scripts/test-tmedia-agents.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.98.0",
+    "@supabase/supabase-js": "^2.117.1",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.21.2",
-    "nodemailer": "^8.0.1",
-    "openai": "^6.26.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "nodemailer": "^10.0.10",
+    "openai": "^6.49.0",
     "pdfkit": "^0.17.2",
-    "puppeteer": "^24.8.2"
+    "puppeteer": "^25.12.0"
   }
 }

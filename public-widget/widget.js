@@ -11,7 +11,8 @@
     const explicitDefault = currentScript?.getAttribute("data-default-account-slug");
     if (explicitDefault) return explicitDefault;
     const host = String(window.location?.hostname || "").replace(/^www\./, "");
-    if (["t-mediaglobal.com", "heysancho.com"].includes(host)) return "tmedia-global";
+    if (host === "heysancho.com") return "sancho";
+    if (host === "t-mediaglobal.com") return "tmedia-global";
     return "";
   }
   const defaultAccountSlug = inferDefaultAccountSlug();
@@ -29,8 +30,23 @@
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
     chatStartedStorageKey: "agente_ia_chat_started",
+    chatHistoryStorageKey: "agente_ia_chat_history",
+    completedSignatureStorageKey: "agente_ia_last_completed_signature",
     requestTimeoutMs: 25000,
   };
+
+  // Las claves de almacenamiento se aislan por cuenta: si el mismo origen
+  // sirve el widget para varias cuentas (por ejemplo, la vista previa del
+  // CRM en el dominio del backend), evita reutilizar conversation_id /
+  // external_user_id de otra cuenta y mezclar leads entre clientes.
+  function accountStorageSuffix() {
+    const raw = String(CONFIG.accountId || CONFIG.accountSlug || "default").trim();
+    return raw.toLowerCase().replace(/[^a-z0-9_-]+/g, "_");
+  }
+
+  function storageKey(baseKey) {
+    return `${baseKey}__${accountStorageSuffix()}`;
+  }
 
   CONFIG.supportEmail = "";
   CONFIG.publicWhatsappNumber = "";
@@ -76,35 +92,66 @@
   const uid = () => Math.random().toString(36).slice(2, 10);
 
   function getOrCreateExternalUserId() {
-    let externalUserId = localStorage.getItem(CONFIG.externalUserIdStorageKey);
+    const key = storageKey(CONFIG.externalUserIdStorageKey);
+    let externalUserId = localStorage.getItem(key);
     if (!externalUserId) {
       externalUserId = `web_${uid()}`;
-      localStorage.setItem(CONFIG.externalUserIdStorageKey, externalUserId);
+      localStorage.setItem(key, externalUserId);
     }
     return externalUserId;
   }
 
   function getConversationId() {
-    return localStorage.getItem(CONFIG.conversationIdStorageKey);
+    return localStorage.getItem(storageKey(CONFIG.conversationIdStorageKey));
   }
 
   function setConversationId(conversationId) {
     if (!conversationId) return;
-    localStorage.setItem(CONFIG.conversationIdStorageKey, conversationId);
+    localStorage.setItem(storageKey(CONFIG.conversationIdStorageKey), conversationId);
   }
 
   function clearConversationId() {
-    localStorage.removeItem(CONFIG.conversationIdStorageKey);
-    sessionStorage.removeItem("agente_ia_last_completed_signature");
+    localStorage.removeItem(storageKey(CONFIG.conversationIdStorageKey));
+    localStorage.removeItem(storageKey(CONFIG.chatHistoryStorageKey));
+    sessionStorage.removeItem(storageKey(CONFIG.completedSignatureStorageKey));
   }
 
   function hasChatStarted() {
-    return localStorage.getItem(CONFIG.chatStartedStorageKey) === "true";
+    return localStorage.getItem(storageKey(CONFIG.chatStartedStorageKey)) === "true";
   }
 
   function setChatStarted(value) {
-    if (value) localStorage.setItem(CONFIG.chatStartedStorageKey, "true");
-    else localStorage.removeItem(CONFIG.chatStartedStorageKey);
+    const key = storageKey(CONFIG.chatStartedStorageKey);
+    if (value) localStorage.setItem(key, "true");
+    else localStorage.removeItem(key);
+  }
+
+  function getCachedMessages() {
+    try {
+      const raw = localStorage.getItem(storageKey(CONFIG.chatHistoryStorageKey));
+      const messages = JSON.parse(raw || "[]");
+      return Array.isArray(messages) ? messages : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function setCachedMessages(items = []) {
+    const cleanItems = (Array.isArray(items) ? items : [])
+      .map((item) => ({
+        role: String(item?.role || "").trim(),
+        text: String(item?.text || "").trim(),
+      }))
+      .filter((item) => item.role && item.text)
+      .slice(-80);
+    localStorage.setItem(
+      storageKey(CONFIG.chatHistoryStorageKey),
+      JSON.stringify(cleanItems)
+    );
+  }
+
+  function cacheMessage(role, text) {
+    setCachedMessages([...getCachedMessages(), { role, text }]);
   }
 
   function getAvailableChannels() {
@@ -166,13 +213,12 @@
 
   function pushChatCompleted(payload = {}) {
     const signature = buildCompletedSignature(payload);
-    const lastSignature = sessionStorage.getItem(
-      "agente_ia_last_completed_signature"
-    );
+    const signatureKey = storageKey(CONFIG.completedSignatureStorageKey);
+    const lastSignature = sessionStorage.getItem(signatureKey);
 
     if (signature && signature === lastSignature) return;
     if (signature) {
-      sessionStorage.setItem("agente_ia_last_completed_signature", signature);
+      sessionStorage.setItem(signatureKey, signature);
     }
 
     pushDataLayer("chatbot_completed", {
@@ -405,7 +451,7 @@
       .replace(/âœ•/g, "✕");
   }
 
-  function appendMessage(role, text) {
+  function appendMessage(role, text, options = {}) {
     const row = document.createElement("div");
     row.className = `row ${role}`;
     const bubble = document.createElement("div");
@@ -414,6 +460,9 @@
     row.appendChild(bubble);
     messages.appendChild(row);
     messages.scrollTop = messages.scrollHeight;
+    if (options.persist !== false) {
+      cacheMessage(role, text);
+    }
   }
 
   function appendHandoffCard(url, label = "Continuar por WhatsApp") {
@@ -430,6 +479,15 @@
     messages.scrollTop = messages.scrollHeight;
   }
 
+  function appendHandoffOptions(options = []) {
+    const cleanOptions = (Array.isArray(options) ? options : [])
+      .filter((option) => option?.url && option?.label)
+      .slice(0, 2);
+    if (!cleanOptions.length) return false;
+    cleanOptions.forEach((option) => appendHandoffCard(option.url, option.label));
+    return true;
+  }
+
   function openPanel() {
     panel.classList.add("open");
     input.focus();
@@ -441,6 +499,18 @@
 
   async function ensureGreeting() {
     if (mini) mini.textContent = getFooterMessage();
+    if (hasChatStarted() && messages.childElementCount === 0) {
+      const cachedMessages = getCachedMessages();
+      if (cachedMessages.length) {
+        messages.innerHTML = "";
+        cachedMessages.forEach((item) => {
+          appendMessage(item.role, item.text, { persist: false });
+        });
+        setStatus("Listo");
+        sendBtn.disabled = false;
+        return;
+      }
+    }
     if (!hasChatStarted() || messages.childElementCount === 0) {
       messages.innerHTML = "";
       appendMessage("assistant", getInitialGreeting());
@@ -495,7 +565,7 @@
         });
       }
 
-      if (data?.handoff_url) {
+      if (!appendHandoffOptions(data?.handoff_options || data?.handoff?.options || []) && data?.handoff_url) {
         appendHandoffCard(
           data.handoff_url,
           data?.handoff_label || "Continuar por WhatsApp"

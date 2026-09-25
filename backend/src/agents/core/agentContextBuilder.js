@@ -4,7 +4,7 @@ import {
   getConversationMessages,
   getLeadByConversationId,
 } from "../../lib/chatStore.js";
-import { getAppConfig } from "../../lib/appConfigStore.js";
+import { getPublishedAppConfig } from "../../lib/appConfigStore.js";
 import { buildKnowledgeContext, getWebsiteFacts } from "../../lib/websiteFacts.js";
 import { retrieveWebsiteContext } from "../../lib/kbRetriever.js";
 
@@ -15,8 +15,10 @@ export async function buildTmediaAgentContext({
   message,
   metadata = {},
   accountId = null,
+  includeKnowledge = true,
 } = {}) {
   let conversation_id = conversationId || null;
+  let conversationRecord = null;
   const safeAccountId = accountId ? String(accountId).trim() : null;
 
   if (conversation_id) {
@@ -25,6 +27,7 @@ export async function buildTmediaAgentContext({
     // compartido entre previews de distintos clientes) mezcle leads,
     // mensajes y contexto entre cuentas distintas.
     const existingConversation = await getConversationById(conversation_id).catch(() => null);
+    conversationRecord = existingConversation;
     const ownerAccountId = existingConversation?.account_id
       ? String(existingConversation.account_id).trim()
       : null;
@@ -44,24 +47,28 @@ export async function buildTmediaAgentContext({
       account_id: accountId,
     });
     conversation_id = conversation.id;
+    conversationRecord = conversation;
   }
 
   const [messages, lead, appConfig] = await Promise.all([
     getConversationMessages(conversation_id, 40, { accountId: safeAccountId }).catch(() => []),
     getLeadByConversationId(conversation_id, { accountId }).catch(() => null),
-    getAppConfig({ accountId }).catch(() => null),
+    getPublishedAppConfig({ accountId }).catch(() => null),
   ]);
 
   const websiteFacts = getWebsiteFacts(appConfig);
   const knowledgeContext = buildKnowledgeContext(appConfig);
-  const kbContext = await retrieveWebsiteContext(message, {
-    topK: 4,
-    threshold: 0.72,
-    accountId,
-  }).catch(() => []);
+  const kbContext = includeKnowledge
+    ? await retrieveWebsiteContext(message, {
+        topK: 4,
+        threshold: 0.72,
+        accountId,
+      }).catch(() => [])
+    : [];
 
   return {
     conversationId: conversation_id,
+    conversation: conversationRecord,
     externalUserId,
     sourceChannel: sourceChannel || "web",
     message: String(message || "").trim(),

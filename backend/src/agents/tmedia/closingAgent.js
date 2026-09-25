@@ -62,9 +62,10 @@ export async function runClosingAgent(context = {}) {
         current_step: "completed",
       });
     } catch (error) {
-      // Igual que en leadMemoryAgent: un fallo de guardado aquí no debe
-      // tumbar el cierre de la conversación ni dejar al usuario sin respuesta.
       console.log("[closingAgent] upsertLeadFromConversation failed:", error.message);
+      throw new Error("No se pudo confirmar el cierre del lead en el CRM; el turno debe reintentarse.", {
+        cause: error,
+      });
     }
   }
 

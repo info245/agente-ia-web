@@ -30,17 +30,29 @@ alter table if exists messages add column if not exists account_id text referenc
 
 update conversations set account_id = 'default' where account_id is null;
 update leads set account_id = 'default' where account_id is null;
-update quotes set account_id = 'default' where account_id is null;
 update conversation_events set account_id = 'default' where account_id is null;
 update tool_logs set account_id = 'default' where account_id is null;
 update messages set account_id = 'default' where account_id is null;
 
+do $$
+begin
+  if to_regclass('public.quotes') is not null then
+    update quotes set account_id = 'default' where account_id is null;
+  end if;
+end $$;
+
 create index if not exists idx_conversations_account_id on conversations(account_id);
 create index if not exists idx_leads_account_id on leads(account_id);
-create index if not exists idx_quotes_account_id on quotes(account_id);
 create index if not exists idx_conversation_events_account_id on conversation_events(account_id);
 create index if not exists idx_tool_logs_account_id on tool_logs(account_id);
 create index if not exists idx_messages_account_id on messages(account_id);
+
+do $$
+begin
+  if to_regclass('public.quotes') is not null then
+    create index if not exists idx_quotes_account_id on quotes(account_id);
+  end if;
+end $$;
 
 create or replace function set_updated_at_accounts()
 returns trigger as $$

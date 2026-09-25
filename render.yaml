@@ -48,6 +48,14 @@ services:
         value: 30
       - key: INTEGRATIONS_SECRET
         sync: false
+      - key: CRM_INTEGRATIONS_SECRET
+        sync: false
+      - key: CRM_AUTH_SECRET
+        generateValue: true
+      - key: SECRETS_ENCRYPTION_KEY
+        generateValue: true
+      - key: CHANNEL_INBOX_INTERVAL_MS
+        value: 5000
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

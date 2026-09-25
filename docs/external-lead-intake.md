@@ -18,9 +18,21 @@ Autenticacion requerida:
 
 `x-integrations-secret: TU_INTEGRATIONS_SECRET`
 
-Si el plugin del formulario no permite headers personalizados, se puede enviar el mismo secreto en la URL:
+Origen del valor:
 
-`POST /api/integrations/external-lead?secret=TU_INTEGRATIONS_SECRET`
+- El secreto no esta en el codigo ni debe pegarse en el frontend.
+- Se obtiene del hosting del backend CRM: Render > servicio `tmedia-global-ai` > Environment.
+- Copiar el valor de `INTEGRATIONS_SECRET` o `CRM_INTEGRATIONS_SECRET`.
+- Si una web externa tiene una API propia, como `heysancho.com/api/contact`, esa web debe tener una variable de entorno `CRM_INTEGRATIONS_SECRET` con el mismo valor.
+- Si nadie tiene acceso a Render, hay que pedir el valor al responsable del backend o rotarlo y actualizar ambos lados.
+
+El secreto solo se acepta en cabecera. Nunca se admite en la URL ni en JavaScript del navegador, porque quedaría expuesto en logs e historial. Si el plugin no permite cabeceras, se debe usar un webhook server-side del sitio o un relay seguro.
+
+Cada entrega debe incluir además una clave estable para deduplicar reintentos:
+
+`Idempotency-Key: meta:lead:961191756517367`
+
+Si se omite, el backend deriva una clave determinista del identificador externo y el payload. La clave explícita sigue siendo preferible.
 
 Cuenta requerida:
 
@@ -113,12 +125,13 @@ Campos españoles reconocidos:
 
 ## Comportamiento
 
+- persiste primero el evento en `intake_events` y deduplica reintentos
 - crea una `conversation` con canal `lead_form`
 - guarda el lead en el CRM
 - registra el origen: plataforma, campaña, formulario y anuncio
 - crea evento `external_lead_imported`
 - opcionalmente inicia contacto automatico si `auto_start=true`
-  - `whatsapp` si el canal preferido es WhatsApp
+  - `whatsapp` solo mediante una plantilla aprobada de Meta fuera de la ventana de 24 horas
   - `email` si el canal preferido es email
 
 ## Flujo recomendado en n8n
@@ -136,7 +149,7 @@ Campos españoles reconocidos:
 
 3. HTTP Request
    - `POST https://tmedia-global-ai.onrender.com/api/integrations/external-lead`
-   - header `x-integrations-secret`
+   - headers `x-integrations-secret` e `Idempotency-Key`
    - body JSON
 
 4. Opcional

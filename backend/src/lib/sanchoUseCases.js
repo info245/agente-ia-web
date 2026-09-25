@@ -1,9 +1,66 @@
 import { normalizeIntentText } from "./conversationIntent.js";
 
-function isSanchoConfig(appConfig = null) {
+export function isSanchoConfig(appConfig = null) {
   const brand = normalizeIntentText(appConfig?.brand?.name || "");
   const offers = Object.keys(appConfig?.offers || appConfig?.services || {});
   return brand.includes("sancho") || offers.some((offer) => normalizeIntentText(offer).includes("sancho"));
+}
+
+const SANCHO_PRODUCT_VALUE =
+  "Sancho AI es una plataforma de inteligencia operativa: reúne datos y señales de negocio, marketing y ventas para explicar qué está pasando, priorizar decisiones y proponer siguientes acciones revisables.";
+
+const SANCHO_PRODUCT_LIMITS =
+  "No presta atención al cliente, no automatiza comunicaciones con clientes y no gestiona ni hace seguimiento de leads o contactos.";
+
+export function isSanchoProductOverviewRequest(message = "") {
+  const text = normalizeIntentText(message);
+  return (
+    /^(?:que|quien) eres(?: tu)?$/.test(text) ||
+    /\bque (?:es|hace|aporta) sancho(?: ai)?\b/.test(text) ||
+    /\b(?:para que sirve|como funciona) sancho(?: ai)?\b/.test(text) ||
+    /\bque aporta (?:tu |la |esta )?plataforma\b/.test(text) ||
+    /\b(?:que hace|para que sirve) (?:tu |la |esta )plataforma\b/.test(text)
+  );
+}
+
+export function buildSanchoProductOverviewReply({ message = "", appConfig = null } = {}) {
+  if (!isSanchoConfig(appConfig) || !isSanchoProductOverviewRequest(message)) return null;
+  const identityQuestion = /^(?:que|quien) eres(?: tu)?$/.test(normalizeIntentText(message));
+  const prefix = identityQuestion ? "Soy el asistente informativo de Sancho AI. " : "";
+  return `${prefix}${SANCHO_PRODUCT_VALUE} ${SANCHO_PRODUCT_LIMITS}`;
+}
+
+export function buildSanchoProductPolicyPrompt(appConfig = null) {
+  if (!isSanchoConfig(appConfig)) return "";
+  return [
+    "CONTRATO DE PRODUCTO SANCHO AI",
+    `- Capacidad confirmada: ${SANCHO_PRODUCT_VALUE}`,
+    `- Límites obligatorios: ${SANCHO_PRODUCT_LIMITS}`,
+    "- Hablar de datos de ventas no significa gestionar el CRM, los leads ni los contactos.",
+    "- Hablar de pasar del análisis a la acción significa proponer y priorizar acciones revisables; no significa ejecutarlas ni automatizarlas de forma autónoma.",
+    "- No describas Sancho AI como una herramienta de atención al cliente, comunicación con clientes, seguimiento comercial, gestión de leads o gestión de contactos.",
+  ].join("\n");
+}
+
+function makesForbiddenSanchoProductClaim(sentence = "") {
+  const text = normalizeIntentText(sentence);
+  const forbiddenConcept =
+    /\b(atencion al cliente|servicio al cliente|comunicacion(?:es)? con (?:los )?clientes|seguimiento de (?:los |tus )?(?:leads|contactos)|gestion de (?:leads|contactos)|gestionar (?:leads|contactos)|experiencia del cliente)\b/;
+  if (!forbiddenConcept.test(text)) return false;
+
+  const explicitlyDenied =
+    /\b(?:no|nunca|tampoco|sin)\b.{0,45}\b(?:presta|ofrece|incluye|automatiza|gestiona|hace|realiza|mejora|seguimiento|atencion|comunicacion)\b/;
+  if (explicitlyDenied.test(text)) return false;
+
+  return /\b(?:puede|permite|sirve|aporta|ofrece|ayuda|ayudarte|gestiona|gestionar|automatiza|automatizar|mejora|mejorar|realiza|hacer|hace|disenado|tareas)\b/.test(text);
+}
+
+export function guardSanchoProductClaims({ reply = "", appConfig = null } = {}) {
+  const rawReply = String(reply || "").trim();
+  if (!rawReply || !isSanchoConfig(appConfig)) return rawReply;
+  const sentences = rawReply.split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (!sentences.some(makesForbiddenSanchoProductClaim)) return rawReply;
+  return `${SANCHO_PRODUCT_VALUE} ${SANCHO_PRODUCT_LIMITS}`;
 }
 
 function sectorFrom({ message = "", lead = {} } = {}) {
@@ -34,8 +91,11 @@ function asksForUseCase(message = "", lead = {}) {
 }
 
 export function buildSanchoUseCaseReply({ message = "", lead = {}, appConfig = null } = {}) {
-  if (!isSanchoConfig(appConfig) || !asksForUseCase(message, lead)) return null;
+  if (!isSanchoConfig(appConfig)) return null;
   const sector = sectorFrom({ message, lead });
+  const overviewReply = buildSanchoProductOverviewReply({ message, appConfig });
+  if (overviewReply && !sector) return overviewReply;
+  if (!asksForUseCase(message, lead)) return null;
   const text = normalizeIntentText(message);
 
   if (sector === "ecommerce") {
@@ -92,5 +152,6 @@ export function buildSanchoUseCaseReply({ message = "", lead = {}, appConfig = n
 
 export const __sanchoUseCasesTestables = {
   asksForUseCase,
+  makesForbiddenSanchoProductClaim,
   sectorFrom,
 };

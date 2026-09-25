@@ -201,6 +201,42 @@ export async function getConversationById(conversationId) {
   return data || null;
 }
 
+export async function updateConversationInboxState(conversationId, patch = {}, { accountId = null } = {}) {
+  const safeConversationId = clean(conversationId);
+  if (!safeConversationId) throw new Error("conversationId es obligatorio");
+  const update = { updated_at: new Date().toISOString() };
+  if (["new", "open", "pending", "snoozed", "closed"].includes(patch.inbox_status)) {
+    update.inbox_status = patch.inbox_status;
+  }
+  if (["active", "paused"].includes(patch.ai_status)) update.ai_status = patch.ai_status;
+  if (Object.prototype.hasOwnProperty.call(patch, "assigned_to")) {
+    update.assigned_to = clean(patch.assigned_to);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, "snoozed_until")) {
+    update.snoozed_until = clean(patch.snoozed_until);
+  }
+  let query = supabase.from("conversations").update(update).eq("id", safeConversationId);
+  if (clean(accountId)) query = query.eq("account_id", clean(accountId));
+  const { data, error } = await query.select("*").single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listInboxConversations({ accountId = null, status = null, limit = 100 } = {}) {
+  let query = supabase
+    .from("conversations")
+    .select("*, leads(*)")
+    .order("updated_at", { ascending: false })
+    .limit(Math.max(1, Math.min(500, Number(limit) || 100)));
+  if (clean(accountId)) query = query.eq("account_id", clean(accountId));
+  if (["new", "open", "pending", "snoozed", "closed"].includes(status)) {
+    query = query.eq("inbox_status", status);
+  }
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+}
+
 export async function saveMessage({
   conversation_id,
   role,
@@ -539,8 +575,45 @@ export async function getLeadByConversationId(conversation_id, { accountId = nul
   return data || null;
 }
 
-export async function listCrmLeads({ limit = 200, accountId = null } = {}) {
-  const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 200;
+export async function getCrmLeadById(leadId, { accountId = null } = {}) {
+  const safeLeadId = clean(leadId);
+  const safeAccountId = clean(accountId);
+  if (!safeLeadId) {
+    throw new Error("getCrmLeadById: leadId es obligatorio");
+  }
+
+  let query = supabase
+    .from("leads")
+    .select(
+      `
+      *,
+      conversations (
+        id,
+        channel,
+        external_user_id,
+        created_at,
+        inbox_status,
+        ai_status,
+        assigned_to,
+        snoozed_until,
+        updated_at
+      )
+      `
+    )
+    .eq("id", safeLeadId);
+
+  if (safeAccountId && (await tableHasAccountColumn("leads"))) {
+    query = query.eq("account_id", safeAccountId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+export async function listCrmLeads({ limit = 200, offset = 0, accountId = null } = {}) {
+  const safeLimit = Math.max(1, Math.min(500, Number.isFinite(Number(limit)) ? Number(limit) : 200));
+  const safeOffset = Math.max(0, Number.isFinite(Number(offset)) ? Number(offset) : 0);
   const safeAccountId = clean(accountId);
 
   let query = supabase
@@ -552,12 +625,17 @@ export async function listCrmLeads({ limit = 200, accountId = null } = {}) {
         id,
         channel,
         external_user_id,
-        created_at
+        created_at,
+        inbox_status,
+        ai_status,
+        assigned_to,
+        snoozed_until,
+        updated_at
       )
       `
       )
       .order("created_at", { ascending: false })
-      .limit(safeLimit);
+      .range(safeOffset, safeOffset + safeLimit - 1);
 
   if (safeAccountId && (await tableHasAccountColumn("leads"))) {
     query = query.eq("account_id", safeAccountId);

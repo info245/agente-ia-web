@@ -488,6 +488,11 @@
             <section class="crm-card crm-panel crm-conversation-card">
               <div class="crm-card-header">
                 <h3>Conversacion</h3>
+                <div class="crm-actions" aria-label="Control de la conversacion">
+                  <span id="conversationAiStatus" class="status-pill">IA activa</span>
+                  <button id="conversationTakeoverBtn" type="button">Tomar conversacion</button>
+                  <button id="conversationResumeAiBtn" type="button">Reactivar IA</button>
+                </div>
               </div>
               <div id="messageList" class="message-list"></div>
             </section>
@@ -742,17 +747,18 @@
             </section>
 
             <form id="configForm" class="config-form">
-                <div class="config-tabs">
-                  <button id="configTabGeneral" type="button" class="config-tab is-active" data-config-tab="general">Configurar tono</button>
-                  <button id="configTabSalesSystem" type="button" class="config-tab" data-config-tab="sales_system">Sistema de ventas IA</button>
-                  <button id="configTabKnowledge" type="button" class="config-tab" data-config-tab="knowledge">Configurar conocimiento</button>
-                  <button id="configTabMessages" type="button" class="config-tab" data-config-tab="messages">Configurar respuestas</button>
-                <button id="configTabAutomations" type="button" class="config-tab" data-config-tab="automations">Automatizaciones</button>
-                <button id="configTabIntegrations" type="button" class="config-tab" data-config-tab="integrations">Integraciones</button>
-                <button id="configTabWebsite" type="button" class="config-tab" data-config-tab="website">Desde web</button>
+                <div class="config-tabs" role="tablist" aria-label="Secciones de configuracion">
+                  <button id="configTabGeneral" type="button" role="tab" aria-selected="true" aria-controls="configPanelGeneral" tabindex="0" class="config-tab is-active" data-config-tab="general">Configurar tono</button>
+                  <button id="configTabSalesSystem" type="button" role="tab" aria-selected="false" aria-controls="configPanelSalesSystem" tabindex="-1" class="config-tab" data-config-tab="sales_system">Sistema de ventas IA</button>
+                  <button id="configTabPipeline" type="button" role="tab" aria-selected="false" aria-controls="configPanelPipeline" tabindex="-1" class="config-tab" data-config-tab="pipeline">Pipeline</button>
+                  <button id="configTabKnowledge" type="button" role="tab" aria-selected="false" aria-controls="configPanelKnowledge" tabindex="-1" class="config-tab" data-config-tab="knowledge">Configurar conocimiento</button>
+                  <button id="configTabMessages" type="button" role="tab" aria-selected="false" aria-controls="configPanelMessages" tabindex="-1" class="config-tab" data-config-tab="messages">Configurar respuestas</button>
+                <button id="configTabAutomations" type="button" role="tab" aria-selected="false" aria-controls="configPanelAutomations" tabindex="-1" class="config-tab" data-config-tab="automations">Automatizaciones</button>
+                <button id="configTabIntegrations" type="button" role="tab" aria-selected="false" aria-controls="configPanelIntegrations" tabindex="-1" class="config-tab" data-config-tab="integrations">Integraciones</button>
+                <button id="configTabWebsite" type="button" role="tab" aria-selected="false" aria-controls="configPanelWebsite" tabindex="-1" class="config-tab" data-config-tab="website">Desde web</button>
               </div>
 
-              <section id="configPanelGeneral" class="config-panel is-active" data-config-panel="general">
+              <section id="configPanelGeneral" class="config-panel is-active" role="tabpanel" aria-labelledby="configTabGeneral" data-config-panel="general">
                 <div class="quote-grid">
                   <div class="config-product-mode-card quote-grid-full">
                     <div class="config-product-mode-head">
@@ -932,20 +938,17 @@
                         </label>
                       </section>
 
-                    <div class="quote-grid-full services-editor">
-                      <div class="services-editor-head">
-                        <div>
-                        <strong>Servicios</strong>
-                        <p>Define lo que vende el agente, tarifas orientativas y URLs de apoyo.</p>
+                    <div class="quote-grid-full config-service-source-card">
+                      <div>
+                        <strong>Oferta y servicios</strong>
+                        <p>La oferta se gestiona en un unico lugar para evitar versiones distintas entre el tono y el conocimiento del agente.</p>
                       </div>
-                      <button id="configAddServiceBtn" type="button">Añadir servicio</button>
+                      <button id="configGoToServicesBtn" type="button" class="crm-secondary-btn">Configurar servicios</button>
                     </div>
-                    <div id="configServicesList" class="services-editor-list"></div>
-                  </div>
                 </div>
               </section>
 
-              <section id="configPanelSalesSystem" class="config-panel" data-config-panel="sales_system">
+              <section id="configPanelSalesSystem" class="config-panel" role="tabpanel" aria-labelledby="configTabSalesSystem" hidden data-config-panel="sales_system">
                 <div class="config-section-intro">
                   <strong>Sistema de ventas IA <span class="config-info-tip" title="Aqui configuras la logica comercial del agente para cada cliente: perfil de negocio, scoring, personalizacion, cualificacion, acciones y pruebas antes de publicar.">i</span></strong>
                   <p>Define el tipo de cliente, el objetivo de conversión y la lógica que guía al agente. Esta capa hace que el mismo sistema pueda adaptarse a una academia, clínica, inmobiliaria o cualquier negocio sin tocar código.</p>
@@ -1133,7 +1136,29 @@
                 </section>
               </section>
 
-              <section id="configPanelKnowledge" class="config-panel" data-config-panel="knowledge">
+              <section id="configPanelPipeline" class="config-panel" role="tabpanel" aria-labelledby="configTabPipeline" hidden data-config-panel="pipeline">
+                <div class="config-section-intro">
+                  <strong>Estados del pipeline</strong>
+                  <p>Define las etapas que usa el equipo en el CRM. El orden se aplica al selector de cada lead y la categoria permite distinguir oportunidades abiertas, ganadas y perdidas.</p>
+                </div>
+                <section class="pipeline-editor-card">
+                  <div class="pipeline-editor-head">
+                    <div>
+                      <span>Flujo comercial</span>
+                      <strong>Etapas visibles para el equipo</strong>
+                      <p>Usa nombres breves y colores reconocibles. Cada etapa conserva un identificador estable para no romper leads existentes.</p>
+                    </div>
+                    <button id="configAddPipelineStageBtn" type="button">Añadir etapa</button>
+                  </div>
+                  <div class="pipeline-stage-legend" aria-hidden="true">
+                    <span>Color</span><span>Nombre</span><span>Categoria</span><span>Orden</span><span>Acciones</span>
+                  </div>
+                  <div id="configPipelineStagesList" class="pipeline-stage-list"></div>
+                  <div id="configPipelineStatus" class="save-status" aria-live="polite"></div>
+                </section>
+              </section>
+
+              <section id="configPanelKnowledge" class="config-panel" role="tabpanel" aria-labelledby="configTabKnowledge" hidden data-config-panel="knowledge">
                   <div class="config-section-intro">
                    <strong>Configurar conocimiento <span class="config-info-tip" title="Aquí defines lo que el agente sabe del negocio: servicios, web, tarifas, notas internas y documentación útil.">i</span></strong>
                     <p>Combina una capa manual para asegurar control comercial y una capa avanzada para importar contexto desde tu web, Excel/CSV o notas internas. El agente siempre prioriza lo revisado manualmente.</p>
@@ -1239,6 +1264,14 @@
                       URLs relevantes
                       <textarea id="configKnowledgeWebsiteUrls" rows="7" placeholder="https://tuweb.com&#10;https://tuweb.com/seo&#10;https://tuweb.com/google-ads"></textarea>
                     </label>
+                    <div class="crm-actions">
+                      <button id="configKnowledgeSyncBtn" type="button">Sincronizar conocimiento</button>
+                      <span id="configKnowledgeSyncStatus" class="save-status" aria-live="polite"></span>
+                    </div>
+                    <div class="crm-actions">
+                      <button id="configKnowledgeSyncBtn" type="button">Sincronizar conocimiento</button>
+                      <span id="configKnowledgeSyncStatus" class="save-status" aria-live="polite"></span>
+                    </div>
                     <label class="knowledge-field">
                       Qué quieres extraer
                       <textarea id="configKnowledgeWebsiteFocus" rows="4" placeholder="Servicios prioritarios, propuesta de valor, testimonios, FAQs, claims comerciales..."></textarea>
@@ -1318,7 +1351,7 @@
                 </section>
               </section>
 
-              <section id="configPanelMessages" class="config-panel" data-config-panel="messages">
+              <section id="configPanelMessages" class="config-panel" role="tabpanel" aria-labelledby="configTabMessages" hidden data-config-panel="messages">
                   <div class="config-section-intro">
                     <strong>Configurar respuestas <span class="config-info-tip" title="Aquí decides cómo redacta el sistema los mensajes comerciales y de seguimiento por cada canal.">i</span></strong>
                    <p>Define el tono y el copy de emails y WhatsApp para cada momento comercial. Las variables se rellenan en envio: <code>{nombre}</code>, <code>{servicio}</code>, <code>{empresa}</code>, <code>{link_presupuesto}</code>, <code>{link_analisis}</code>, <code>{resumen_analisis}</code>, <code>{whatsapp_humano}</code>.</p>
@@ -1375,7 +1408,7 @@
                 </section>
               </section>
 
-              <section id="configPanelAutomations" class="config-panel" data-config-panel="automations">
+              <section id="configPanelAutomations" class="config-panel" role="tabpanel" aria-labelledby="configTabAutomations" hidden data-config-panel="automations">
                 <div class="config-section-intro">
                   <strong>Recuperacion y seguimiento automatico</strong>
                   <p>Configura secuencias para recuperar leads frios y seguir propuestas sin depender de tareas manuales. Cada paso define tiempo, canal y plantilla asociada.</p>
@@ -1384,7 +1417,7 @@
                 <div id="configAutomationFlowsList" class="automation-flow-list"></div>
               </section>
 
-              <section id="configPanelIntegrations" class="config-panel" data-config-panel="integrations">
+              <section id="configPanelIntegrations" class="config-panel" role="tabpanel" aria-labelledby="configTabIntegrations" hidden data-config-panel="integrations">
                 <div class="config-section-intro">
                   <strong>Centro de conexiones</strong>
                   <p>Define como se conectan WhatsApp, formularios, email y automatizaciones. La idea es que esta capa sea la puerta clara para integrar herramientas sin invadir el CRM comercial.</p>
@@ -1410,12 +1443,60 @@
                       <em id="configWhatsappStatusBadge">Pendiente</em>
                     </div>
                     <div class="config-integration-tools">
-                      <button id="configValidateWhatsappBtn" type="button" class="crm-secondary-btn">Comprobar conexion</button>
+                      <button id="configValidateWhatsappBtn" type="button" class="crm-secondary-btn">Actualizar estado</button>
                       <div class="config-integration-meta">
                         <span id="configWhatsappValidationMessage">Sin validar todavia</span>
                         <small id="configWhatsappLastValidated">Ultima validacion: -</small>
                       </div>
                     </div>
+                    <section class="whatsapp-channel-editor" aria-labelledby="whatsappChannelEditorTitle">
+                      <div class="whatsapp-channel-editor-head">
+                        <div>
+                          <span>Conexion activa</span>
+                          <strong id="whatsappChannelEditorTitle">Meta WhatsApp Cloud API</strong>
+                          <p>Estos datos alimentan el canal real de esta cuenta. El token nunca vuelve a mostrarse completo despues de guardarlo.</p>
+                        </div>
+                        <span id="configWhatsappRealStatus" class="status-pill" data-tone="pending">Sin conectar</span>
+                      </div>
+                      <div class="quote-grid">
+                        <label>
+                          Nombre verificado del canal
+                          <input id="configWhatsappVerifiedName" data-config-runtime-control="true" type="text" placeholder="Nombre visible en WhatsApp" />
+                        </label>
+                        <label>
+                          Numero visible
+                          <input id="configWhatsappDisplayPhone" data-config-runtime-control="true" type="tel" placeholder="+34 600 000 000" />
+                        </label>
+                        <label>
+                          Phone Number ID
+                          <input id="configWhatsappPhoneNumberId" data-config-runtime-control="true" type="text" placeholder="ID del numero en Meta" />
+                        </label>
+                        <label>
+                          Business Account ID
+                          <input id="configWhatsappBusinessAccountId" data-config-runtime-control="true" type="text" placeholder="WhatsApp Business Account ID" />
+                        </label>
+                        <label>
+                          Access token
+                          <input id="configWhatsappAccessToken" data-config-runtime-control="true" type="password" autocomplete="new-password" placeholder="Pega el token de Meta" />
+                          <small>Dejalo vacio para conservar el token actual.</small>
+                        </label>
+                        <label>
+                          Token guardado
+                          <input id="configWhatsappTokenMasked" type="text" readonly value="Sin token" />
+                        </label>
+                        <label class="quote-grid-full">
+                          Numero de prueba (opcional)
+                          <input id="configWhatsappTestTo" data-config-runtime-control="true" type="tel" placeholder="+34 600 000 000" />
+                          <small>Si lo completas, la prueba enviara un mensaje real. Si lo dejas vacio, solo validara las credenciales con Meta.</small>
+                        </label>
+                      </div>
+                      <div class="whatsapp-channel-actions">
+                        <button id="configSaveWhatsappChannelBtn" type="button">Guardar canal</button>
+                        <button id="configTestWhatsappChannelBtn" type="button" class="crm-secondary-btn">Probar canal</button>
+                        <button id="configDisconnectWhatsappChannelBtn" type="button" class="crm-danger-btn">Desconectar</button>
+                      </div>
+                      <div id="configWhatsappChannelStatus" class="save-status" aria-live="polite"></div>
+                    </section>
                     <div class="config-external-kicker">No hace falta conocer la API. Empieza por estas 2 decisiones.</div>
                     <div class="quote-grid">
                       <label>
@@ -1469,11 +1550,8 @@
                       <div class="quote-grid">
                         <label>
                           Proveedor
-                          <select id="configWhatsappProvider">
+                          <select id="configWhatsappProvider" disabled title="El canal operativo actual usa Meta Cloud API">
                             <option value="meta_cloud">Meta Cloud API</option>
-                            <option value="twilio">Twilio</option>
-                            <option value="360dialog">360dialog</option>
-                            <option value="manual">Manual</option>
                           </select>
                         </label>
 
@@ -1482,15 +1560,6 @@
                           <input id="configWhatsappStatusLabel" type="text" placeholder="Conectado, pendiente, en prueba..." />
                         </label>
 
-                        <label>
-                          Phone Number ID
-                          <input id="configWhatsappPhoneNumberId" type="text" placeholder="ID del numero en Meta/Twilio" />
-                        </label>
-
-                        <label>
-                          Business Account ID
-                          <input id="configWhatsappBusinessAccountId" type="text" placeholder="ID de cuenta de negocio" />
-                        </label>
                       </div>
                     </details>
                     </article>
@@ -1926,7 +1995,7 @@
                 </div>
               </section>
 
-              <section id="configPanelWebsite" class="config-panel" data-config-panel="website">
+              <section id="configPanelWebsite" class="config-panel" role="tabpanel" aria-labelledby="configTabWebsite" hidden data-config-panel="website">
                 <div class="quote-grid">
                   <label class="quote-grid-full">
                     URL de la web a analizar
@@ -1975,6 +2044,6 @@
     </nav>
   </main>
 
-  <script src="./app.js?v=20260503-help-and-published-demo"></script>
+  <script src="./app.js?v=20260925-crm-pipeline-whatsapp"></script>
 </body>
 </html>

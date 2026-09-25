@@ -1,3 +1,7 @@
+import { fetchPublicHttpText } from "./safeHttpFetch.js";
+
+const MAX_ANALYSIS_PAGE_BYTES = 1024 * 1024;
+
 function stripHtml(html = "") {
   return String(html || "")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -152,62 +156,49 @@ export async function runLightSiteAnalysis(inputUrl) {
   const url = normalizeUrl(inputUrl);
   if (!url) return null;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+  const page = await fetchPublicHttpText(url, {
+    timeoutMs: 8_000,
+    maxBytes: MAX_ANALYSIS_PAGE_BYTES,
+    maxRedirects: 3,
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (compatible; TMediaGlobalBot/2.0; +https://t-mediaglobal.com)",
+      Accept: "text/html,application/xhtml+xml",
+    },
+  });
+  const html = page.text;
+  const plainText = stripHtml(html);
 
-  try {
-    const response = await fetch(url, {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; TMediaGlobalBot/1.0; +https://t-mediaglobal.com)",
-        Accept: "text/html,application/xhtml+xml",
-      },
-    });
+  const snapshot = {
+    url,
+    final_url: page.url,
+    title: extractMatch(html, /<title[^>]*>([\s\S]*?)<\/title>/i),
+    meta_description: extractMatch(
+      html,
+      /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i
+    ),
+    h1: extractMatch(html, /<h1[^>]*>([\s\S]*?)<\/h1>/i),
+    h2: extractAllMatches(html, /<h2[^>]*>([\s\S]*?)<\/h2>/gi, 3),
+    hero_text: buildHeroSnippet(plainText.split("\n").filter(Boolean).slice(0, 4).join(" ")),
+    signals: detectVisibleSignals(html, plainText),
+  };
 
-    clearTimeout(timeout);
+  snapshot.findings = buildFindings(snapshot);
+  snapshot.priorities = buildPriorities(snapshot);
+  snapshot.summary = [
+    snapshot.hero_text
+      ? "La home sí comunica una propuesta inicial."
+      : "La propuesta de valor no queda del todo clara en el primer vistazo.",
+    snapshot.signals?.has_cta
+      ? "Se ve intención de captación con CTA visibles."
+      : "La captación podría reforzarse con una CTA más clara.",
+    snapshot.signals?.has_trust_signals
+      ? "Hay alguna señal de confianza."
+      : "La credibilidad visible se puede reforzar.",
+  ].join(" ");
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+  snapshot.recommended_focus =
+    snapshot.priorities?.[0] || "Mejorar claridad, captación y confianza en la home.";
 
-    const html = await response.text();
-    const plainText = stripHtml(html);
-
-    const snapshot = {
-      url,
-      final_url: response.url || url,
-      title: extractMatch(html, /<title[^>]*>([\s\S]*?)<\/title>/i),
-      meta_description: extractMatch(
-        html,
-        /<meta[^>]+name=["']description["'][^>]+content=["']([\s\S]*?)["'][^>]*>/i
-      ),
-      h1: extractMatch(html, /<h1[^>]*>([\s\S]*?)<\/h1>/i),
-      h2: extractAllMatches(html, /<h2[^>]*>([\s\S]*?)<\/h2>/gi, 3),
-      hero_text: buildHeroSnippet(plainText.split("\n").filter(Boolean).slice(0, 4).join(" ")),
-      signals: detectVisibleSignals(html, plainText),
-    };
-
-    snapshot.findings = buildFindings(snapshot);
-    snapshot.priorities = buildPriorities(snapshot);
-    snapshot.summary = [
-      snapshot.hero_text
-        ? "La home sí comunica una propuesta inicial."
-        : "La propuesta de valor no queda del todo clara en el primer vistazo.",
-      snapshot.signals?.has_cta
-        ? "Se ve intención de captación con CTA visibles."
-        : "La captación podría reforzarse con una CTA más clara.",
-      snapshot.signals?.has_trust_signals
-        ? "Hay alguna señal de confianza."
-        : "La credibilidad visible se puede reforzar.",
-    ].join(" ");
-
-    snapshot.recommended_focus =
-      snapshot.priorities?.[0] || "Mejorar claridad, captación y confianza en la home.";
-
-    return snapshot;
-  } finally {
-    clearTimeout(timeout);
-  }
+  return snapshot;
 }

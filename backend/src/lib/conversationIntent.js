@@ -83,7 +83,7 @@ export function isAgentQuestion(text = "") {
   const value = normalizeIntentText(text);
   return (
     /\b(que|cual)\b.*\b(tipo de agente|directrices|capacidad|capacidades|funcion|limitaciones)\b/.test(value) ||
-    /\b(que puedes hacer|como asistente|eres un bot|eres una ia|quien eres)\b/.test(value) ||
+    /\b(que puedes hacer|como asistente|eres un bot|eres una ia|que eres|quien eres)\b/.test(value) ||
     /\b(tu capacidad|la capacidad de sancho)\b/.test(value) ||
     /\b(mejor que chatgpt|mejor que otro asistente|comparado con chatgpt|compararte con chatgpt)\b/.test(value)
   );

@@ -12,7 +12,8 @@
     const explicitDefault = currentScript?.getAttribute("data-default-account-slug");
     if (explicitDefault) return explicitDefault;
     const host = String(window.location?.hostname || "").replace(/^www\./, "");
-    if (["t-mediaglobal.com", "heysancho.com"].includes(host)) return "tmedia-global";
+    if (host === "heysancho.com") return "sancho";
+    if (host === "t-mediaglobal.com") return "tmedia-global";
     return "";
   }
   const defaultAccountSlug = inferDefaultAccountSlug();
@@ -28,6 +29,7 @@
     accountSlug: accountSlugFromAttr || defaultAccountSlug,
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
+    chatHistoryStorageKey: "agente_ia_chat_history",
     requestTimeoutMs: 25000,
   };
 
@@ -71,28 +73,64 @@
   // ====== HELPERS ======
   const uid = () => Math.random().toString(36).slice(2, 10);
 
+  function accountStorageSuffix() {
+    const raw = String(CONFIG.accountId || CONFIG.accountSlug || "default").trim();
+    return raw.toLowerCase().replace(/[^a-z0-9_-]+/g, "_");
+  }
+
+  function storageKey(baseKey) {
+    return `${baseKey}__${accountStorageSuffix()}`;
+  }
+
   function getOrCreateExternalUserId() {
-    let externalUserId = localStorage.getItem(CONFIG.externalUserIdStorageKey);
+    const key = storageKey(CONFIG.externalUserIdStorageKey);
+    let externalUserId = localStorage.getItem(key);
     if (!externalUserId) {
       externalUserId = `web_${uid()}`;
-      localStorage.setItem(CONFIG.externalUserIdStorageKey, externalUserId);
+      localStorage.setItem(key, externalUserId);
     }
     return externalUserId;
   }
 
   function getConversationId() {
-    return localStorage.getItem(CONFIG.conversationIdStorageKey);
+    return localStorage.getItem(storageKey(CONFIG.conversationIdStorageKey));
   }
 
   function setConversationId(conversationId) {
     if (!conversationId) return;
-    localStorage.setItem(CONFIG.conversationIdStorageKey, conversationId);
+    localStorage.setItem(storageKey(CONFIG.conversationIdStorageKey), conversationId);
   }
 
   function clearConversationId() {
-    localStorage.removeItem(CONFIG.conversationIdStorageKey);
+    localStorage.removeItem(storageKey(CONFIG.conversationIdStorageKey));
+    localStorage.removeItem(storageKey(CONFIG.chatHistoryStorageKey));
     sessionStorage.removeItem("agente_ia_last_lead_signature");
     sessionStorage.removeItem("agente_ia_last_completed_signature");
+  }
+
+  function getCachedMessages() {
+    try {
+      const raw = localStorage.getItem(storageKey(CONFIG.chatHistoryStorageKey));
+      const items = JSON.parse(raw || "[]");
+      return Array.isArray(items) ? items : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function setCachedMessages(items = []) {
+    const cleanItems = (Array.isArray(items) ? items : [])
+      .map((item) => ({
+        role: String(item?.role || "").trim(),
+        text: String(item?.text || "").trim(),
+      }))
+      .filter((item) => item.role && item.text)
+      .slice(-80);
+    localStorage.setItem(storageKey(CONFIG.chatHistoryStorageKey), JSON.stringify(cleanItems));
+  }
+
+  function cacheMessage(role, text) {
+    setCachedMessages([...getCachedMessages(), { role, text }]);
   }
 
   function buildLeadSignature(lead) {
@@ -417,7 +455,7 @@
       .replace(/âœ•/g, "✕");
   }
 
-  function append(role, text) {
+  function append(role, text, options = {}) {
     const row = document.createElement("div");
     row.className = `row ${role}`;
 
@@ -428,6 +466,9 @@
     row.appendChild(bubble);
     el.messages.appendChild(row);
     el.messages.scrollTop = el.messages.scrollHeight;
+    if (options.persist !== false) {
+      cacheMessage(role, text);
+    }
   }
 
   function pushChatCompletedEvent(payload = {}) {
@@ -486,6 +527,29 @@
     el.messages.scrollTop = el.messages.scrollHeight;
   }
 
+  function appendHandoffOptions(options = []) {
+    const cleanOptions = (Array.isArray(options) ? options : [])
+      .filter((option) => option?.url && option?.label)
+      .slice(0, 2);
+    if (!cleanOptions.length) return false;
+
+    for (const option of cleanOptions) {
+      const row = document.createElement("div");
+      row.className = "row assistant";
+      const card = document.createElement("div");
+      card.className = "handoff-card";
+      card.innerHTML = `
+        <strong>${option.title || "Seguir por otro canal"}</strong>
+        <span>${option.description || "Continuamos con el contexto de esta conversacion."}</span>
+        <a class="handoff-link" href="${option.url}" target="_blank" rel="noopener noreferrer">${option.label}</a>
+      `;
+      row.appendChild(card);
+      el.messages.appendChild(row);
+    }
+    el.messages.scrollTop = el.messages.scrollHeight;
+    return true;
+  }
+
   function setLoading(isLoading) {
     el.sendBtn.disabled = isLoading;
     el.input.disabled = isLoading;
@@ -503,6 +567,12 @@
     updateMini();
 
     if (el.messages.childElementCount === 0) {
+      const cachedMessages = getCachedMessages();
+      if (cachedMessages.length) {
+        cachedMessages.forEach((item) => append(item.role, item.text, { persist: false }));
+        setTimeout(() => el.input.focus(), 50);
+        return;
+      }
       append("assistant", getInitialGreeting());
       setTimeout(() => el.input.focus(), 50);
       return;
@@ -581,7 +651,7 @@
       }
 
       append("assistant", data?.reply || "Sin respuesta del backend.");
-      if (data?.handoff?.whatsapp_url) {
+      if (!appendHandoffOptions(data?.handoff_options || data?.handoff?.options || []) && data?.handoff?.whatsapp_url) {
         appendHandoffCard(data.handoff);
       }
       updateMini();
@@ -604,6 +674,7 @@
 
   el.newBtn.addEventListener("click", () => {
     clearConversationId();
+    el.messages.innerHTML = "";
     append("system", "Nueva conversación iniciada.");
     updateMini();
   });

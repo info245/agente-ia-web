@@ -18,6 +18,10 @@ const state = {
   lastScenarioRunSummary: null,
   configTouchedAfterPublish: false,
   suggestedSectorPresetKey: "",
+  whatsappChannel: null,
+  configDirty: false,
+  currentMainView: null,
+  currentConfigTab: "general",
 };
 
 const LEAD_PAGE_SIZE = 15;
@@ -33,6 +37,16 @@ const MESSAGE_TEMPLATE_ORDER = [
   "recovery_email",
 ];
 const AUTOMATION_FLOW_ORDER = ["lead_recovery", "quote_followup"];
+const DEFAULT_PIPELINE_STAGES = [
+  { id: "nuevo", name: "Nuevo", color: "#2563eb", order: 10, category: "open" },
+  { id: "contactado", name: "Contactado", color: "#7c3aed", order: 20, category: "open" },
+  { id: "cualificado", name: "Cualificado", color: "#0891b2", order: 30, category: "open" },
+  { id: "presupuesto_borrador", name: "Presupuesto borrador", color: "#d97706", order: 40, category: "open" },
+  { id: "presupuesto_enviado", name: "Presupuesto enviado", color: "#ea580c", order: 50, category: "open" },
+  { id: "negociacion", name: "Negociacion", color: "#db2777", order: 60, category: "open" },
+  { id: "ganado", name: "Ganado", color: "#16a34a", order: 70, category: "won" },
+  { id: "perdido", name: "Perdido", color: "#64748b", order: 80, category: "lost" },
+];
 
 function repairMojibake(value) {
   if (value === undefined || value === null) return "";
@@ -535,6 +549,7 @@ const el = {
   configWidgetPreviewBtn: document.getElementById("configWidgetPreviewBtn"),
   configTabGeneral: document.getElementById("configTabGeneral"),
   configTabSalesSystem: document.getElementById("configTabSalesSystem"),
+  configTabPipeline: document.getElementById("configTabPipeline"),
   configTabKnowledge: document.getElementById("configTabKnowledge"),
   configTabMessages: document.getElementById("configTabMessages"),
   configTabAutomations: document.getElementById("configTabAutomations"),
@@ -542,11 +557,16 @@ const el = {
   configTabWebsite: document.getElementById("configTabWebsite"),
   configPanelGeneral: document.getElementById("configPanelGeneral"),
   configPanelSalesSystem: document.getElementById("configPanelSalesSystem"),
+  configPanelPipeline: document.getElementById("configPanelPipeline"),
   configPanelKnowledge: document.getElementById("configPanelKnowledge"),
   configPanelMessages: document.getElementById("configPanelMessages"),
   configPanelAutomations: document.getElementById("configPanelAutomations"),
   configPanelIntegrations: document.getElementById("configPanelIntegrations"),
   configPanelWebsite: document.getElementById("configPanelWebsite"),
+  configGoToServicesBtn: document.getElementById("configGoToServicesBtn"),
+  configPipelineStagesList: document.getElementById("configPipelineStagesList"),
+  configAddPipelineStageBtn: document.getElementById("configAddPipelineStageBtn"),
+  configPipelineStatus: document.getElementById("configPipelineStatus"),
   configBrandName: document.getElementById("configBrandName"),
   configWebsiteUrl: document.getElementById("configWebsiteUrl"),
   configBootstrapUrl: document.getElementById("configBootstrapUrl"),
@@ -631,6 +651,16 @@ const el = {
   configValidateWhatsappBtn: document.getElementById("configValidateWhatsappBtn"),
   configWhatsappValidationMessage: document.getElementById("configWhatsappValidationMessage"),
   configWhatsappLastValidated: document.getElementById("configWhatsappLastValidated"),
+  configWhatsappRealStatus: document.getElementById("configWhatsappRealStatus"),
+  configWhatsappVerifiedName: document.getElementById("configWhatsappVerifiedName"),
+  configWhatsappDisplayPhone: document.getElementById("configWhatsappDisplayPhone"),
+  configWhatsappAccessToken: document.getElementById("configWhatsappAccessToken"),
+  configWhatsappTokenMasked: document.getElementById("configWhatsappTokenMasked"),
+  configWhatsappTestTo: document.getElementById("configWhatsappTestTo"),
+  configSaveWhatsappChannelBtn: document.getElementById("configSaveWhatsappChannelBtn"),
+  configTestWhatsappChannelBtn: document.getElementById("configTestWhatsappChannelBtn"),
+  configDisconnectWhatsappChannelBtn: document.getElementById("configDisconnectWhatsappChannelBtn"),
+  configWhatsappChannelStatus: document.getElementById("configWhatsappChannelStatus"),
   configIntegrationsOverviewGrid: document.getElementById("configIntegrationsOverviewGrid"),
   configLeadFormsOwner: document.getElementById("configLeadFormsOwner"),
   configLeadFormsGoal: document.getElementById("configLeadFormsGoal"),
@@ -736,6 +766,8 @@ const el = {
   configKnowledgeWebsiteUrls: document.getElementById("configKnowledgeWebsiteUrls"),
   configKnowledgeWebsiteFocus: document.getElementById("configKnowledgeWebsiteFocus"),
   configKnowledgeWebsiteCount: document.getElementById("configKnowledgeWebsiteCount"),
+  configKnowledgeSyncBtn: document.getElementById("configKnowledgeSyncBtn"),
+  configKnowledgeSyncStatus: document.getElementById("configKnowledgeSyncStatus"),
   configKnowledgeSpreadsheetFile: document.getElementById("configKnowledgeSpreadsheetFile"),
   configKnowledgeSpreadsheetUrl: document.getElementById("configKnowledgeSpreadsheetUrl"),
   configKnowledgeSpreadsheetData: document.getElementById("configKnowledgeSpreadsheetData"),
@@ -789,6 +821,9 @@ const el = {
   leadNextBtn: document.getElementById("leadNextBtn"),
   leadPaginationInfo: document.getElementById("leadPaginationInfo"),
   messageList: document.getElementById("messageList"),
+  conversationAiStatus: document.getElementById("conversationAiStatus"),
+  conversationTakeoverBtn: document.getElementById("conversationTakeoverBtn"),
+  conversationResumeAiBtn: document.getElementById("conversationResumeAiBtn"),
   leadForm: document.getElementById("leadForm"),
   saveBtn: document.getElementById("saveBtn"),
   deleteLeadBtn: document.getElementById("deleteLeadBtn"),
@@ -1412,11 +1447,20 @@ function normalizeKnowledgeCopyLegacy() {
 }
 
 function escapeHtml(value) {
-  return String(value || "")
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function markConfigDirty() {
+  state.configDirty = true;
+}
+
+function confirmConfigNavigation(message = "Hay cambios de configuracion sin guardar. ¿Quieres continuar?") {
+  return !state.configDirty || window.confirm(message);
 }
 
 function parseJsonField(value, fallback) {
@@ -2077,7 +2121,8 @@ function buildExternalLeadInstructions(config = state.appConfig || {}, type = "c
     `Tipo de web: ${getExternalLeadTypeLabel(type)}.`,
     `Responsable: ${getExternalLeadOwnerLabel(owner)}.`,
     `Endpoint del CRM: ${endpoint}.`,
-    `Autenticacion: header x-integrations-secret o, si el plugin no permite headers, query ?secret=TU_INTEGRATIONS_SECRET.`,
+    `Autenticacion: si el envio sale desde un dominio permitido de la cuenta, no pongas secretos en el frontend; si es una automatizacion servidor-a-servidor, usa header x-integrations-secret.`,
+    `Valor del secreto: copiarlo desde Render > tmedia-global-ai > Environment > INTEGRATIONS_SECRET o CRM_INTEGRATIONS_SECRET. En una web con API propia, como Sancho, crear CRM_INTEGRATIONS_SECRET con ese mismo valor en su hosting.`,
     `Slug de la cuenta: ${slug}.`,
     `Datos mínimos que queremos recibir: ${goalText}.`,
     `Notas: ${notesText}`,
@@ -2120,7 +2165,6 @@ function buildExternalLeadSnippet(config = state.appConfig || {}, type = "custom
     '  method: "POST",',
     "  headers: {",
     '    "Content-Type": "application/json",',
-    '    "x-integrations-secret": process.env.CRM_INTEGRATIONS_SECRET ?? ""',
     "  },",
     `  body: JSON.stringify(${JSON.stringify(payload, null, 2)})`,
     "});",
@@ -2145,7 +2189,8 @@ function renderExternalLeadIntegration(config = state.appConfig || {}) {
 
   if (el.configExternalLeadEndpoint) el.configExternalLeadEndpoint.value = endpoint;
   if (el.configExternalLeadAuthHeader) {
-    el.configExternalLeadAuthHeader.value = "x-integrations-secret";
+    el.configExternalLeadAuthHeader.value =
+      type === "automation" ? "x-integrations-secret" : "Sin secreto en frontend: validar por dominio permitido";
   }
   if (el.configExternalLeadAccountSlug) {
     el.configExternalLeadAccountSlug.value = accountSlug || "";
@@ -2230,6 +2275,16 @@ function setMainView(viewName) {
   const finalIsAdmin = isAdmin && canSeeAdmin;
   const isConfig = requestedConfig || (!allowSales && !finalIsAdmin);
   const isSales = !isConfig && !finalIsAdmin && allowSales;
+  const nextView = finalIsAdmin ? "admin" : isConfig ? "config" : "sales";
+
+  if (
+    state.currentMainView === "config" &&
+    nextView !== "config" &&
+    !confirmConfigNavigation("Hay cambios de configuracion sin guardar. ¿Salir de Configuracion de todos modos?")
+  ) {
+    return false;
+  }
+  state.currentMainView = nextView;
 
   el.crmViewAdminBtn?.classList.toggle("is-hidden", !canSeeAdmin);
   el.crmViewAdminBtn?.classList.toggle("is-active", finalIsAdmin);
@@ -2257,6 +2312,7 @@ function setMainView(viewName) {
   for (const link of el.crmSalesLinks) {
     link.classList.toggle("is-hidden", isConfig || isAdmin || !allowSales);
   }
+  return true;
 }
 
 function syncMobileAdaptiveUi() {
@@ -2612,8 +2668,7 @@ function renderAdminOverview() {
     button.addEventListener("click", async () => {
       const accountId = button.getAttribute("data-open-account");
       const view = button.getAttribute("data-open-view") || "sales";
-      await handleAccountChange(accountId);
-      setMainView(view);
+      if (await handleAccountChange(accountId)) setMainView(view);
     });
   });
 
@@ -2695,7 +2750,7 @@ function renderAdminOverview() {
             );
           }
 
-          await handleAccountChange(fallbackAccount.id);
+          if (!(await handleAccountChange(fallbackAccount.id))) return;
         }
 
         await fetchJson(`${window.location.origin}/api/admin/accounts/${accountId}`, {
@@ -2935,6 +2990,10 @@ async function createAdminAccount() {
 }
 
 async function handleAccountChange(nextAccountId) {
+  if (!confirmConfigNavigation("Hay cambios de configuracion sin guardar. ¿Cambiar de cuenta de todos modos?")) {
+    renderAccounts();
+    return false;
+  }
   state.activeAccountId = String(nextAccountId || "").trim();
   setStoredAccountId(state.activeAccountId);
 
@@ -2948,6 +3007,8 @@ async function handleAccountChange(nextAccountId) {
 
   renderAccounts();
   await Promise.all([loadLeads(), loadConfig(), loadAdminOverview()]);
+  await loadWhatsappChannel();
+  return true;
 }
 
 async function logoutCrm() {
@@ -2971,6 +3032,8 @@ async function logoutCrm() {
   state.selectedQuote = null;
   state.analytics = null;
   state.appConfig = null;
+  state.whatsappChannel = null;
+  state.configDirty = false;
   setStoredAccountId("");
   setAuthenticatedUi(false);
   const needsBootstrap = await checkBootstrapStatus();
@@ -2995,8 +3058,6 @@ function looksGenericName(value) {
 
 function getLeadDisplayName(lead) {
   if (lead?.name && !looksGenericName(lead.name)) return lead.name;
-  if (lead?.phone) return lead.phone;
-  if (lead?.email) return lead.email;
   return "Lead sin nombre";
 }
 
@@ -3050,7 +3111,10 @@ function createServiceEditorItem(name = "", facts = {}) {
 
   item
     .querySelector(".service-remove-btn")
-    .addEventListener("click", () => item.remove());
+    .addEventListener("click", () => {
+      item.remove();
+      markConfigDirty();
+    });
 
   return item;
 }
@@ -3092,6 +3156,195 @@ function collectServiceConfig() {
   }
 
   return services;
+}
+
+function slugifyPipelineStage(value = "") {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "etapa";
+}
+
+function normalizePipelineColor(value = "") {
+  const color = String(value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : "#64748b";
+}
+
+function normalizePipelineStages(stages = []) {
+  const source = Array.isArray(stages) && stages.length ? stages : DEFAULT_PIPELINE_STAGES;
+  const seenIds = new Set();
+  return source
+    .map((stage, index) => {
+      const baseId = slugifyPipelineStage(stage?.id || stage?.key || stage?.value || stage?.name || stage?.label);
+      let id = baseId;
+      let suffix = 2;
+      while (seenIds.has(id)) {
+        id = `${baseId}_${suffix}`;
+        suffix += 1;
+      }
+      seenIds.add(id);
+      const category = ["open", "won", "lost"].includes(stage?.category) ? stage.category : "open";
+      return {
+        id,
+        name: String(stage?.name || stage?.label || id).trim() || id,
+        color: normalizePipelineColor(stage?.color),
+        order: Number.isFinite(Number(stage?.order))
+          ? Number(stage.order)
+          : Number.isFinite(Number(stage?.position))
+            ? Number(stage.position) * 10
+            : (index + 1) * 10,
+        category,
+      };
+    })
+    .sort((a, b) => a.order - b.order);
+}
+
+function createPipelineStageItem(stage = {}, index = 0) {
+  const item = document.createElement("article");
+  item.className = "pipeline-stage-item";
+  item.dataset.stageId = slugifyPipelineStage(stage.id || stage.name || `etapa_${index + 1}`);
+  const category = ["open", "won", "lost"].includes(stage.category) ? stage.category : "open";
+  item.innerHTML = `
+    <label class="pipeline-color-field">
+      <span class="sr-only">Color de la etapa</span>
+      <input type="color" data-field="color" value="${escapeHtml(normalizePipelineColor(stage.color))}" title="Color de la etapa" />
+    </label>
+    <label>
+      <span class="sr-only">Nombre de la etapa</span>
+      <input type="text" data-field="name" value="${escapeHtml(stage.name || "")}" placeholder="Nombre de la etapa" required />
+    </label>
+    <label>
+      <span class="sr-only">Categoria de la etapa</span>
+      <select data-field="category" title="Categoria de la etapa">
+        <option value="open"${category === "open" ? " selected" : ""}>Abierta</option>
+        <option value="won"${category === "won" ? " selected" : ""}>Ganada</option>
+        <option value="lost"${category === "lost" ? " selected" : ""}>Perdida</option>
+      </select>
+    </label>
+    <label>
+      <span class="sr-only">Orden de la etapa</span>
+      <input type="number" data-field="order" min="0" step="10" value="${escapeHtml(stage.order ?? (index + 1) * 10)}" title="Orden de la etapa" />
+    </label>
+    <div class="pipeline-stage-actions">
+      <button type="button" class="pipeline-stage-move" data-direction="up" aria-label="Mover etapa arriba">↑</button>
+      <button type="button" class="pipeline-stage-move" data-direction="down" aria-label="Mover etapa abajo">↓</button>
+      <button type="button" class="pipeline-stage-remove" aria-label="Eliminar etapa">Quitar</button>
+    </div>
+  `;
+
+  item.querySelectorAll("input, select").forEach((control) => {
+    control.addEventListener("input", markConfigDirty);
+    control.addEventListener("change", markConfigDirty);
+  });
+  item.querySelector(".pipeline-stage-remove")?.addEventListener("click", () => {
+    const total = el.configPipelineStagesList?.querySelectorAll(".pipeline-stage-item").length || 0;
+    if (total <= 1) {
+      setStatus(el.configPipelineStatus, "El pipeline necesita al menos una etapa.", "error");
+      return;
+    }
+    item.remove();
+    markConfigDirty();
+    setStatus(el.configPipelineStatus, "Etapa eliminada. Guarda para aplicar el cambio.");
+  });
+  item.querySelectorAll(".pipeline-stage-move").forEach((button) => {
+    button.addEventListener("click", () => {
+      const direction = button.dataset.direction;
+      const sibling = direction === "up" ? item.previousElementSibling : item.nextElementSibling;
+      if (!sibling) return;
+      if (direction === "up") {
+        item.parentElement?.insertBefore(item, sibling);
+      } else {
+        item.parentElement?.insertBefore(sibling, item);
+      }
+      [...(el.configPipelineStagesList?.querySelectorAll(".pipeline-stage-item") || [])].forEach(
+        (row, rowIndex) => {
+          const orderInput = row.querySelector('[data-field="order"]');
+          if (orderInput) orderInput.value = String((rowIndex + 1) * 10);
+        }
+      );
+      markConfigDirty();
+    });
+  });
+  return item;
+}
+
+function renderPipelineStages(stages = []) {
+  if (!el.configPipelineStagesList) return;
+  const normalized = normalizePipelineStages(stages);
+  el.configPipelineStagesList.replaceChildren(
+    ...normalized.map((stage, index) => createPipelineStageItem(stage, index))
+  );
+  syncCrmStatusOptions(normalized);
+}
+
+function collectPipelineStages() {
+  const rows = [...(el.configPipelineStagesList?.querySelectorAll(".pipeline-stage-item") || [])];
+  const seenIds = new Set();
+  return rows.map((row, index) => {
+    const value = (field) => String(row.querySelector(`[data-field="${field}"]`)?.value || "").trim();
+    const name = value("name") || `Etapa ${index + 1}`;
+    const preferredId = slugifyPipelineStage(row.dataset.stageId || name);
+    let id = preferredId;
+    let suffix = 2;
+    while (seenIds.has(id)) {
+      id = `${preferredId}_${suffix}`;
+      suffix += 1;
+    }
+    seenIds.add(id);
+    row.dataset.stageId = id;
+    return {
+      key: id,
+      label: name,
+      color: normalizePipelineColor(value("color")),
+      position: Number.isFinite(Number(value("order"))) ? Number(value("order")) : (index + 1) * 10,
+      category: ["open", "won", "lost"].includes(value("category")) ? value("category") : "open",
+      is_active: true,
+    };
+  }).sort((a, b) => a.position - b.position).map((stage, index, stages) => ({
+    ...stage,
+    position: index,
+    is_default: stage.category === "open" && !stages.slice(0, index).some((item) => item.category === "open"),
+  }));
+}
+
+function getPipelineValidationError(stages = collectPipelineStages()) {
+  if (!stages.length) return "El pipeline necesita al menos una etapa.";
+  if (stages.some((stage) => !String(stage.label || "").trim())) {
+    return "Todas las etapas del pipeline necesitan un nombre.";
+  }
+  const categories = new Set(stages.map((stage) => stage.category));
+  if (!categories.has("open")) return "Añade al menos una etapa abierta.";
+  if (!categories.has("won")) return "Añade una etapa con categoria Ganada.";
+  if (!categories.has("lost")) return "Añade una etapa con categoria Perdida.";
+  return "";
+}
+
+function syncCrmStatusOptions(stages = [], selectedValue = el.crmStatus?.value || "") {
+  if (!el.crmStatus) return;
+  const normalized = normalizePipelineStages(stages);
+  const selectedExists = normalized.some((stage) => stage.id === selectedValue);
+  const options = normalized.map((stage) => {
+    const option = document.createElement("option");
+    option.value = stage.id;
+    option.textContent = stage.name;
+    option.dataset.category = stage.category;
+    option.dataset.color = stage.color;
+    return option;
+  });
+  if (selectedValue && !selectedExists) {
+    const legacyOption = document.createElement("option");
+    legacyOption.value = selectedValue;
+    legacyOption.textContent = `${selectedValue} (estado anterior)`;
+    legacyOption.dataset.category = "open";
+    options.push(legacyOption);
+  }
+  el.crmStatus.replaceChildren(...options);
+  el.crmStatus.value = selectedValue && options.some((option) => option.value === selectedValue)
+    ? selectedValue
+    : normalized[0]?.id || "";
 }
 
 function parseMultilineUrls(value = "") {
@@ -3862,6 +4115,7 @@ function applySectorPreset(presetKey) {
   state.appConfig = nextConfig;
   state.suggestedSectorPresetKey = presetKey;
       renderConfig();
+      markConfigDirty();
       state.suggestedSectorPresetKey = inferSectorPresetKey(buildConfigPayload());
       renderSectorPresets();
   setStatus(
@@ -3986,6 +4240,7 @@ async function applyIndustryPreset() {
     });
     state.appConfig = data.config || state.appConfig;
     state.configTouchedAfterPublish = false;
+    state.configDirty = false;
     renderConfig();
     setConfigTab("sales_system");
     setStatus(el.configIndustryPresetStatus, "Preset aplicado. Revisa campos, acciones y plantillas antes de publicar.", "ok");
@@ -4660,6 +4915,7 @@ async function runSalesSystemScenarios() {
 
 function buildConfigPayload() {
   const services = collectServiceConfig();
+  const pipelineStages = collectPipelineStages();
   const qualificationFromBuilder = collectQualificationBuilder();
   const qualification_schema = qualificationFromBuilder.length
     ? qualificationFromBuilder
@@ -4727,6 +4983,10 @@ function buildConfigPayload() {
   return {
     product: {
       mode: el.configProductMode?.value || "full_crm",
+    },
+    pipeline: {
+      ...(state.appConfig?.pipeline || {}),
+      stages: pipelineStages,
     },
     brand: {
       name: el.configBrandName.value,
@@ -4822,6 +5082,12 @@ async function publishAgentConfig() {
   if (!el.configPublishAgentBtn) return;
 
   const payload = buildConfigPayload();
+  const pipelineError = getPipelineValidationError(payload.pipeline?.stages || []);
+  if (pipelineError) {
+    setStatus(el.configPipelineStatus, pipelineError, "error");
+    setStatus(el.configPublishAgentStatus, pipelineError, "error");
+    return;
+  }
   const readiness = buildReadinessPayload(payload);
   renderSetupHealth(payload);
 
@@ -4847,6 +5113,7 @@ async function publishAgentConfig() {
 
     state.appConfig = data.config || null;
     state.configTouchedAfterPublish = false;
+    state.configDirty = false;
     renderConfig();
     renderAccounts();
     const publishedAt = data.deployment?.published_at
@@ -4875,6 +5142,7 @@ async function importKnowledgeSpreadsheetFile(file) {
   });
 
   el.configKnowledgeSpreadsheetData.value = text.trim();
+  markConfigDirty();
   updateKnowledgeUiHints();
   setStatus(
     el.configSaveStatus,
@@ -4895,6 +5163,7 @@ function mergeSuggestedServicesIntoEditor(nextServices = {}) {
   }
 
   renderServiceEditor(merged);
+  markConfigDirty();
   return Object.keys(nextServices).length;
 }
 
@@ -5321,20 +5590,26 @@ function renderLeadTable() {
   state.leadPage = safePage;
 
   for (const lead of pageItems) {
+    const pipelineStage = normalizePipelineStages(state.appConfig?.pipeline?.stages || []).find(
+      (stage) => stage.id === String(lead.crm_status || "nuevo")
+    );
+    const stageStyle = pipelineStage
+      ? ` style="--stage-color:${normalizePipelineColor(pipelineStage.color)}" data-stage-category="${pipelineStage.category}"`
+      : "";
     const row = document.createElement("tr");
     row.className = `lead-row${state.selectedLead?.id === lead.id ? " active" : ""}`;
     row.innerHTML = `
       <td class="lead-check-col" data-label="Seleccion">
         <input type="checkbox" class="lead-row-checkbox" ${isLeadSelected(lead.id) ? "checked" : ""} />
       </td>
-      <td data-label="Nombre de lead"><button type="button" class="lead-name-btn">${getLeadDisplayName(lead)}</button></td>
-      <td data-label="Servicio">${lead.interest_service || "-"}</td>
-      <td data-label="Presupuesto">${lead.budget_range || "-"}</td>
-      <td data-label="Canal">${lead.channel || "web"}</td>
-      <td data-label="Telefono">${lead.phone || "-"}</td>
-      <td data-label="Email">${lead.email || "-"}</td>
-      <td data-label="Fecha">${fmtDate(lead.last_message?.created_at || lead.created_at)}</td>
-      <td data-label="Status"><span class="status-pill">${lead.crm_status || "nuevo"}</span></td>
+      <td data-label="Nombre de lead"><button type="button" class="lead-name-btn">${escapeHtml(getLeadDisplayName(lead))}</button></td>
+      <td data-label="Servicio">${escapeHtml(lead.interest_service || "-")}</td>
+      <td data-label="Presupuesto">${escapeHtml(lead.budget_range || "-")}</td>
+      <td data-label="Canal">${escapeHtml(lead.channel || "web")}</td>
+      <td data-label="Telefono">${escapeHtml(lead.phone || "-")}</td>
+      <td data-label="Email">${escapeHtml(lead.email || "-")}</td>
+      <td data-label="Fecha">${escapeHtml(fmtDate(lead.last_message?.created_at || lead.created_at))}</td>
+      <td data-label="Status"><span class="status-pill${pipelineStage ? " is-pipeline-stage" : ""}"${stageStyle}>${escapeHtml(pipelineStage?.name || lead.crm_status || "nuevo")}</span></td>
     `;
     row.addEventListener("click", () => selectLead(lead.id));
     row.querySelector(".lead-name-btn")?.addEventListener("click", (event) => {
@@ -5359,12 +5634,12 @@ function renderLeadTable() {
       <summary>
         <div class="lead-mobile-summary">
           <div class="lead-mobile-main">
-            <strong>${getLeadDisplayName(lead)}</strong>
-            <span>${lead.interest_service || "Sin servicio"}</span>
+            <strong>${escapeHtml(getLeadDisplayName(lead))}</strong>
+            <span>${escapeHtml(lead.interest_service || "Sin servicio")}</span>
           </div>
           <div class="lead-mobile-meta-top">
-            <span class="status-pill">${lead.crm_status || "nuevo"}</span>
-            <time>${fmtDate(lead.last_message?.created_at || lead.created_at)}</time>
+            <span class="status-pill${pipelineStage ? " is-pipeline-stage" : ""}"${stageStyle}>${escapeHtml(pipelineStage?.name || lead.crm_status || "nuevo")}</span>
+            <time>${escapeHtml(fmtDate(lead.last_message?.created_at || lead.created_at))}</time>
           </div>
         </div>
       </summary>
@@ -5373,10 +5648,10 @@ function renderLeadTable() {
           <input type="checkbox" class="lead-mobile-checkbox" ${isLeadSelected(lead.id) ? "checked" : ""} />
           <span>Seleccionar para borrado masivo</span>
         </label>
-        <div><span>Canal</span><strong>${lead.channel || "web"}</strong></div>
-        <div><span>Presupuesto</span><strong>${lead.budget_range || "-"}</strong></div>
-        <div><span>Telefono</span><strong>${lead.phone || "-"}</strong></div>
-        <div><span>Email</span><strong>${lead.email || "-"}</strong></div>
+        <div><span>Canal</span><strong>${escapeHtml(lead.channel || "web")}</strong></div>
+        <div><span>Presupuesto</span><strong>${escapeHtml(lead.budget_range || "-")}</strong></div>
+        <div><span>Telefono</span><strong>${escapeHtml(lead.phone || "-")}</strong></div>
+        <div><span>Email</span><strong>${escapeHtml(lead.email || "-")}</strong></div>
         <button type="button" class="lead-mobile-open-btn">Abrir lead</button>
       </div>
     `;
@@ -5416,6 +5691,9 @@ function renderLeadDetail() {
     el.leadChannel.textContent = "-";
     el.leadMeta.innerHTML = "";
     el.messageList.innerHTML = '<div class="empty">Selecciona una conversacion.</div>';
+    if (el.conversationAiStatus) el.conversationAiStatus.textContent = "Sin conversacion";
+    if (el.conversationTakeoverBtn) el.conversationTakeoverBtn.disabled = true;
+    if (el.conversationResumeAiBtn) el.conversationResumeAiBtn.disabled = true;
     renderQuote(null);
     renderAnalysis(null);
     if (el.deleteLeadBtn) {
@@ -5427,6 +5705,17 @@ function renderLeadDetail() {
 
   el.leadTitle.textContent = getLeadDisplayName(lead);
   el.leadChannel.textContent = lead.channel || "web";
+  const aiPaused = lead.ai_status === "paused";
+  if (el.conversationAiStatus) {
+    el.conversationAiStatus.textContent = aiPaused ? "En manos del equipo" : "IA activa";
+    el.conversationAiStatus.classList.toggle("is-human", aiPaused);
+  }
+  if (el.conversationTakeoverBtn) {
+    el.conversationTakeoverBtn.disabled = aiPaused || !lead.conversation_id;
+  }
+  if (el.conversationResumeAiBtn) {
+    el.conversationResumeAiBtn.disabled = !aiPaused || !lead.conversation_id;
+  }
   const customMeta = formatCustomFields(
     lead.custom_fields || {},
     state.appConfig?.lead_capture?.custom_fields || []
@@ -5438,18 +5727,18 @@ function renderLeadDetail() {
     )
     .join("");
   el.leadMeta.innerHTML = `
-    <div class="meta-box"><strong>Servicio</strong>${lead.interest_service || "-"}</div>
-    <div class="meta-box"><strong>Presupuesto</strong>${lead.budget_range || "-"}</div>
-    <div class="meta-box"><strong>Urgencia</strong>${lead.urgency || "-"}</div>
-    <div class="meta-box"><strong>Email</strong>${lead.email || "-"}</div>
-    <div class="meta-box"><strong>Telefono</strong>${lead.phone || "-"}</div>
-    <div class="meta-box"><strong>Actividad</strong>${lead.business_activity || "-"}</div>
-    <div class="meta-box"><strong>Origen</strong>${lead.source_platform || "-"}</div>
-    <div class="meta-box"><strong>Campaña</strong>${lead.source_campaign || "-"}</div>
+    <div class="meta-box"><strong>Servicio</strong>${escapeHtml(lead.interest_service || "-")}</div>
+    <div class="meta-box"><strong>Presupuesto</strong>${escapeHtml(lead.budget_range || "-")}</div>
+    <div class="meta-box"><strong>Urgencia</strong>${escapeHtml(lead.urgency || "-")}</div>
+    <div class="meta-box"><strong>Email</strong>${escapeHtml(lead.email || "-")}</div>
+    <div class="meta-box"><strong>Telefono</strong>${escapeHtml(lead.phone || "-")}</div>
+    <div class="meta-box"><strong>Actividad</strong>${escapeHtml(lead.business_activity || "-")}</div>
+    <div class="meta-box"><strong>Origen</strong>${escapeHtml(lead.source_platform || "-")}</div>
+    <div class="meta-box"><strong>Campaña</strong>${escapeHtml(lead.source_campaign || "-")}</div>
     ${customMetaHtml}
   `;
 
-  el.crmStatus.value = lead.crm_status || "nuevo";
+  syncCrmStatusOptions(state.appConfig?.pipeline?.stages || [], lead.crm_status || "nuevo");
   el.quoteStatus.value = lead.quote_status || "sin_presupuesto";
   el.leadName.value = lead.name || "";
   el.leadEmail.value = lead.email || "";
@@ -5486,8 +5775,8 @@ function renderBreakdown(target, rows = []) {
     .map(
       (row) => `
         <div class="analytics-breakdown-row">
-          <span>${row.label || "-"}</span>
-          <strong>${row.value ?? 0}</strong>
+          <span>${escapeHtml(row.label || "-")}</span>
+          <strong>${escapeHtml(row.value ?? 0)}</strong>
         </div>
       `
     )
@@ -5508,13 +5797,13 @@ function renderServicePerformance(rows = []) {
       (row) => `
         <article class="analytics-service-card">
           <div class="analytics-service-head">
-            <strong>${row.label || "-"}</strong>
-            <span>${row.acceptance_rate ?? 0}% aceptacion</span>
+            <strong>${escapeHtml(row.label || "-")}</strong>
+            <span>${escapeHtml(row.acceptance_rate ?? 0)}% aceptacion</span>
           </div>
           <div class="analytics-service-metrics">
-            <div><span>Leads</span><strong>${row.leads ?? 0}</strong></div>
-            <div><span>Enviadas</span><strong>${row.quotes_sent ?? 0}</strong></div>
-            <div><span>Aceptadas</span><strong>${row.quotes_accepted ?? 0}</strong></div>
+            <div><span>Leads</span><strong>${escapeHtml(row.leads ?? 0)}</strong></div>
+            <div><span>Enviadas</span><strong>${escapeHtml(row.quotes_sent ?? 0)}</strong></div>
+            <div><span>Aceptadas</span><strong>${escapeHtml(row.quotes_accepted ?? 0)}</strong></div>
           </div>
         </article>
       `
@@ -5530,56 +5819,60 @@ function renderTimeline(rows = []) {
     return;
   }
 
+  const metric = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
   const maxValue = Math.max(
-    ...rows.flatMap((row) => [row.leads || 0, row.quotes_sent || 0, row.quotes_accepted || 0]),
+    ...rows.flatMap((row) => [metric(row.leads), metric(row.quotes_sent), metric(row.quotes_accepted)]),
     1
   );
 
   const totals = rows.reduce(
     (acc, row) => {
-      acc.leads += row.leads || 0;
-      acc.sent += row.quotes_sent || 0;
-      acc.accepted += row.quotes_accepted || 0;
+      acc.leads += metric(row.leads);
+      acc.sent += metric(row.quotes_sent);
+      acc.accepted += metric(row.quotes_accepted);
       return acc;
     },
     { leads: 0, sent: 0, accepted: 0 }
   );
 
   const activeDays = rows.filter(
-    (row) => (row.leads || 0) > 0 || (row.quotes_sent || 0) > 0 || (row.quotes_accepted || 0) > 0
+    (row) => metric(row.leads) > 0 || metric(row.quotes_sent) > 0 || metric(row.quotes_accepted) > 0
   ).length;
   const averageLeads = rows.length ? (totals.leads / rows.length).toFixed(1) : "0.0";
   const topDay = rows.reduce((best, row) => {
-    const currentScore = (row.leads || 0) + (row.quotes_sent || 0) + (row.quotes_accepted || 0);
+    const currentScore = metric(row.leads) + metric(row.quotes_sent) + metric(row.quotes_accepted);
     const bestScore =
-      (best?.leads || 0) + (best?.quotes_sent || 0) + (best?.quotes_accepted || 0);
+      metric(best?.leads) + metric(best?.quotes_sent) + metric(best?.quotes_accepted);
     return currentScore > bestScore ? row : best;
   }, rows[0]);
 
   const dailyRows = rows
     .map((row) => {
-      const leadPct = Math.max(8, Math.round(((row.leads || 0) / maxValue) * 100));
-      const sentPct = Math.max(8, Math.round(((row.quotes_sent || 0) / maxValue) * 100));
-      const acceptedPct = Math.max(8, Math.round(((row.quotes_accepted || 0) / maxValue) * 100));
+      const leadValue = metric(row.leads);
+      const sentValue = metric(row.quotes_sent);
+      const acceptedValue = metric(row.quotes_accepted);
+      const leadPct = Math.max(8, Math.round((leadValue / maxValue) * 100));
+      const sentPct = Math.max(8, Math.round((sentValue / maxValue) * 100));
+      const acceptedPct = Math.max(8, Math.round((acceptedValue / maxValue) * 100));
 
       return `
         <article class="timeline-row">
-          <div class="timeline-date">${row.date}</div>
+          <div class="timeline-date">${escapeHtml(row.date)}</div>
           <div class="timeline-metrics">
             <div class="timeline-bar-group">
               <span>Leads</span>
               <div class="timeline-bar"><i style="width:${leadPct}%"></i></div>
-              <strong>${row.leads || 0}</strong>
+              <strong>${leadValue}</strong>
             </div>
             <div class="timeline-bar-group">
               <span>Enviadas</span>
               <div class="timeline-bar secondary"><i style="width:${sentPct}%"></i></div>
-              <strong>${row.quotes_sent || 0}</strong>
+              <strong>${sentValue}</strong>
             </div>
             <div class="timeline-bar-group">
               <span>Aceptadas</span>
               <div class="timeline-bar success"><i style="width:${acceptedPct}%"></i></div>
-              <strong>${row.quotes_accepted || 0}</strong>
+              <strong>${acceptedValue}</strong>
             </div>
           </div>
         </article>
@@ -5592,20 +5885,20 @@ function renderTimeline(rows = []) {
       <div class="timeline-overview-copy">
         <span class="timeline-overview-kicker">Resumen ejecutivo</span>
         <h5>Lectura global del periodo</h5>
-        <p>${activeDays} dias con movimiento. Mejor pico: <strong>${topDay?.date || "-"}</strong>. Media diaria de leads: <strong>${averageLeads}</strong>.</p>
+        <p>${escapeHtml(activeDays)} dias con movimiento. Mejor pico: <strong>${escapeHtml(topDay?.date || "-")}</strong>. Media diaria de leads: <strong>${escapeHtml(averageLeads)}</strong>.</p>
       </div>
       <div class="timeline-overview-stats">
         <article class="timeline-overview-stat">
           <span>Leads del periodo</span>
-          <strong>${totals.leads}</strong>
+          <strong>${escapeHtml(totals.leads)}</strong>
         </article>
         <article class="timeline-overview-stat">
           <span>Propuestas enviadas</span>
-          <strong>${totals.sent}</strong>
+          <strong>${escapeHtml(totals.sent)}</strong>
         </article>
         <article class="timeline-overview-stat">
           <span>Propuestas aceptadas</span>
-          <strong>${totals.accepted}</strong>
+          <strong>${escapeHtml(totals.accepted)}</strong>
         </article>
       </div>
     </div>
@@ -5789,8 +6082,7 @@ function renderConfig() {
   if (el.configWidgetSnippet) {
     el.configWidgetSnippet.value = widgetInstall.snippet;
   }
-  el.configWhatsappProvider.value =
-    config?.integrations?.whatsapp?.provider || "meta_cloud";
+  el.configWhatsappProvider.value = "meta_cloud";
   if (el.configWhatsappSetupOwner) {
     el.configWhatsappSetupOwner.value =
       config?.integrations?.whatsapp?.setup_owner || "tmedia";
@@ -5977,6 +6269,7 @@ function renderConfig() {
       analysisDeliverables.human_button_label || "Hablar con una persona";
   }
   renderAutomationFlows(config?.automation_flows || {});
+  renderPipelineStages(config?.pipeline?.stages || []);
   renderServiceEditor(config?.offers || config?.services || {});
   if (!canAccessSalesWorkspace()) {
     setMainView("config");
@@ -5988,27 +6281,55 @@ function renderConfig() {
 }
 
 function setConfigTab(tabName) {
+  if (
+    state.currentConfigTab &&
+    state.currentConfigTab !== tabName &&
+    !confirmConfigNavigation("Hay cambios sin guardar en la configuracion. ¿Cambiar de seccion de todos modos?")
+  ) {
+    return false;
+  }
   const isGeneral = tabName === "general";
   const isSalesSystem = tabName === "sales_system";
+  const isPipeline = tabName === "pipeline";
   const isKnowledge = tabName === "knowledge";
   const isMessages = tabName === "messages";
   const isAutomations = tabName === "automations";
   const isIntegrations = tabName === "integrations";
   const isWebsite = tabName === "website";
-  el.configTabGeneral.classList.toggle("is-active", isGeneral);
-  el.configTabSalesSystem?.classList.toggle("is-active", isSalesSystem);
-  el.configTabKnowledge?.classList.toggle("is-active", isKnowledge);
-  el.configTabMessages.classList.toggle("is-active", isMessages);
-  el.configTabAutomations.classList.toggle("is-active", isAutomations);
-  el.configTabIntegrations.classList.toggle("is-active", isIntegrations);
-  el.configTabWebsite.classList.toggle("is-active", isWebsite);
-  el.configPanelGeneral.classList.toggle("is-active", isGeneral);
-  el.configPanelSalesSystem?.classList.toggle("is-active", isSalesSystem);
-  el.configPanelKnowledge?.classList.toggle("is-active", isKnowledge);
-  el.configPanelMessages.classList.toggle("is-active", isMessages);
-  el.configPanelAutomations.classList.toggle("is-active", isAutomations);
-  el.configPanelIntegrations.classList.toggle("is-active", isIntegrations);
-  el.configPanelWebsite.classList.toggle("is-active", isWebsite);
+  const tabs = [
+    [el.configTabGeneral, isGeneral],
+    [el.configTabSalesSystem, isSalesSystem],
+    [el.configTabPipeline, isPipeline],
+    [el.configTabKnowledge, isKnowledge],
+    [el.configTabMessages, isMessages],
+    [el.configTabAutomations, isAutomations],
+    [el.configTabIntegrations, isIntegrations],
+    [el.configTabWebsite, isWebsite],
+  ];
+  const panels = [
+    [el.configPanelGeneral, isGeneral],
+    [el.configPanelSalesSystem, isSalesSystem],
+    [el.configPanelPipeline, isPipeline],
+    [el.configPanelKnowledge, isKnowledge],
+    [el.configPanelMessages, isMessages],
+    [el.configPanelAutomations, isAutomations],
+    [el.configPanelIntegrations, isIntegrations],
+    [el.configPanelWebsite, isWebsite],
+  ];
+
+  tabs.forEach(([tab, active]) => {
+    if (!tab) return;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", String(active));
+    tab.tabIndex = active ? 0 : -1;
+  });
+  panels.forEach(([panel, active]) => {
+    if (!panel) return;
+    panel.classList.toggle("is-active", active);
+    panel.hidden = !active;
+  });
+  state.currentConfigTab = tabName;
+  return true;
 }
 
 function renderMessages(messages = []) {
@@ -6021,12 +6342,15 @@ function renderMessages(messages = []) {
 
   for (const msg of messages) {
     const item = document.createElement("div");
-    item.className = `message-item ${msg.role}`;
-    item.innerHTML = `
-      <strong>${msg.role}</strong>
-      <div>${msg.content}</div>
-      <time>${fmtDate(msg.created_at)}</time>
-    `;
+    const safeRole = ["assistant", "user", "system"].includes(msg?.role) ? msg.role : "system";
+    item.className = `message-item ${safeRole}`;
+    const role = document.createElement("strong");
+    role.textContent = safeRole;
+    const content = document.createElement("div");
+    content.textContent = String(msg?.content || "");
+    const time = document.createElement("time");
+    time.textContent = fmtDate(msg?.created_at);
+    item.append(role, content, time);
     el.messageList.appendChild(item);
   }
 }
@@ -6049,6 +6373,200 @@ function renderAnalysisList(target, rows = []) {
       )}</li>`;
     })
       .join("");
+}
+
+function renderWhatsappChannel(channel = null, { unavailable = false } = {}) {
+  const configured = Boolean(channel?.configured);
+  state.whatsappChannel = channel;
+
+  if (el.configWhatsappRealStatus) {
+    el.configWhatsappRealStatus.textContent = unavailable
+      ? "No disponible"
+      : configured
+        ? "Conectado"
+        : "Sin conectar";
+    el.configWhatsappRealStatus.dataset.tone = unavailable ? "warning" : configured ? "ok" : "pending";
+  }
+  if (el.configWhatsappStatusBadge) {
+    el.configWhatsappStatusBadge.textContent = unavailable
+      ? "No disponible"
+      : configured
+        ? "Conectado real"
+        : "Pendiente";
+    el.configWhatsappStatusBadge.dataset.tone = unavailable ? "warning" : configured ? "ok" : "pending";
+  }
+  if (el.configWhatsappVerifiedName) {
+    el.configWhatsappVerifiedName.value = channel?.verified_name || "";
+  }
+  if (el.configWhatsappDisplayPhone) {
+    el.configWhatsappDisplayPhone.value = channel?.display_phone_number || "";
+  }
+  if (el.configWhatsappPhoneNumberId) {
+    el.configWhatsappPhoneNumberId.value = channel?.phone_number_id || "";
+  }
+  if (el.configWhatsappBusinessAccountId) {
+    el.configWhatsappBusinessAccountId.value = channel?.waba_id || "";
+  }
+  if (el.configWhatsappAccessToken) {
+    el.configWhatsappAccessToken.value = "";
+    el.configWhatsappAccessToken.placeholder = configured
+      ? "Dejalo vacio para conservar el token"
+      : "Pega el token permanente de Meta";
+  }
+  if (el.configWhatsappTokenMasked) {
+    el.configWhatsappTokenMasked.value = channel?.access_token_masked || "Sin token";
+  }
+  if (el.configDisconnectWhatsappChannelBtn) {
+    el.configDisconnectWhatsappChannelBtn.disabled = !configured;
+  }
+  if (el.configTestWhatsappChannelBtn) {
+    el.configTestWhatsappChannelBtn.disabled = !configured;
+  }
+  if (el.configWhatsappValidationMessage && !unavailable) {
+    el.configWhatsappValidationMessage.textContent = configured
+      ? `Canal real activo${channel?.display_phone_number ? `: ${channel.display_phone_number}` : "."}`
+      : "No hay un canal operativo guardado para esta cuenta.";
+  }
+}
+
+async function loadWhatsappChannel({ announce = false } = {}) {
+  if (el.configValidateWhatsappBtn) {
+    el.configValidateWhatsappBtn.disabled = true;
+    el.configValidateWhatsappBtn.classList.add("is-busy");
+  }
+  try {
+    const data = await fetchJson(`${API_BASE}/integrations/whatsapp/channel`);
+    renderWhatsappChannel(data.channel || null);
+    if (announce) {
+      setStatus(
+        el.configWhatsappChannelStatus,
+        data.channel?.configured
+          ? "Estado actualizado: el canal esta conectado."
+          : "Estado actualizado: todavia no hay un canal conectado.",
+        data.channel?.configured ? "ok" : "warning"
+      );
+    }
+    return data.channel || null;
+  } catch (error) {
+    renderWhatsappChannel(null, { unavailable: true });
+    setStatus(el.configWhatsappChannelStatus, `No se pudo cargar el canal: ${error.message}`, "error");
+    return null;
+  } finally {
+    if (el.configValidateWhatsappBtn) {
+      el.configValidateWhatsappBtn.disabled = false;
+      el.configValidateWhatsappBtn.classList.remove("is-busy");
+    }
+  }
+}
+
+async function saveWhatsappChannel() {
+  const phoneNumberId = String(el.configWhatsappPhoneNumberId?.value || "").trim();
+  const businessAccountId = String(el.configWhatsappBusinessAccountId?.value || "").trim();
+  const accessToken = String(el.configWhatsappAccessToken?.value || "").trim();
+  if (!phoneNumberId || !businessAccountId) {
+    setStatus(el.configWhatsappChannelStatus, "Phone Number ID y Business Account ID son obligatorios.", "error");
+    return;
+  }
+  if (!state.whatsappChannel?.configured && !accessToken) {
+    setStatus(el.configWhatsappChannelStatus, "Pega el access token de Meta para conectar el canal.", "error");
+    return;
+  }
+
+  el.configSaveWhatsappChannelBtn.disabled = true;
+  el.configSaveWhatsappChannelBtn.classList.add("is-busy");
+  setStatus(el.configWhatsappChannelStatus, "Guardando canal real de WhatsApp...");
+  try {
+    const payload = {
+      provider: "meta_cloud",
+      phone_number_id: phoneNumberId,
+      business_account_id: businessAccountId,
+      display_phone_number: String(el.configWhatsappDisplayPhone?.value || "").trim(),
+      verified_name: String(el.configWhatsappVerifiedName?.value || "").trim(),
+      token_label: "crm",
+    };
+    if (accessToken) payload.access_token = accessToken;
+    const data = await fetchJson(`${API_BASE}/integrations/whatsapp/channel`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    state.appConfig = data.config || state.appConfig;
+    renderWhatsappChannel(data.channel || null);
+    if (el.configPublicWhatsappNumber && data.config?.contact?.public_whatsapp_number) {
+      el.configPublicWhatsappNumber.value = data.config.contact.public_whatsapp_number;
+    }
+    if (el.configWhatsappStatusLabel) el.configWhatsappStatusLabel.value = "Conectado";
+    renderIntegrationsOverview(state.appConfig || {});
+    setStatus(el.configWhatsappChannelStatus, "Canal conectado y guardado para esta cuenta.", "ok");
+  } catch (error) {
+    setStatus(el.configWhatsappChannelStatus, `No se pudo guardar el canal: ${error.message}`, "error");
+  } finally {
+    el.configSaveWhatsappChannelBtn.disabled = false;
+    el.configSaveWhatsappChannelBtn.classList.remove("is-busy");
+  }
+}
+
+async function testWhatsappChannel() {
+  el.configTestWhatsappChannelBtn.disabled = true;
+  el.configTestWhatsappChannelBtn.classList.add("is-busy");
+  setStatus(el.configWhatsappChannelStatus, "Validando credenciales con Meta...");
+  try {
+    const testTo = String(el.configWhatsappTestTo?.value || "").trim();
+    const data = await fetchJson(`${API_BASE}/integrations/whatsapp/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        test_to: testTo,
+        message: "Prueba de conexion WhatsApp completada correctamente.",
+      }),
+    });
+    const channel = {
+      ...(state.whatsappChannel || {}),
+      ...(data.channel || {}),
+      configured: true,
+    };
+    renderWhatsappChannel(channel);
+    const delivered = data.provider_message_id
+      ? ` Mensaje enviado (${data.provider_message_id}).`
+      : " Credenciales validadas sin enviar mensaje.";
+    setStatus(el.configWhatsappChannelStatus, `Conexion correcta con Meta.${delivered}`, "ok");
+    if (el.configWhatsappLastValidated) {
+      el.configWhatsappLastValidated.textContent = `Ultima validacion: ${new Date().toLocaleString("es-ES")}`;
+    }
+  } catch (error) {
+    setStatus(el.configWhatsappChannelStatus, `La prueba ha fallado: ${error.message}`, "error");
+  } finally {
+    el.configTestWhatsappChannelBtn.disabled = !state.whatsappChannel?.configured;
+    el.configTestWhatsappChannelBtn.classList.remove("is-busy");
+  }
+}
+
+async function disconnectWhatsappChannel() {
+  if (!state.whatsappChannel?.configured) return;
+  if (!window.confirm("¿Desconectar el canal de WhatsApp de esta cuenta? Los mensajes dejaran de procesarse.")) return;
+
+  el.configDisconnectWhatsappChannelBtn.disabled = true;
+  el.configDisconnectWhatsappChannelBtn.classList.add("is-busy");
+  setStatus(el.configWhatsappChannelStatus, "Desconectando canal...");
+  try {
+    await fetchJson(`${API_BASE}/integrations/whatsapp/channel`, { method: "DELETE" });
+    if (state.appConfig?.integrations?.whatsapp) {
+      state.appConfig.integrations.whatsapp = {
+        ...state.appConfig.integrations.whatsapp,
+        phone_number_id: "",
+        business_account_id: "",
+        status_label: "Desconectado",
+      };
+    }
+    renderWhatsappChannel(null);
+    renderIntegrationsOverview(state.appConfig || {});
+    setStatus(el.configWhatsappChannelStatus, "Canal desconectado. No se ha mostrado ni expuesto el token.", "ok");
+  } catch (error) {
+    setStatus(el.configWhatsappChannelStatus, `No se pudo desconectar: ${error.message}`, "error");
+    el.configDisconnectWhatsappChannelBtn.disabled = false;
+  } finally {
+    el.configDisconnectWhatsappChannelBtn.classList.remove("is-busy");
+  }
 }
 
 function buildWhatsappGuide(config = state.appConfig || {}) {
@@ -6887,6 +7405,7 @@ async function loadConfig() {
   const data = await fetchJson(`${API_BASE}/config`);
   state.appConfig = data.config || null;
   state.configTouchedAfterPublish = false;
+  state.configDirty = false;
   if (data.account?.id) {
     state.activeAccountId = data.account.id;
   }
@@ -6908,6 +7427,26 @@ async function loadAnalytics() {
 async function loadMessages(conversationId) {
   const data = await fetchJson(`${API_BASE}/conversations/${conversationId}/messages`);
   renderMessages(data.messages || []);
+}
+
+async function updateConversationControl(aiStatus) {
+  const lead = state.selectedLead;
+  if (!lead?.conversation_id) return;
+  const data = await fetchJson(`${API_BASE}/conversations/${lead.conversation_id}/state`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ai_status: aiStatus,
+      inbox_status: aiStatus === "paused" ? "open" : "pending",
+      assigned_to:
+        aiStatus === "paused"
+          ? state.currentUser?.display_name || state.currentUser?.email || "Equipo"
+          : null,
+    }),
+  });
+  lead.ai_status = data.conversation?.ai_status || aiStatus;
+  lead.inbox_status = data.conversation?.inbox_status || lead.inbox_status;
+  renderLeadDetail();
 }
 
 async function loadQuote(leadId) {
@@ -6941,6 +7480,12 @@ async function selectLead(leadId) {
 }
 
 async function saveConfig() {
+  const pipelineError = getPipelineValidationError();
+  if (pipelineError) {
+    setStatus(el.configPipelineStatus, pipelineError, "error");
+    setStatus(el.configSaveStatus, `No se puede guardar: ${pipelineError}`, "error");
+    return;
+  }
   el.configSaveBtn.disabled = true;
   el.configSaveBtn.classList.add("is-busy");
   setStatus(el.configSaveStatus, "Guardando configuracion...");
@@ -6956,6 +7501,7 @@ async function saveConfig() {
 
     state.appConfig = data.config || null;
     state.configTouchedAfterPublish = false;
+    state.configDirty = false;
     renderConfig();
     highlightSuggestedKnowledgeFlow();
     highlightSuggestedKnowledgeFlow();
@@ -7042,6 +7588,7 @@ async function analyzeWebsiteConfig() {
       "ok"
     );
     setConfigTab("knowledge");
+    markConfigDirty();
     const nextStep = focusNextKnowledgeStep();
     setStatus(
       el.configAnalyzeStatus,
@@ -7303,6 +7850,7 @@ function suggestOnboardingSetup() {
 
   state.appConfig = nextConfig;
   renderConfig();
+  markConfigDirty();
   setStatus(
     el.configSuggestSetupStatus,
     "Setup inicial propuesto. Revisa Mensajes, Automatizaciones y el tono del agente antes de guardar.",
@@ -7753,15 +8301,15 @@ function renderQuoteItems() {
     row.innerHTML = `
       <label>
         Concepto
-        <input type="text" data-field="concept" data-index="${index}" value="${item.concept || ""}" />
+        <input type="text" data-field="concept" data-index="${index}" value="${escapeHtml(item.concept || "")}" />
       </label>
       <label>
         Cantidad
-        <input type="number" min="0" step="1" data-field="quantity" data-index="${index}" value="${item.quantity || 1}" />
+        <input type="number" min="0" step="1" data-field="quantity" data-index="${index}" value="${escapeHtml(item.quantity || 1)}" />
       </label>
       <label>
         Precio unitario
-        <input type="number" min="0" step="0.01" data-field="unit_price" data-index="${index}" value="${item.unit_price || 0}" />
+        <input type="number" min="0" step="0.01" data-field="unit_price" data-index="${index}" value="${escapeHtml(item.unit_price || 0)}" />
       </label>
       <button type="button" class="quote-item-remove" data-remove-index="${index}">Quitar</button>
     `;
@@ -8002,6 +8550,22 @@ async function copyToClipboard(value, successMessage, target = el.configWidgetIn
 
 el.saveBtn.addEventListener("click", saveLead);
 el.deleteLeadBtn?.addEventListener("click", deleteSelectedLead);
+el.conversationTakeoverBtn?.addEventListener("click", async () => {
+  try {
+    await updateConversationControl("paused");
+    setStatus(el.leadSaveStatus, "Conversacion asignada al equipo. La IA queda pausada.", "success");
+  } catch (error) {
+    setStatus(el.leadSaveStatus, error.message, "error");
+  }
+});
+el.conversationResumeAiBtn?.addEventListener("click", async () => {
+  try {
+    await updateConversationControl("active");
+    setStatus(el.leadSaveStatus, "IA reactivada para los proximos mensajes.", "success");
+  } catch (error) {
+    setStatus(el.leadSaveStatus, error.message, "error");
+  }
+});
 el.leadBulkDeleteBtn?.addEventListener("click", deleteSelectedLeadsBulk);
 el.leadSelectPageCheckbox?.addEventListener("change", (event) => {
   const { pageItems } = getCurrentLeadPageItems();
@@ -8018,6 +8582,18 @@ el.accountSelect?.addEventListener("change", () =>
 el.configSaveBtn.addEventListener("click", saveConfig);
 el.configAddServiceBtn.addEventListener("click", () => {
   el.configServicesList.appendChild(createServiceEditorItem());
+  markConfigDirty();
+});
+el.configAddPipelineStageBtn?.addEventListener("click", () => {
+  const index = el.configPipelineStagesList?.querySelectorAll(".pipeline-stage-item").length || 0;
+  el.configPipelineStagesList?.appendChild(
+    createPipelineStageItem(
+      { id: `etapa_${index + 1}`, name: "", color: "#64748b", order: (index + 1) * 10, category: "open" },
+      index
+    )
+  );
+  markConfigDirty();
+  el.configPipelineStagesList?.lastElementChild?.querySelector('[data-field="name"]')?.focus();
 });
 el.configSuggestServicesBtn?.addEventListener("click", suggestServicesFromSpreadsheet);
 el.configSuggestSetupBtn?.addEventListener("click", suggestOnboardingSetup);
@@ -8042,6 +8618,7 @@ el.configLogoFile.addEventListener("change", async (event) => {
 
     el.configLogoUrl.value = uploadedUrl;
     updateConfigLogoPreview(uploadedUrl);
+    markConfigDirty();
     setStatus(el.configSaveStatus, "Logo subido. Guarda la configuracion para aplicarlo.", "ok");
   } catch (error) {
     setStatus(el.configSaveStatus, error.message, "error");
@@ -8056,13 +8633,18 @@ el.configLogoClearBtn.addEventListener("click", () => {
     el.configLogoFile.value = "";
   }
   updateConfigLogoPreview("");
+  markConfigDirty();
   setStatus(el.configSaveStatus, "Logo eliminado de la configuracion actual.", "ok");
 });
 el.crmViewSalesBtn.addEventListener("click", () => setMainView("sales"));
 el.crmViewAdminBtn?.addEventListener("click", () => setMainView("admin"));
 el.crmViewConfigBtn.addEventListener("click", () => setMainView("config"));
 el.adminCreateAccountBtn?.addEventListener("click", createAdminAccount);
-el.logoutBtn?.addEventListener("click", logoutCrm);
+el.logoutBtn?.addEventListener("click", () => {
+  if (confirmConfigNavigation("Hay cambios de configuracion sin guardar. ¿Cerrar sesion de todos modos?")) {
+    logoutCrm();
+  }
+});
 el.configBackBtn?.addEventListener("click", () => setMainView("sales"));
 el.crmLoginForm?.addEventListener("submit", loginCrm);
 el.crmPasswordSetupForm?.addEventListener("submit", setupCrmPassword);
@@ -8084,9 +8666,10 @@ el.crmSalesLinks.forEach((link) =>
 );
 el.configAnalyzeWebsiteBtn.addEventListener("click", analyzeWebsiteConfig);
 el.configPreviewContextBtn?.addEventListener("click", previewKnowledgeContext);
-el.configValidateWhatsappBtn?.addEventListener("click", () =>
-  validateIntegration("whatsapp", el.configValidateWhatsappBtn)
-);
+el.configValidateWhatsappBtn?.addEventListener("click", () => loadWhatsappChannel({ announce: true }));
+el.configSaveWhatsappChannelBtn?.addEventListener("click", saveWhatsappChannel);
+el.configTestWhatsappChannelBtn?.addEventListener("click", testWhatsappChannel);
+el.configDisconnectWhatsappChannelBtn?.addEventListener("click", disconnectWhatsappChannel);
 el.configCopyWhatsappInstructionsBtn?.addEventListener("click", () => {
   copyToClipboard(
     el.configWhatsappInstructions?.value || "",
@@ -8176,11 +8759,32 @@ el.configAutomationWorkspaceUrl?.addEventListener("input", () => {
 });
 el.configTabGeneral.addEventListener("click", () => setConfigTab("general"));
 el.configTabSalesSystem?.addEventListener("click", () => setConfigTab("sales_system"));
+el.configTabPipeline?.addEventListener("click", () => setConfigTab("pipeline"));
 el.configTabKnowledge?.addEventListener("click", () => setConfigTab("knowledge"));
 el.configTabMessages?.addEventListener("click", () => setConfigTab("messages"));
 el.configTabAutomations?.addEventListener("click", () => setConfigTab("automations"));
 el.configTabIntegrations.addEventListener("click", () => setConfigTab("integrations"));
 el.configTabWebsite.addEventListener("click", () => setConfigTab("website"));
+el.configGoToServicesBtn?.addEventListener("click", () => {
+  if (setConfigTab("knowledge")) {
+    el.configKnowledgeStepServicesBtn?.focus();
+    document.getElementById("configKnowledgeStepServices")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+});
+document.querySelector(".config-tabs")?.addEventListener("keydown", (event) => {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const tabs = [...document.querySelectorAll('.config-tabs [role="tab"]')];
+  const currentIndex = tabs.indexOf(document.activeElement);
+  if (currentIndex < 0) return;
+  event.preventDefault();
+  const nextIndex = event.key === "Home"
+    ? 0
+    : event.key === "End"
+      ? tabs.length - 1
+      : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  const nextTab = tabs[nextIndex];
+  if (setConfigTab(nextTab.dataset.configTab)) nextTab.focus();
+});
 el.configProductMode?.addEventListener("change", () => {
   if (!el.configProductModeHint) return;
   updateProductModeUi({
@@ -8273,7 +8877,9 @@ el.configScenarioTests?.addEventListener("change", () => {
 });
 el.configRunScenariosBtn?.addEventListener("click", runSalesSystemScenarios);
 el.configPublishAgentBtn?.addEventListener("click", publishAgentConfig);
-el.configForm?.addEventListener("input", () => {
+el.configForm?.addEventListener("input", (event) => {
+  if (event.target?.closest?.('[data-config-runtime-control="true"]')) return;
+  markConfigDirty();
   state.lastScenarioRunSummary = null;
   state.configTouchedAfterPublish =
     String(state.appConfig?.deployment?.status || "").toLowerCase() === "published";
@@ -8284,7 +8890,9 @@ el.configForm?.addEventListener("input", () => {
     deployment: state.appConfig?.deployment || payload.deployment || {},
   });
 });
-el.configForm?.addEventListener("change", () => {
+el.configForm?.addEventListener("change", (event) => {
+  if (event.target?.closest?.('[data-config-runtime-control="true"]')) return;
+  markConfigDirty();
   state.lastScenarioRunSummary = null;
   state.configTouchedAfterPublish =
     String(state.appConfig?.deployment?.status || "").toLowerCase() === "published";
@@ -8413,6 +9021,33 @@ el.configCopyExternalPayloadBtn?.addEventListener("click", () => {
     el.configExternalLeadCopyStatus
   );
 });
+el.configKnowledgeSyncBtn?.addEventListener("click", async () => {
+  const urls = parseMultilineUrls(el.configKnowledgeWebsiteUrls?.value || "");
+  if (!urls.length) {
+    setStatus(el.configKnowledgeSyncStatus, "Añade al menos una URL pública.", "error");
+    return;
+  }
+  el.configKnowledgeSyncBtn.disabled = true;
+  setStatus(el.configKnowledgeSyncStatus, "Sincronizando y generando embeddings...");
+  try {
+    const result = await fetchJson(`${API_BASE}/knowledge/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ urls }),
+    });
+    const completed = (result.results || []).filter((item) => item.ok).length;
+    const failed = (result.results || []).length - completed;
+    setStatus(
+      el.configKnowledgeSyncStatus,
+      failed ? `${completed} fuentes sincronizadas; ${failed} requieren revisión.` : `${completed} fuentes sincronizadas.`,
+      failed ? "error" : "success"
+    );
+  } catch (error) {
+    setStatus(el.configKnowledgeSyncStatus, error.message, "error");
+  } finally {
+    el.configKnowledgeSyncBtn.disabled = false;
+  }
+});
 el.configExternalLeadType?.addEventListener("change", () => {
   renderExternalLeadIntegration(buildConfigPayload());
 });
@@ -8447,10 +9082,16 @@ el.quoteBillingType.addEventListener("change", () => {
   }
 });
 window.addEventListener("resize", syncMobileAdaptiveUi);
+window.addEventListener("beforeunload", (event) => {
+  if (!state.configDirty) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
 
 async function bootstrapCrm() {
   await loadAccounts();
   await Promise.all([loadLeads(), loadConfig(), loadAdminOverview(), loadIndustryPresets()]);
+  await loadWhatsappChannel();
   consumeEmailOauthRedirectStatus();
 }
 
@@ -8485,5 +9126,5 @@ async function startCrm() {
 startCrm().catch((error) => {
   setAuthenticatedUi(false);
   setStatus(el.crmAuthStatus, `No se pudo iniciar el CRM: ${error.message}`, "error");
-  el.leadTableBody.innerHTML = `<tr><td colspan="9" class="empty">Error cargando CRM: ${error.message}</td></tr>`;
+  el.leadTableBody.innerHTML = `<tr><td colspan="9" class="empty">Error cargando CRM: ${escapeHtml(error.message)}</td></tr>`;
 });

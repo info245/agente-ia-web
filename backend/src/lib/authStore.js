@@ -41,6 +41,10 @@ function normalizeUser(raw = {}) {
   };
 }
 
+function isActiveUser(raw = {}) {
+  return clean(raw.status).toLowerCase() === "active";
+}
+
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   const digest = crypto.scryptSync(String(password || ""), salt, 64).toString("hex");
   return `${salt}:${digest}`;
@@ -169,6 +173,9 @@ export async function setCrmUserPasswordFromToken(token, password) {
 
   if (error) throw error;
   if (!data) throw new Error("El enlace no es valido o ya se ha usado.");
+  if (clean(data.status).toLowerCase() === "disabled") {
+    throw new Error("El usuario esta deshabilitado.");
+  }
 
   const expiresAt = data.password_setup_expires_at
     ? new Date(data.password_setup_expires_at).getTime()
@@ -207,7 +214,7 @@ export async function getCrmUserById(userId) {
     .maybeSingle();
 
   if (error) throw error;
-  return data ? normalizeUser(data) : null;
+  return data && isActiveUser(data) ? normalizeUser(data) : null;
 }
 
 export async function verifyCrmUserCredentials(email, password) {
@@ -227,7 +234,7 @@ export async function verifyCrmUserCredentials(email, password) {
 
   if (error) throw error;
   if (!data) return null;
-  if (clean(data.status) && clean(data.status) !== "active") return null;
+  if (!isActiveUser(data)) return null;
   if (!verifyPassword(password, data.password_hash)) return null;
 
   return normalizeUser(data);
