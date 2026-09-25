@@ -454,12 +454,12 @@ export const DEFAULT_APP_CONFIG = {
     },
     "Diseño Web": {
       category: "web",
-      min_project_fee: "700 € + IVA",
+      min_project_fee: "500 €",
       url: "https://t-mediaglobal.com/diseno-web/",
       description:
         "Diseño y desarrollo de páginas web corporativas optimizadas para SEO, conversión y experiencia de usuario.",
       notes:
-        "El presupuesto mínimo para un proyecto de diseño web corporativo es de 700 € + IVA. El precio puede aumentar dependiendo de funcionalidades, número de páginas o integración de sistemas.",
+        "Los proyectos de diseño web publicados parten desde 500 €. El precio final depende de funcionalidades, número de páginas e integraciones.",
       conversion_goal: "request_quote",
     },
     "Consultoría Digital": {
@@ -499,12 +499,12 @@ export const DEFAULT_APP_CONFIG = {
         "Los paquetes publicados de redes sociales parten desde 150 € al mes. La inversión publicitaria se establece aparte según los objetivos del cliente.",
     },
     "Diseño Web": {
-      min_project_fee: "700 € + IVA",
+      min_project_fee: "500 €",
       url: "https://t-mediaglobal.com/diseno-web/",
       description:
         "Diseño y desarrollo de páginas web corporativas optimizadas para SEO, conversión y experiencia de usuario.",
       notes:
-        "El presupuesto mínimo para un proyecto de diseño web corporativo es de 700 € + IVA. El precio puede aumentar dependiendo de funcionalidades, número de páginas o integración de sistemas.",
+        "Los proyectos de diseño web publicados parten desde 500 €. El precio final depende de funcionalidades, número de páginas e integraciones.",
     },
     "Consultoría Digital": {
       min_project_fee: "500 € + IVA",
