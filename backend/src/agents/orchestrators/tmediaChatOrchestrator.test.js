@@ -136,6 +136,26 @@ test("does not ask for the company again after an answer followed by a pricing q
   assert.match(reply, /información necesaria|Ya tengo ese dato/i);
 });
 
+test("keeps the configured price when removing a repeated objective question", () => {
+  const reply = repairFinalReply({
+    reply:
+      "SEO parte desde 300 EUR al mes. Si quieres, dime en una frase que quieres conseguir y te digo que opcion encaja mejor.",
+    currentMessage: "¿Qué precio tiene?",
+    lead: {
+      interest_service: "SEO",
+      main_goal: "Generar nuevos leads y aumentar trafico web",
+    },
+    messages: [
+      { role: "user", content: "Generar nuevos leads y aumentar trafico web" },
+    ],
+    appConfig: { lead_capture: { fields: { main_goal: true } } },
+  });
+
+  assert.match(reply, /SEO parte desde 300 EUR al mes/i);
+  assert.doesNotMatch(reply, /que quieres conseguir/i);
+  assert.doesNotMatch(reply, /deberia revisarlo/i);
+});
+
 test("support and human requests bypass closing and commercial questions", () => {
   const config = {
     contact: { public_whatsapp_number: "34600000000", support_email: "help@example.com" },

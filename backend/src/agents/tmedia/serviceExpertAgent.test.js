@@ -69,6 +69,61 @@ test("answers proof and guarantee objections without promising daily clients", a
   assert.doesNotMatch(result.assistant_message, /objetivo quieres conseguir/i);
 });
 
+test("answers a price question with the configured packages and an entry recommendation", async () => {
+  const result = await runServiceExpertAgent({
+    message: "¿Qué precio tiene?",
+    routerResult: { service: "SEO" },
+    lead: {
+      interest_service: "SEO",
+      main_goal: "Generar nuevos leads y aumentar trafico web",
+    },
+    appConfig: {
+      brand: { name: "TMedia Global" },
+      offers: {
+        SEO: {
+          min_monthly_fee: "300 €",
+          pricing_plans: [
+            { plan: "SEO Starter", monthly_price: "300 €", notes: "4 contenidos al mes" },
+            { plan: "SEO Avanzado", monthly_price: "500 €", notes: "SEO local y 6 contenidos al mes" },
+            { plan: "SEO PRO", monthly_price: "desde 800 €", notes: "8 contenidos al mes" },
+          ],
+        },
+      },
+      lead_capture: { fields: { main_goal: true }, custom_fields: [] },
+    },
+  });
+
+  assert.match(result.assistant_message, /SEO Starter.*300 €/i);
+  assert.match(result.assistant_message, /SEO Avanzado.*500 €/i);
+  assert.match(result.assistant_message, /SEO PRO.*800 €/i);
+  assert.match(result.assistant_message, /punto de entrada.*SEO Starter/i);
+  assert.doesNotMatch(result.assistant_message, /dime.*que quieres conseguir/i);
+});
+
+test("uses synchronized website packages when the offer only has a base price", async () => {
+  const result = await runServiceExpertAgent({
+    message: "¿Qué precio tiene?",
+    routerResult: { service: "SEO" },
+    lead: { interest_service: "SEO", main_goal: "Captar leads" },
+    kbContext: [
+      {
+        url: "https://example.com/agencia-seo/",
+        title: "Agencia SEO",
+        chunk:
+          "Nuestras tarifas de SEO SEO STARTER 300 &#128; Auditoría web SEO AVANZADO 500 &#128; SEO local SEO PRO 800 &#128; informes avanzados",
+      },
+    ],
+    appConfig: {
+      offers: { SEO: { min_monthly_fee: "300 €" } },
+      lead_capture: { fields: { main_goal: true }, custom_fields: [] },
+    },
+  });
+
+  assert.match(result.assistant_message, /SEO Starter.*300 €/i);
+  assert.match(result.assistant_message, /SEO Avanzado.*500 €/i);
+  assert.match(result.assistant_message, /SEO Pro.*800 €/i);
+});
+
 test("uses Sancho operational metrics instead of an unrelated SEO proof template", async () => {
   const appConfig = {
     brand: { name: "Sancho AI" },

@@ -58,10 +58,22 @@ export async function buildTmediaAgentContext({
 
   const websiteFacts = getWebsiteFacts(appConfig);
   const knowledgeContext = buildKnowledgeContext(appConfig);
+  const pricingKnowledgeQuery = /precio|cuanto|cuesta|tarifa|paquete|plan/i.test(
+    String(message || "")
+  );
+  const knowledgeQuery = [
+    String(message || "").trim(),
+    lead?.interest_service ? `Servicio mencionado: ${lead.interest_service}` : "",
+    pricingKnowledgeQuery
+      ? "precio tarifas paquetes planes qué incluye"
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
   const kbContext = includeKnowledge
-    ? await retrieveWebsiteContext(message, {
-        topK: 4,
-        threshold: 0.72,
+    ? await retrieveWebsiteContext(knowledgeQuery, {
+        topK: pricingKnowledgeQuery ? 6 : 4,
+        threshold: pricingKnowledgeQuery ? 0.52 : 0.68,
         accountId,
       }).catch(() => [])
     : [];

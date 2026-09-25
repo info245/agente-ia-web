@@ -363,7 +363,6 @@ function enforceNoRepeatedQuestions({ reply = "", lead = {}, messages = [], curr
   const enrichedLead = enrichLeadFromMessages(lead, messages, currentMessage);
   const sentences = String(reply || "").split(/(?<=[.!?])\s+/).filter(Boolean);
   const kept = sentences.filter((sentence) => {
-    if (!sentence.includes("?")) return true;
     const field = questionField(sentence);
     return !field || !leadKnowsField(enrichedLead, field);
   });
@@ -445,11 +444,11 @@ function repairFinalReply({
   if (sanchoProductReply) return sanitizeCommercialReply(sanchoProductReply);
   const odooReply = buildOdooIntegrationReply({ messages, currentMessage });
   if (odooReply) return odooReply;
-  if (
-    userIsFrustratedOrSaysAlreadyAnswered(currentMessage) ||
-    asksForAlreadyKnownObjective(reply, lead, messages, currentMessage)
-  ) {
+  if (userIsFrustratedOrSaysAlreadyAnswered(currentMessage)) {
     return sanitizeCommercialReply(buildRecoveryReply({ lead, messages, currentMessage, appConfig }));
+  }
+  if (asksForAlreadyKnownObjective(reply, lead, messages, currentMessage)) {
+    return enforceNoRepeatedQuestions({ reply, lead, messages, currentMessage, appConfig });
   }
   return enforceNoRepeatedQuestions({ reply, lead, messages, currentMessage, appConfig });
 }

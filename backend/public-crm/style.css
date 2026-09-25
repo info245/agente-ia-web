@@ -3602,6 +3602,68 @@ textarea {
   line-height: 1.58;
 }
 
+.service-pricing-plans {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(109, 65, 243, 0.18);
+  background: rgba(240, 236, 255, 0.5);
+}
+
+.service-pricing-plans-head,
+.pricing-plan-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.service-pricing-plans-head p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.pricing-plan-add-btn,
+.pricing-plan-remove-btn {
+  border-radius: 999px;
+  padding: 9px 13px;
+  cursor: pointer;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pricing-plan-add-btn {
+  border: 1px solid rgba(109, 65, 243, 0.28);
+  background: #fff;
+  color: var(--accent);
+}
+
+.pricing-plan-remove-btn {
+  border: 1px solid rgba(169, 58, 81, 0.18);
+  background: rgba(169, 58, 81, 0.08);
+  color: var(--danger);
+}
+
+.pricing-plan-list {
+  display: grid;
+  gap: 12px;
+}
+
+.pricing-plan-item {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(191, 208, 234, 0.82);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.pricing-plan-grid .service-item-field textarea {
+  min-height: 96px;
+}
+
 #configBootstrapSummary {
   min-height: 220px;
   background: linear-gradient(180deg, #f8fbff, #f0f5ff);

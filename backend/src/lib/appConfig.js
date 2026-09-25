@@ -371,26 +371,86 @@ export const DEFAULT_APP_CONFIG = {
       notes:
         "La cuota mínima de gestión mensual para Google Ads es de 250 € + IVA. La inversión publicitaria en Google es independiente de esta cuota.",
       conversion_goal: "request_quote",
+      pricing_plans: [
+        {
+          plan: "Google Ads Starter",
+          monthly_price: "250 €",
+          audience: "inversión publicitaria de hasta 1.500 €/mes y hasta 2 campañas",
+          notes: "Análisis de competencia, keyword research, conversiones, soporte e informe mensual.",
+        },
+        {
+          plan: "Google Ads Avanzado",
+          monthly_price: "300 €",
+          audience: "inversión publicitaria de hasta 5.000 €/mes y hasta 4 campañas",
+          notes: "Incluye Starter, Tag Manager, conversiones avanzadas y audiencias.",
+        },
+        {
+          plan: "Google Ads PRO",
+          monthly_price: "desde 400 €",
+          audience: "inversión publicitaria de hasta 10.000 €/mes y campañas sin límite",
+          notes: "Incluye Avanzado, metodología cross-channel e informes multicanal bisemanales.",
+        },
+      ],
     },
     SEO: {
       category: "marketing",
-      min_monthly_fee: "200 € + IVA",
+      min_monthly_fee: "300 €",
       url: "https://t-mediaglobal.com/agencia-seo/",
       description:
         "Servicios de posicionamiento SEO orientados a mejorar la visibilidad orgánica en Google mediante optimización técnica, estrategia de contenidos y autoridad digital.",
       notes:
         "Las estrategias SEO se adaptan al sector, competencia y objetivos del cliente. El presupuesto puede variar según el alcance del proyecto.",
       conversion_goal: "request_quote",
+      pricing_plans: [
+        {
+          plan: "SEO Starter",
+          monthly_price: "300 €",
+          audience: "negocios que quieren iniciar una estrategia SEO y GEO",
+          notes: "Auditoría web y de competencia, keyword research, 4 contenidos al mes, GA4, Search Console e informe mensual.",
+        },
+        {
+          plan: "SEO Avanzado",
+          monthly_price: "500 €",
+          audience: "negocios que necesitan SEO local, autoridad y más contenido",
+          notes: "Incluye Starter, SEO local, Google Business Profile, linkbuilding, analítica avanzada y 6 contenidos al mes.",
+        },
+        {
+          plan: "SEO PRO",
+          monthly_price: "desde 800 €",
+          audience: "proyectos con mayor alcance, contenido y medición multicanal",
+          notes: "Incluye Avanzado, SEO local avanzado, informes de audiencia y multicanal, y 8 contenidos al mes.",
+        },
+      ],
     },
     "Redes Sociales": {
       category: "marketing",
-      min_monthly_fee: "250 € + IVA",
+      min_monthly_fee: "150 €",
       url: "https://t-mediaglobal.com/publicidad-en-redes-sociales/",
       description:
         "Gestión y optimización de campañas publicitarias en redes sociales como Facebook, Instagram o LinkedIn para generar leads y ventas.",
       notes:
-        "El coste mínimo de gestión de campañas en redes sociales parte desde 250 € + IVA al mes. La inversión publicitaria se establece según los objetivos del cliente.",
+        "Los paquetes publicados de redes sociales parten desde 150 € al mes. La inversión publicitaria se establece aparte según los objetivos del cliente.",
       conversion_goal: "request_quote",
+      pricing_plans: [
+        {
+          plan: "Social Media Starter",
+          monthly_price: "150 €",
+          audience: "un canal y hasta 1.000 €/mes de inversión publicitaria",
+          notes: "Análisis de competencia, creación y optimización de campañas, conversiones e informe mensual.",
+        },
+        {
+          plan: "Social Media Avanzado",
+          monthly_price: "250 €",
+          audience: "hasta 2.000 €/mes de inversión y dos canales",
+          notes: "Incluye Starter, Tag Manager, Business Manager y generación de audiencias.",
+        },
+        {
+          plan: "Social Media PRO",
+          monthly_price: "desde 500 €",
+          audience: "hasta 4.000 €/mes de inversión y campañas sin límite",
+          notes: "Incluye Avanzado, metodología cross-channel e informes multicanal.",
+        },
+      ],
     },
     "Diseño Web": {
       category: "web",
@@ -423,7 +483,7 @@ export const DEFAULT_APP_CONFIG = {
         "La cuota mínima de gestión mensual para Google Ads es de 250 € + IVA. La inversión publicitaria en Google es independiente de esta cuota.",
     },
     SEO: {
-      min_monthly_fee: "200 € + IVA",
+      min_monthly_fee: "300 €",
       url: "https://t-mediaglobal.com/agencia-seo/",
       description:
         "Servicios de posicionamiento SEO orientados a mejorar la visibilidad orgánica en Google mediante optimización técnica, estrategia de contenidos y autoridad digital.",
@@ -431,12 +491,12 @@ export const DEFAULT_APP_CONFIG = {
         "Las estrategias SEO se adaptan al sector, competencia y objetivos del cliente. El presupuesto puede variar según el alcance del proyecto.",
     },
     "Redes Sociales": {
-      min_monthly_fee: "250 € + IVA",
+      min_monthly_fee: "150 €",
       url: "https://t-mediaglobal.com/publicidad-en-redes-sociales/",
       description:
         "Gestión y optimización de campañas publicitarias en redes sociales como Facebook, Instagram o LinkedIn para generar leads y ventas.",
       notes:
-        "El coste mínimo de gestión de campañas en redes sociales parte desde 250 € + IVA al mes. La inversión publicitaria se establece según los objetivos del cliente.",
+        "Los paquetes publicados de redes sociales parten desde 150 € al mes. La inversión publicitaria se establece aparte según los objetivos del cliente.",
     },
     "Diseño Web": {
       min_project_fee: "700 € + IVA",
@@ -734,6 +794,26 @@ function resolveString(value, fallback = "") {
   return cleanString(value);
 }
 
+function sanitizePricingPlans(plans = []) {
+  if (!Array.isArray(plans)) return [];
+  return plans
+    .map((plan) => ({
+      plan: cleanString(plan?.plan),
+      badge: cleanString(plan?.badge),
+      monthly_price: cleanString(plan?.monthly_price),
+      annual_price: cleanString(plan?.annual_price),
+      setup: cleanString(plan?.setup),
+      audience: cleanString(plan?.audience),
+      modules: cleanString(plan?.modules),
+      users: cleanString(plan?.users),
+      workspaces: cleanString(plan?.workspaces),
+      trial_days: cleanString(plan?.trial_days),
+      notes: cleanString(plan?.notes),
+    }))
+    .filter((plan) => plan.plan)
+    .slice(0, 12);
+}
+
 function sanitizeServices(services = {}) {
   if (!services || typeof services !== "object" || Array.isArray(services)) {
     return {};
@@ -752,6 +832,7 @@ function sanitizeServices(services = {}) {
       description: cleanString(facts?.description),
       notes: cleanString(facts?.notes),
       conversion_goal: cleanString(facts?.conversion_goal),
+      pricing_plans: sanitizePricingPlans(facts?.pricing_plans),
     };
   }
 

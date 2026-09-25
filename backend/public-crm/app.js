@@ -3078,6 +3078,53 @@ function getLeadDisplayName(lead) {
   return "Lead sin nombre";
 }
 
+function createPricingPlanEditorItem(plan = {}) {
+  const item = document.createElement("article");
+  item.className = "pricing-plan-item";
+  item._sourcePricingPlan = { ...(plan || {}) };
+  item.innerHTML = `
+    <div class="pricing-plan-item-head">
+      <strong>${escapeHtml(plan?.plan || "Nuevo paquete")}</strong>
+      <button type="button" class="pricing-plan-remove-btn">Quitar</button>
+    </div>
+    <div class="service-item-grid pricing-plan-grid">
+      <label class="service-item-field">
+        Nombre del paquete
+        <input type="text" data-plan-field="plan" value="${escapeHtml(plan?.plan || "")}" placeholder="Ej. SEO Starter" />
+      </label>
+      <label class="service-item-field">
+        Precio mensual
+        <input type="text" data-plan-field="monthly_price" value="${escapeHtml(plan?.monthly_price || "")}" placeholder="Ej. 300 €" />
+      </label>
+      <label class="service-item-field">
+        Precio anual
+        <input type="text" data-plan-field="annual_price" value="${escapeHtml(plan?.annual_price || "")}" />
+      </label>
+      <label class="service-item-field">
+        Alta o puesta en marcha
+        <input type="text" data-plan-field="setup" value="${escapeHtml(plan?.setup || "")}" />
+      </label>
+      <label class="service-item-field quote-grid-full">
+        Cliente ideal
+        <input type="text" data-plan-field="audience" value="${escapeHtml(plan?.audience || "")}" placeholder="Para quién encaja este paquete" />
+      </label>
+      <label class="service-item-field quote-grid-full">
+        Qué incluye y condiciones
+        <textarea rows="3" data-plan-field="notes" placeholder="Incluye, límites y condiciones que debe explicar el agente">${escapeHtml(plan?.notes || "")}</textarea>
+      </label>
+    </div>
+  `;
+  item.querySelector(".pricing-plan-remove-btn")?.addEventListener("click", () => {
+    item.remove();
+    markConfigDirty();
+  });
+  item.querySelector('[data-plan-field="plan"]')?.addEventListener("input", (event) => {
+    const title = item.querySelector(".pricing-plan-item-head strong");
+    if (title) title.textContent = event.target.value.trim() || "Nuevo paquete";
+  });
+  return item;
+}
+
 function createServiceEditorItem(name = "", facts = {}) {
   const item = document.createElement("article");
   item.className = "service-item";
@@ -3124,7 +3171,26 @@ function createServiceEditorItem(name = "", facts = {}) {
         <textarea rows="4" data-field="notes">${escapeHtml(facts?.notes || "")}</textarea>
       </label>
     </div>
+    <section class="service-pricing-plans">
+      <div class="service-pricing-plans-head">
+        <div>
+          <strong>Paquetes que puede ofrecer el agente</strong>
+          <p>Añade nombres, precios y qué incluye cada opción. El agente los usará al responder y recomendar.</p>
+        </div>
+        <button type="button" class="pricing-plan-add-btn">+ Añadir paquete</button>
+      </div>
+      <div class="pricing-plan-list"></div>
+    </section>
   `;
+
+  const pricingPlanList = item.querySelector(".pricing-plan-list");
+  for (const plan of Array.isArray(facts?.pricing_plans) ? facts.pricing_plans : []) {
+    pricingPlanList?.appendChild(createPricingPlanEditorItem(plan));
+  }
+  item.querySelector(".pricing-plan-add-btn")?.addEventListener("click", () => {
+    pricingPlanList?.appendChild(createPricingPlanEditorItem());
+    markConfigDirty();
+  });
 
   item
     .querySelector(".service-remove-btn")
@@ -3169,6 +3235,21 @@ function collectServiceConfig() {
       description: getValue("description"),
       notes: getValue("notes"),
       conversion_goal: getValue("conversion_goal"),
+      pricing_plans: [...item.querySelectorAll(".pricing-plan-item")]
+        .map((planItem) => {
+          const getPlanValue = (field) =>
+            String(planItem.querySelector(`[data-plan-field="${field}"]`)?.value || "").trim();
+          return {
+            ...(planItem._sourcePricingPlan || {}),
+            plan: getPlanValue("plan"),
+            monthly_price: getPlanValue("monthly_price"),
+            annual_price: getPlanValue("annual_price"),
+            setup: getPlanValue("setup"),
+            audience: getPlanValue("audience"),
+            notes: getPlanValue("notes"),
+          };
+        })
+        .filter((plan) => plan.plan),
     };
   }
 

@@ -126,6 +126,7 @@ function getPriceText(facts = {}) {
           plan.annual_price ? `anual: ${plan.annual_price}` : "",
           plan.setup ? `setup: ${plan.setup}` : "",
           plan.trial_days ? `prueba: ${plan.trial_days} dias` : "",
+          plan.audience ? `ideal para ${plan.audience}` : "",
           plan.notes ? plan.notes : "",
         ].filter(Boolean);
         return `${plan.plan}${parts.length ? ` (${parts.join("; ")})` : ""}`;
@@ -142,13 +143,45 @@ function getPriceText(facts = {}) {
   return "";
 }
 
+function pricingPlansFromKnowledge(kbContext = [], service = "") {
+  const serviceToken = normalizeText(service);
+  const source = (Array.isArray(kbContext) ? kbContext : [])
+    .filter((item) => {
+      if (!serviceToken) return true;
+      const haystack = normalizeText(`${item?.url || ""} ${item?.title || ""} ${item?.chunk || ""}`);
+      const words = serviceToken.split(" ").filter((word) => word.length > 2);
+      return words.some((word) => haystack.includes(word));
+    })
+    .map((item) => String(item?.chunk || item?.content || item?.text || ""))
+    .join(" ")
+    .replace(/&#(?:128|8364);|&euro;/gi, "€")
+    .replace(/\s+/g, " ");
+
+  const matches = [];
+  const pattern = /\b((?:SEO|Google\s+Ads|Social\s+Media)\s+(?:Starter|Avanzado|Pro))\s+(\d{2,5}(?:[.,]\d{1,2})?)\s*€/gi;
+  let match = pattern.exec(source);
+  while (match && matches.length < 5) {
+    const key = normalizeText(match[1]);
+    if (!matches.some((plan) => normalizeText(plan.plan) === key)) {
+      const prefix = source.slice(Math.max(0, match.index - 24), match.index).toLowerCase();
+      matches.push({
+        plan: match[1].replace(/\b\w/g, (letter) => letter.toUpperCase()),
+        monthly_price: `${prefix.includes("desde") ? "desde " : ""}${match[2]} €`,
+      });
+    }
+    match = pattern.exec(source);
+  }
+  return matches;
+}
+
 function buildPricingReply({ service, facts = {}, appConfig = null } = {}) {
   const knownService = service && service !== "servicio" && service !== "unknown";
   const priceText = getPriceText(facts);
 
   if (knownService && priceText) {
     if (Array.isArray(facts?.pricing_plans) && facts.pricing_plans.length) {
-      return `Estos son los paquetes configurados de ${service}: ${priceText}. Si quieres, dime tu caso y te ayudo a elegir el plan que encaja mejor.`;
+      const entryPlan = facts.pricing_plans[0]?.plan;
+      return `Estos son los paquetes configurados de ${service}: ${priceText}.${entryPlan ? ` Como punto de entrada, te propondría ${entryPlan}; antes de cerrarlo validaríamos el alcance para confirmar que encaja con tu caso.` : ""}`;
     }
     return `${service} parte ${priceText}. Si quieres, dime en una frase que quieres conseguir y te digo que opcion encaja mejor.`;
   }
@@ -223,7 +256,15 @@ function nextConfiguredConversionHint(lead = {}, appConfig = null) {
 
 export async function runServiceExpertAgent(context = {}) {
   const service = normalizeServiceName(context.routerResult?.service, context.lead || {}, context.appConfig);
-  const facts = getServiceFacts(service, context.appConfig) || {};
+  const configuredFacts = getServiceFacts(service, context.appConfig) || {};
+  const knowledgePricingPlans = pricingPlansFromKnowledge(context.kbContext, service);
+  const facts = {
+    ...configuredFacts,
+    pricing_plans:
+      Array.isArray(configuredFacts?.pricing_plans) && configuredFacts.pricing_plans.length
+        ? configuredFacts.pricing_plans
+        : knowledgePricingPlans,
+  };
   const extracted = extractLeadDataFromText(context.message, context.lead || {});
   const contextualLead = {
     ...(context.lead || {}),
@@ -390,4 +431,5 @@ export const __serviceExpertTestables = {
   nextConfiguredConversionHint,
   buildContextLeadPatch,
   guardCapabilityReply,
+  pricingPlansFromKnowledge,
 };
