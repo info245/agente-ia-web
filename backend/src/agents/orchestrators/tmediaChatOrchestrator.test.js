@@ -3,7 +3,31 @@ import assert from "node:assert/strict";
 
 import { __tmediaChatOrchestratorTestables } from "./tmediaChatOrchestrator.js";
 
-const { repairFinalReply } = __tmediaChatOrchestratorTestables;
+const { repairFinalReply, buildSalesDecisionLead } = __tmediaChatOrchestratorTestables;
+
+test("projects the current custom-field answer before choosing the reply strategy", () => {
+  const lead = buildSalesDecisionLead({
+    lead: {
+      current_step: "custom:student_type",
+      custom_fields: { language: "ingles" },
+    },
+    currentMessage: "empresa",
+  });
+
+  assert.equal(lead.custom_fields.language, "ingles");
+  assert.equal(lead.custom_fields.student_type, "empresa");
+});
+
+test("projects WhatsApp identity into sales scoring before drafting", () => {
+  const lead = buildSalesDecisionLead({
+    lead: {},
+    sourceChannel: "whatsapp",
+    externalUserId: "+34 600 111 222",
+    currentMessage: "quiero reservar",
+  });
+
+  assert.equal(lead.phone, "34600111222");
+});
 
 test("recognizes a complaint about Sancho itself and leaves the sales questionnaire", () => {
   const reply = repairFinalReply({

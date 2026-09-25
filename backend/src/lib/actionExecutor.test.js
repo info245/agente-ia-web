@@ -64,6 +64,44 @@ test("skips duplicate action signatures", () => {
   assert.equal(duplicate.reason, "duplicate-action");
 });
 
+test("retries the same configured send after a non-terminal delivery failure", () => {
+  const first = buildActionExecutionPlan({ nextBestAction: readyNba });
+  const retry = buildActionExecutionPlan({
+    nextBestAction: readyNba,
+    recentActionEvents: [
+      {
+        payload: {
+          action_signature: first.action_signature,
+          status: "prepared",
+          delivery: { ok: false, reason: "send-error" },
+          operation: { skipped: true, reason: "no-operational-task" },
+        },
+      },
+    ],
+  });
+
+  assert.equal(retry.executable, true);
+});
+
+test("does not repeat a configured send whose delivery was confirmed", () => {
+  const first = buildActionExecutionPlan({ nextBestAction: readyNba });
+  const duplicate = buildActionExecutionPlan({
+    nextBestAction: readyNba,
+    recentActionEvents: [
+      {
+        payload: {
+          action_signature: first.action_signature,
+          status: "sent",
+          delivery: { ok: true, provider_message_id: "provider-1" },
+        },
+      },
+    ],
+  });
+
+  assert.equal(duplicate.executable, false);
+  assert.equal(duplicate.reason, "duplicate-action");
+});
+
 test("executeConfiguredAction updates CRM and writes event", async () => {
   const calls = {
     updates: [],

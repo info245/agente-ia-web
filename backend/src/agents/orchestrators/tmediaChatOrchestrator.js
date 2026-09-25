@@ -32,7 +32,10 @@ import {
   buildSanchoProductOverviewReply,
   guardSanchoProductClaims,
 } from "../../lib/sanchoUseCases.js";
-import { getNextBestAction } from "../../lib/nextBestAction.js";
+import {
+  buildNextBestActionPromptBlock,
+  getNextBestAction,
+} from "../../lib/nextBestAction.js";
 import { executeConfiguredAction } from "../../lib/actionExecutor.js";
 import { updateConversationInboxState } from "../../lib/chatStore.js";
 
@@ -319,6 +322,35 @@ function enrichLeadFromMessages(lead = {}, messages = [], currentMessage = "") {
   return enriched;
 }
 
+function buildSalesDecisionLead({
+  lead = {},
+  messages = [],
+  currentMessage = "",
+  sourceChannel = "web",
+  externalUserId = null,
+} = {}) {
+  const projected = enrichLeadFromMessages(lead, messages, currentMessage);
+  const activeStep = String(lead?.current_step || "").trim();
+
+  // Esta proyeccion solo alimenta la decision del turno. Lead Memory sigue
+  // siendo quien valida y persiste el dato real en CRM.
+  if (activeStep.startsWith("custom:") && String(currentMessage || "").trim()) {
+    const customKey = activeStep.slice("custom:".length);
+    if (customKey) {
+      projected.custom_fields = {
+        ...(lead?.custom_fields || {}),
+        [customKey]: String(currentMessage).trim(),
+      };
+    }
+  }
+
+  if (sourceChannel === "whatsapp" && !projected.phone && externalUserId) {
+    projected.phone = String(externalUserId).replace(/\D/g, "") || null;
+  }
+
+  return projected;
+}
+
 function leadKnowsField(lead = {}, field = "") {
   if (field === "contact") return Boolean(lead?.email || lead?.phone);
   if (field === "business_context") {
@@ -533,6 +565,7 @@ export async function processTmediaIncomingMessage({
   message,
   metadata = {},
   accountId = null,
+  actionCallbacks = null,
 } = {}) {
   if (!message || typeof message !== "string") {
     throw new Error("message es obligatorio y debe ser texto");
@@ -588,18 +621,39 @@ export async function processTmediaIncomingMessage({
     accountId,
   });
 
-  const routerResult = await runAgent("lead_router", refreshedContext);
+  const decisionLead = buildSalesDecisionLead({
+    lead: refreshedContext.lead || {},
+    messages: refreshedContext.messages || [],
+    currentMessage: refreshedContext.message,
+    sourceChannel,
+    externalUserId,
+  });
+  const preReplyNextBestAction = getNextBestAction({
+    lead: decisionLead,
+    text: refreshedContext.message,
+    appConfig: refreshedContext.appConfig,
+    channel: sourceChannel,
+    phase: refreshedContext.lead?.current_step === "completed" ? "close" : "capture",
+  });
+  const salesAwareContext = {
+    ...refreshedContext,
+    decisionLead,
+    nextBestAction: preReplyNextBestAction,
+    nextBestActionPrompt: buildNextBestActionPromptBlock(preReplyNextBestAction),
+  };
+
+  const routerResult = await runAgent("lead_router", salesAwareContext);
   const selectedAgentId = selectAgentId({
     routerResult,
     message: refreshedContext.message,
   });
   const selectedResult = await runAgent(selectedAgentId, {
-    ...refreshedContext,
+    ...salesAwareContext,
     routerResult,
   });
 
   const memoryResult = await runAgent("lead_memory", {
-    ...refreshedContext,
+    ...salesAwareContext,
     routerResult,
     selectedAgentResult: selectedResult,
   });
@@ -689,18 +743,33 @@ export async function processTmediaIncomingMessage({
     }));
   }
 
+  const finalLeadBeforeReply = closingResult?.chat_completed
+    ? await getLeadByConversationId(context.conversationId, { accountId }).catch(
+        () => leadAfterMemory
+      )
+    : leadAfterMemory;
+  const nextBestAction = getNextBestAction({
+    lead: finalLeadBeforeReply || decisionLead,
+    text: refreshedContext.message,
+    appConfig: refreshedContext.appConfig,
+    channel: sourceChannel,
+    phase: closingResult?.chat_completed ? "close" : "capture",
+  });
+
   const rawReply = finalReply({
     selectedResult,
     closingResult,
     memoryResult,
     context: {
       ...refreshedContext,
-      lead: leadAfterMemory || refreshedContext.lead || {},
+      lead: finalLeadBeforeReply || decisionLead,
+      nextBestAction,
+      nextBestActionPrompt: buildNextBestActionPromptBlock(nextBestAction),
     },
   });
   const repairedReply = repairFinalReply({
     reply: rawReply,
-    lead: leadAfterMemory || refreshedContext.lead || {},
+    lead: finalLeadBeforeReply || decisionLead,
     messages: refreshedContext.messages || [],
     currentMessage: refreshedContext.message,
     appConfig: refreshedContext.appConfig,
@@ -711,7 +780,7 @@ export async function processTmediaIncomingMessage({
     reply: repairedReply,
     messages: refreshedContext.messages || [],
     currentMessage: refreshedContext.message,
-    lead: leadAfterMemory || refreshedContext.lead || {},
+    lead: finalLeadBeforeReply || decisionLead,
     appConfig: refreshedContext.appConfig,
   });
   const reply = guardSanchoProductClaims({
@@ -727,6 +796,9 @@ export async function processTmediaIncomingMessage({
       router: routerResult,
       selected_agent: selectedAgentId,
       chat_completed: !!closingResult?.chat_completed,
+      next_best_action: nextBestAction?.next_best_action || null,
+      lead_temperature: nextBestAction?.lead_temperature || null,
+      personalization_key: nextBestAction?.personalization?.active?.key || null,
     },
     account_id: accountId,
   });
@@ -749,13 +821,6 @@ export async function processTmediaIncomingMessage({
 
   let finalLead = await getLeadByConversationId(context.conversationId, { accountId }).catch(() => null);
   const isCompleted = !!closingResult?.chat_completed || finalLead?.current_step === "completed";
-  const nextBestAction = getNextBestAction({
-    lead: finalLead || leadAfterMemory || refreshedContext.lead || {},
-    text: refreshedContext.message,
-    appConfig: refreshedContext.appConfig,
-    channel: sourceChannel,
-    phase: isCompleted ? "close" : "capture",
-  });
   const recentActionEvents = await listConversationEventsByType(
     context.conversationId,
     "action_executed",
@@ -772,6 +837,41 @@ export async function processTmediaIncomingMessage({
     recentActionEvents,
     updateLeadCrmFields,
     saveConversationEvent,
+    sendActionMessage:
+      typeof actionCallbacks?.sendActionMessage === "function"
+        ? (payload) =>
+            actionCallbacks.sendActionMessage({
+              ...payload,
+              appConfig: refreshedContext.appConfig,
+              accountId,
+              conversationId: context.conversationId,
+              channel: sourceChannel,
+              externalUserId,
+            })
+        : undefined,
+    executeActionTask:
+      typeof actionCallbacks?.executeActionTask === "function"
+        ? (payload) => {
+            // Notification Agent ya produjo el mismo efecto interno durante
+            // este turno. Reutilizarlo evita dos emails al equipo.
+            if (notificationResult?.sent_internal === true) {
+              return {
+                ok: true,
+                skipped: true,
+                reason: "already-notified-by-agent",
+                reused_existing_effect: true,
+              };
+            }
+            return actionCallbacks.executeActionTask({
+              ...payload,
+              appConfig: refreshedContext.appConfig,
+              accountId,
+              conversationId: context.conversationId,
+              channel: sourceChannel,
+              externalUserId,
+            });
+          }
+        : undefined,
   }).catch((error) => ({
     executed: false,
     skipped: false,
@@ -839,4 +939,5 @@ export const __tmediaChatOrchestratorTestables = {
   shouldRunClosing,
   guardAgainstReplyLoop,
   buildSafeRepeatedIntentReply,
+  buildSalesDecisionLead,
 };

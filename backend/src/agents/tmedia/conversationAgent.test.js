@@ -42,6 +42,21 @@ test("guided discovery asks a concrete qualification question", () => {
   assert.equal(result.lead_patch.current_step, "ask_main_goal");
 });
 
+test("guided discovery follows the precomputed sales strategy", () => {
+  const result = replyFor("haz preguntas y te respondo", {
+    nextBestAction: {
+      next_best_action: "ask_qualification_field",
+      target_field: {
+        key: "student_type",
+        prompt: "¿La formación es individual o para empresa?",
+      },
+    },
+  });
+
+  assert.match(result.assistant_message, /individual o para empresa/i);
+  assert.equal(result.lead_patch.current_step, "custom:student_type");
+});
+
 test("demo requests state the real limitation and offer Sancho beta access", () => {
   const first = replyFor("puedes agendar una demo?");
   assert.match(first.assistant_message, /No puedo reservar una cita directamente/i);

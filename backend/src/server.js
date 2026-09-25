@@ -108,6 +108,7 @@ import {
   completeAutomationJob,
   enqueueAutomationJob,
   failAutomationJob,
+  retrySkippedAutomationJob,
   updateAutomationJobResult,
 } from "./lib/automationJobStore.js";
 
@@ -132,9 +133,14 @@ import {
 import { executeConfiguredAction } from "./lib/actionExecutor.js";
 import {
   canRecoverLead,
+  canContinueLeadRecovery,
   canUseAutomationChannel,
+  getAutomationConditionFingerprint,
+  getAutomationSequenceBaseTimestamp,
   getLatestConversationMessage,
   getSafeAutomationDueAt,
+  isRetryableAutomationSkipReason,
+  shouldRetrySkippedAutomationJob,
   userRepliedAfter,
 } from "./lib/automationPolicy.js";
 import {
@@ -7701,6 +7707,10 @@ app.post("/messages", async (req, res) => {
       message: message || text,
       metadata: metadata || req.body?.meta || {},
       accountId: account.id,
+      actionCallbacks: {
+        sendActionMessage: sendConfiguredActionMessage,
+        executeActionTask: notifyConfiguredActionTask,
+      },
     });
 
     res.json(result);
@@ -8122,37 +8132,28 @@ async function runAutomationFlowsForAccount({
     const messages = await getConversationMessages(conversationId, 100, {
       accountId: account.id,
     });
-    const lastUserMessageAt = getLastUserMessageTimestamp(messages);
-    const latestWhatsAppFollowup = await getLatestConversationEvent(
-      conversationId,
-      "whatsapp_followup_sent"
-    ).catch(() => null);
-
     const flowEntries = Object.entries(appConfig?.automation_flows || {});
 
     for (const [flowKey, flow] of flowEntries) {
       if (flow?.enabled === false) continue;
 
-      if (flowKey === "lead_recovery" && !canRecoverLead({ lead, messages })) {
-        continue;
-      }
-
-      // Una recuperación es un único intento hasta que el usuario responda.
-      // Así tampoco compite este flujo con el recordatorio de WhatsApp.
-      if (
-        flowKey === "lead_recovery" &&
-        (hasRecoveryAttemptAfter(automationEvents, lastUserMessageAt) ||
-          (latestWhatsAppFollowup &&
-            getEventTimestamp(latestWhatsAppFollowup) >= lastUserMessageAt))
-      ) {
-        continue;
-      }
-
       const needsQuote = flowKey === "quote_followup";
       const quote = needsQuote ? await getLatestQuoteByLeadId(lead.id).catch(() => null) : null;
       if (!leadEligibleForFlow(flowKey, lead, quote)) continue;
 
-      const baseTimestamp = getAutomationBaseTimestamp({ flowKey, lead, quote, messages });
+      const flowEvents = automationEvents
+        .filter((event) => event?.payload?.flow_key === flowKey)
+        .sort((a, b) => getEventTimestamp(a) - getEventTimestamp(b));
+      if (
+        flowKey === "lead_recovery" &&
+        !canContinueLeadRecovery({ lead, messages, sentEvents: flowEvents })
+      ) {
+        continue;
+      }
+      const baseTimestamp = getAutomationSequenceBaseTimestamp({
+        baseTimestamp: getAutomationBaseTimestamp({ flowKey, lead, quote, messages }),
+        events: flowEvents,
+      });
       const baseDate = baseTimestamp ? new Date(baseTimestamp) : null;
       if (!baseDate || Number.isNaN(baseDate.getTime())) continue;
       if (flowKey === "quote_followup" && userRepliedAfter(messages, baseTimestamp)) continue;
@@ -8167,9 +8168,6 @@ async function runAutomationFlowsForAccount({
       });
 
       const steps = Array.isArray(flow?.steps) ? flow.steps : [];
-      const flowEvents = automationEvents
-        .filter((event) => event?.payload?.flow_key === flowKey)
-        .sort((a, b) => getEventTimestamp(a) - getEventTimestamp(b));
       const previousEvent = flowEvents[flowEvents.length - 1] || null;
       const previousStepIndex = Number(previousEvent?.payload?.step_index);
       const previousStep = Number.isInteger(previousStepIndex) ? steps[previousStepIndex] : null;
@@ -8187,26 +8185,51 @@ async function runAutomationFlowsForAccount({
         if (Date.now() < dueAt) continue;
 
         const template = appConfig?.message_templates?.[step.template_key] || null;
-        if (!template) continue;
+        const conditionFingerprint = getAutomationConditionFingerprint({
+          flowKey,
+          step,
+          template,
+          lead,
+          hasWhatsAppPhone: Boolean(normalizeLeadPhoneForWhatsApp(lead)),
+        });
+        const jobPayload = {
+          lead_id: lead.id,
+          conversation_id: conversationId,
+          flow_key: flowKey,
+          flow_label: flow?.label || flowKey,
+          step_index: index,
+          template_key: step.template_key,
+          step,
+          template,
+          scheduled_from: baseDate.toISOString(),
+          condition_fingerprint: conditionFingerprint,
+          vars,
+        };
 
-        const queued = await enqueueAutomationJob({
+        let queued = await enqueueAutomationJob({
           accountId: account.id,
           jobType: "automation_step",
           dedupeKey: `automation:${conversationId}:${flowKey}:${index}:${baseDate.toISOString()}`,
-          payload: {
-            lead_id: lead.id,
-            conversation_id: conversationId,
-            flow_key: flowKey,
-            flow_label: flow?.label || flowKey,
-            step_index: index,
-            template_key: step.template_key,
-            step,
-            template,
-            scheduled_from: baseDate.toISOString(),
-            vars,
-          },
+          payload: jobPayload,
           availableAt: new Date(dueAt).toISOString(),
         });
+        let retriedAfterConditionChange = false;
+        if (
+          queued.duplicate &&
+          shouldRetrySkippedAutomationJob({
+            job: queued.job,
+            conditionFingerprint,
+          })
+        ) {
+          const retriedJob = await retrySkippedAutomationJob(queued.job.id, {
+            payload: jobPayload,
+            availableAt: new Date(dueAt).toISOString(),
+          });
+          if (retriedJob) {
+            queued = { job: retriedJob, duplicate: false };
+            retriedAfterConditionChange = true;
+          }
+        }
 
         processed.push({
           account_id: account.id,
@@ -8216,6 +8239,7 @@ async function runAutomationFlowsForAccount({
           step_index: index,
           queued: true,
           duplicate: queued.duplicate,
+          retried_after_condition_change: retriedAfterConditionChange,
           job_id: queued.job?.id || null,
         });
 
@@ -8282,27 +8306,33 @@ async function runAutomationJobsTask({ limit = 20 } = {}) {
       const appConfig = await getPublishedAppConfig({ accountId: job.account_id });
       const step = payload.step || {};
       const template = payload.template || appConfig?.message_templates?.[payload.template_key] || null;
-      if (!template) throw new Error("La plantilla de automatización ya no está disponible.");
 
       const startedAt = new Date().toISOString();
       await updateAutomationJobResult(job.id, { send_started_at: startedAt });
-      const sendResult = await sendAutomationStep({
-        lead,
-        step,
-        template,
-        vars: payload.vars || {},
-        emailConfig: appConfig?.integrations?.email || null,
-        accountId: job.account_id,
-        conversationId: payload.conversation_id,
-        flowKey: payload.flow_key,
-      });
+      const sendResult = template
+        ? await sendAutomationStep({
+            lead,
+            step,
+            template,
+            vars: payload.vars || {},
+            emailConfig: appConfig?.integrations?.email || null,
+            accountId: job.account_id,
+            conversationId: payload.conversation_id,
+            flowKey: payload.flow_key,
+          })
+        : { skipped: true, reason: "missing-template" };
+      const skipped = Boolean(sendResult?.skipped);
+      const requiresAttention =
+        skipped && isRetryableAutomationSkipReason(sendResult?.reason);
       const result = {
         send_started_at: startedAt,
         completed_at: new Date().toISOString(),
-        skipped: Boolean(sendResult?.skipped),
+        skipped,
+        requires_attention: requiresAttention,
         reason: sendResult?.reason || null,
-        via: sendResult?.via || step.channel || template.channel || null,
+        via: sendResult?.via || step.channel || template?.channel || null,
         provider_message_id: sendResult?.provider_message_id || null,
+        condition_fingerprint: String(payload.condition_fingerprint || ""),
       };
 
       await trackConversationEvent({
@@ -8320,6 +8350,8 @@ async function runAutomationJobsTask({ limit = 20 } = {}) {
           provider_message_id: result.provider_message_id,
           scheduled_from: payload.scheduled_from,
           reason: result.reason,
+          requires_attention: requiresAttention,
+          condition_fingerprint: result.condition_fingerprint,
           body_preview: String(sendResult?.body || "").slice(0, 500),
         },
       });
@@ -8502,6 +8534,10 @@ async function processWhatsAppInboxEvent(event) {
         raw: message,
       },
       accountId: event.account_id,
+      actionCallbacks: {
+        sendActionMessage: sendConfiguredActionMessage,
+        executeActionTask: notifyConfiguredActionTask,
+      },
     });
     await updateChannelInboxEventResult(event.id, {
       agent_reply_generated: true,

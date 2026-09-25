@@ -146,6 +146,10 @@ function getActionReadiness({ actionKey = "", lead = {}, appConfig = null } = {}
           channel: actionConfig.channel || "",
           template_key: actionConfig.template_key || "",
           required_fields: requiredFields,
+          metadata:
+            actionConfig.metadata && typeof actionConfig.metadata === "object"
+              ? { ...actionConfig.metadata }
+              : {},
         }
       : null,
     action_ready: !!actionConfig && missingRequiredFields.length === 0,

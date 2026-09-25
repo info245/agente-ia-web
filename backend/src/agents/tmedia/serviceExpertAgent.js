@@ -316,7 +316,10 @@ export async function runServiceExpertAgent(context = {}) {
     };
   }
 
-  const nextHint = nextConfiguredConversionHint(contextualLead, context.appConfig);
+  const nextHint =
+    (context.nextBestAction?.next_best_action === "ask_qualification_field" &&
+      String(context.nextBestAction?.target_field?.prompt || "").trim()) ||
+    nextConfiguredConversionHint(contextualLead, context.appConfig);
   const fallback = `${service}: podemos orientarte segun tu objetivo y situacion actual. ${nextHint}`;
   const brandName = String(context.appConfig?.brand?.name || "la empresa").trim();
   const offers = configuredOffers(context.appConfig);
@@ -341,6 +344,9 @@ export async function runServiceExpertAgent(context = {}) {
               "Responde primero a la pregunta actual. No vuelvas a pedir un dato que aparezca en el lead, en el mensaje actual o en los mensajes recientes.",
               "No inventes servicios ni precios. No presentes canales, fuentes de datos o herramientas como servicios vendidos si no estan en la lista configurada.",
               "No afirmes que envia mensajes, agenda citas, configura CRM, modifica campanas o ejecuta automatizaciones salvo que ese hecho aparezca expresamente en la informacion configurada.",
+              context.nextBestActionPrompt
+                ? `Estrategia comercial calculada antes de redactar. Aplicala sin contradecir las reglas anteriores:\n${context.nextBestActionPrompt}`
+                : "",
               sanchoProductPolicy,
               promptAdditions ? `Instrucciones especificas de la cuenta: ${promptAdditions}` : "",
             ].filter(Boolean).join(" "),
@@ -354,6 +360,7 @@ export async function runServiceExpertAgent(context = {}) {
             facts: factsText,
             configured_offers: offers,
             next_hint: nextHint,
+            next_best_action: context.nextBestAction || null,
           }),
         },
       ],

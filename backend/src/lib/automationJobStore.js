@@ -66,6 +66,30 @@ export async function updateAutomationJobResult(jobId, result = {}) {
   return data;
 }
 
+export async function retrySkippedAutomationJob(jobId, { payload, availableAt } = {}) {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({
+      payload: payload && typeof payload === "object" ? payload : {},
+      result: {},
+      status: "pending",
+      attempts: 0,
+      available_at: availableAt || now,
+      locked_at: null,
+      lock_token: null,
+      last_error: null,
+      completed_at: null,
+      updated_at: now,
+    })
+    .eq("id", clean(jobId))
+    .eq("status", "completed")
+    .select("*")
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
 export async function failAutomationJob(job, failure) {
   const attempts = Math.max(1, Number(job?.attempts) || 1);
   const maxAttempts = Math.max(1, Number(job?.max_attempts) || 5);

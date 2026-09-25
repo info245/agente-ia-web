@@ -294,7 +294,13 @@ function customFieldPrompt(field = {}) {
   return String(field?.prompt || field?.label || "Me das este dato?").trim();
 }
 
-function getNextQuestionState(lead = {}, patch = {}, sourceChannel = "web", appConfig = null) {
+function getNextQuestionState(
+  lead = {},
+  patch = {},
+  sourceChannel = "web",
+  appConfig = null,
+  nextBestAction = null
+) {
   const merged = { ...(lead || {}), ...(patch || {}) };
   if (lead?.custom_fields || patch?.custom_fields) {
     merged.custom_fields = {
@@ -309,6 +315,16 @@ function getNextQuestionState(lead = {}, patch = {}, sourceChannel = "web", appC
       question: Object.keys(patch || {}).length
         ? "Perfecto, actualizo ese dato en tu solicitud."
         : "Perfecto, lo anado al contexto de tu solicitud.",
+    };
+  }
+  const decisionTarget =
+    nextBestAction?.next_best_action === "ask_qualification_field"
+      ? nextBestAction?.target_field
+      : null;
+  if (decisionTarget?.key && String(decisionTarget?.prompt || "").trim()) {
+    return {
+      step: `custom:${decisionTarget.key}`,
+      question: String(decisionTarget.prompt).trim(),
     };
   }
   if (shouldCapture(appConfig, "main_goal") && !merged.main_goal) {
@@ -363,8 +379,14 @@ function getNextQuestionState(lead = {}, patch = {}, sourceChannel = "web", appC
   return { step: "ready", question: "Gracias. Con esto ya puedo preparar el siguiente paso." };
 }
 
-function pickNextQuestion(lead = {}, patch = {}, sourceChannel = "web", appConfig = null) {
-  return getNextQuestionState(lead, patch, sourceChannel, appConfig).question;
+function pickNextQuestion(
+  lead = {},
+  patch = {},
+  sourceChannel = "web",
+  appConfig = null,
+  nextBestAction = null
+) {
+  return getNextQuestionState(lead, patch, sourceChannel, appConfig, nextBestAction).question;
 }
 
 export async function runSalesQualificationAgent(context = {}) {
@@ -455,7 +477,8 @@ export async function runSalesQualificationAgent(context = {}) {
       context.lead || {},
       lead_patch,
       context.sourceChannel,
-      context.appConfig
+      context.appConfig,
+      context.nextBestAction
     );
     const nextCustom = getMissingRequiredCustomField(
       { ...(context.lead || {}), ...lead_patch },
@@ -482,7 +505,13 @@ export async function runSalesQualificationAgent(context = {}) {
 
   const lead_patch = buildLeadPatch(fields);
   if (context.lead?.name && lead_patch.name) delete lead_patch.name;
-  const nextState = getNextQuestionState(context.lead || {}, lead_patch, context.sourceChannel, context.appConfig);
+  const nextState = getNextQuestionState(
+    context.lead || {},
+    lead_patch,
+    context.sourceChannel,
+    context.appConfig,
+    context.nextBestAction
+  );
   const assistant_message =
     isBudgetPurposeQuestion(context.message) && lastAssistantAskedBudget(context.messages)
       ? buildBudgetPurposeReply()

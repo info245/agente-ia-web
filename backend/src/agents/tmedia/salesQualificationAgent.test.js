@@ -80,6 +80,25 @@ test("an inbound WhatsApp phone satisfies a combined contact requirement", () =>
   assert.doesNotMatch(state.question, /email/i);
 });
 
+test("uses the precomputed next-best-action question before drafting", () => {
+  const state = __salesQualificationTestables.getNextQuestionState(
+    { main_goal: "Mejorar ventas" },
+    {},
+    "web",
+    appConfig,
+    {
+      next_best_action: "ask_qualification_field",
+      target_field: {
+        key: "student_type",
+        prompt: "¿La formación es para una persona o para un equipo?",
+      },
+    }
+  );
+
+  assert.equal(state.step, "custom:student_type");
+  assert.match(state.question, /persona o para un equipo/i);
+});
+
 test("does not assume SEO when the user only asks for more clients", () => {
   const service = __salesQualificationTestables.safeServiceFromFields({
     parsedService: "SEO",

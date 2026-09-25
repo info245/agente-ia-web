@@ -29,9 +29,17 @@ function buildActionSignature(nextBestAction = {}) {
 
 function wasActionAlreadyExecuted(recentActionEvents = [], signature = "") {
   if (!signature) return false;
-  return (recentActionEvents || []).some(
-    (event) => norm(event?.payload?.action_signature) === signature
-  );
+  return (recentActionEvents || []).some((event) => {
+    const payload = event?.payload || {};
+    if (norm(payload.action_signature) !== signature) return false;
+
+    // Los eventos antiguos no guardaban estado: se consideran terminales para
+    // mantener compatibilidad. Los nuevos intentos fallidos o sin callback se
+    // pueden reintentar; solo un efecto confirmado bloquea otro envio.
+    if (!Object.prototype.hasOwnProperty.call(payload, "status")) return true;
+    if (["sent", "ready_for_team"].includes(normalizeText(payload.status))) return true;
+    return payload?.delivery?.ok === true || payload?.operation?.ok === true;
+  });
 }
 
 function buildInternalNotes({ existing = "", nextBestAction = {} } = {}) {

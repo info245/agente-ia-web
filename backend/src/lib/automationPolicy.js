@@ -23,7 +23,7 @@ export function getLastUserMessageTime(messages = []) {
   );
 }
 
-export function canRecoverLead({ lead = {}, messages = [] } = {}) {
+function isLeadRecoveryStateEligible(lead = {}) {
   const status = normalize(lead?.crm_status);
   const step = normalize(lead?.current_step);
   if ([
@@ -43,8 +43,20 @@ export function canRecoverLead({ lead = {}, messages = [] } = {}) {
     return false;
   }
   if (["complete", "completed", "closed"].includes(step)) return false;
+  return true;
+}
+
+export function canRecoverLead({ lead = {}, messages = [] } = {}) {
+  if (!isLeadRecoveryStateEligible(lead)) return false;
   const latest = getLatestConversationMessage(messages);
   return latest?.role === "assistant";
+}
+
+export function canContinueLeadRecovery({ lead = {}, messages = [], sentEvents = [] } = {}) {
+  if (!isLeadRecoveryStateEligible(lead)) return false;
+  if (!sentEvents.length) return canRecoverLead({ lead, messages });
+  const lastSentAt = Math.max(0, ...sentEvents.map((event) => timestamp(event?.created_at)));
+  return lastSentAt > 0 && !userRepliedAfter(messages, lastSentAt);
 }
 
 export function userRepliedAfter(messages = [], timestampValue = null) {
@@ -72,4 +84,52 @@ export function getSafeAutomationDueAt({ baseTimestamp, step = {}, previousEvent
   if (!previousEvent || !previousStep) return baseDueAt;
   const gap = Math.max(3_600_000, stepDelayMs(step) - stepDelayMs(previousStep));
   return Math.max(baseDueAt, timestamp(previousEvent.created_at) + gap);
+}
+
+export function getAutomationSequenceBaseTimestamp({ baseTimestamp, events = [] } = {}) {
+  const scheduledFrom = (events || [])
+    .map((event) => timestamp(event?.payload?.scheduled_from))
+    .filter((value) => value > 0)
+    .sort((a, b) => a - b)[0];
+  return scheduledFrom || timestamp(baseTimestamp);
+}
+
+export function getAutomationConditionFingerprint({
+  flowKey = "",
+  step = {},
+  template = null,
+  lead = {},
+  hasWhatsAppPhone = false,
+} = {}) {
+  return JSON.stringify({
+    flow: normalize(flowKey),
+    channel: normalize(step?.channel || template?.channel),
+    template_key: normalize(step?.template_key),
+    template_available: Boolean(template?.body),
+    whatsapp_template_name: normalize(step?.whatsapp_template_name),
+    whatsapp_template_language: normalize(step?.whatsapp_template_language || "es"),
+    has_whatsapp_phone: Boolean(hasWhatsAppPhone),
+    has_email: Boolean(String(lead?.email || "").trim()),
+    consent: lead?.consent === true,
+    inbound_channel: normalize(lead?.conversations?.channel),
+  });
+}
+
+export function isRetryableAutomationSkipReason(reason = "") {
+  return [
+    "contact-not-authorized",
+    "no-whatsapp-phone",
+    "whatsapp-template-required-outside-24h",
+    "no-email",
+    "unsupported-channel",
+    "missing-template",
+  ].includes(normalize(reason));
+}
+
+export function shouldRetrySkippedAutomationJob({ job = null, conditionFingerprint = "" } = {}) {
+  if (!job || normalize(job?.status) !== "completed") return false;
+  if (job?.result?.skipped !== true || job?.result?.requires_attention !== true) return false;
+  const previousFingerprint = String(job?.result?.condition_fingerprint || "");
+  const nextFingerprint = String(conditionFingerprint || "");
+  return Boolean(nextFingerprint && previousFingerprint && nextFingerprint !== previousFingerprint);
 }

@@ -535,6 +535,8 @@ const el = {
   configForm: document.getElementById("configForm"),
   configBackBtn: document.getElementById("configBackBtn"),
   configSaveBtn: document.getElementById("configSaveBtn"),
+  configFooterSaveBtn: document.getElementById("configFooterSaveBtn"),
+  configFooterPublishBtn: document.getElementById("configFooterPublishBtn"),
   configSaveStatus: document.getElementById("configSaveStatus"),
   configProductMode: document.getElementById("configProductMode"),
   configProductModeHint: document.getElementById("configProductModeHint"),
@@ -602,6 +604,12 @@ const el = {
   configIndustryPresetSelect: document.getElementById("configIndustryPresetSelect"),
   configApplyIndustryPresetBtn: document.getElementById("configApplyIndustryPresetBtn"),
   configIndustryPresetStatus: document.getElementById("configIndustryPresetStatus"),
+  configSalesStrategySummary: document.getElementById("configSalesStrategySummary"),
+  configSalesProfileStatus: document.getElementById("configSalesProfileStatus"),
+  configSalesQualificationCount: document.getElementById("configSalesQualificationCount"),
+  configSalesActionsCount: document.getElementById("configSalesActionsCount"),
+  configSalesTestsStatus: document.getElementById("configSalesTestsStatus"),
+  configScoringPlainSummary: document.getElementById("configScoringPlainSummary"),
   configBusinessIndustry: document.getElementById("configBusinessIndustry"),
   configBusinessModel: document.getElementById("configBusinessModel"),
   configBusinessAudience: document.getElementById("configBusinessAudience"),
@@ -750,6 +758,10 @@ const el = {
   configAnalysisShowHumanButton: document.getElementById("configAnalysisShowHumanButton"),
   configAnalysisHumanButtonLabel: document.getElementById("configAnalysisHumanButtonLabel"),
   configAutomationFlowsList: document.getElementById("configAutomationFlowsList"),
+  configAutomationHealthBadge: document.getElementById("configAutomationHealthBadge"),
+  configAutomationActiveFlows: document.getElementById("configAutomationActiveFlows"),
+  configAutomationActiveSteps: document.getElementById("configAutomationActiveSteps"),
+  configAutomationValidation: document.getElementById("configAutomationValidation"),
   configServicesList: document.getElementById("configServicesListKnowledge"),
   configAddServiceBtn: document.getElementById("configAddServiceBtnKnowledge"),
   configSuggestServicesBtn: document.getElementById("configSuggestServicesBtn"),
@@ -1293,10 +1305,15 @@ function renderSetupHealth(config = state.appConfig) {
     const canPublish = health.blockerIssues.length === 0;
     const isPublished = String(config?.deployment?.status || "").toLowerCase() === "published";
     el.configPublishAgentBtn.disabled = !canPublish;
-    el.configPublishAgentBtn.textContent = isPublished ? "Republicar agente" : "Publicar agente";
+    el.configPublishAgentBtn.textContent = isPublished ? "Publicar nuevos cambios" : "Publicar cambios";
     el.configPublishAgentBtn.title = canPublish
       ? "Publicar esta configuracion del agente"
       : "Resuelve los bloqueos y ejecuta las pruebas antes de publicar";
+    if (el.configFooterPublishBtn) {
+      el.configFooterPublishBtn.disabled = !canPublish;
+      el.configFooterPublishBtn.textContent = isPublished ? "Publicar nuevos cambios" : "Publicar cambios";
+      el.configFooterPublishBtn.title = el.configPublishAgentBtn.title;
+    }
   }
   el.configSetupHealthGrid.innerHTML = health.checks
     .map(
@@ -1368,7 +1385,7 @@ function updateProductModeUi(config = state.appConfig) {
     el.crmViewSalesBtn.textContent = "CRM comercial";
   }
   if (el.crmViewConfigBtn) {
-    el.crmViewConfigBtn.textContent = isChatOnly ? "Setup del chat" : "Configuracion del agente";
+    el.crmViewConfigBtn.textContent = isChatOnly ? "Setup del chat" : "Editor del agente";
   }
   if (el.crmMobileControlsSummary) {
     el.crmMobileControlsSummary.textContent = isChatOnly ? "Setup rapido" : "Menu rapido y filtros";
@@ -1383,12 +1400,12 @@ function updateProductModeUi(config = state.appConfig) {
     el.configBackBtn.textContent = allowSales ? "Volver al CRM" : "Volver";
   }
   if (el.crmConfigTitle) {
-    el.crmConfigTitle.textContent = isChatOnly ? "Setup del chat" : "Configuracion del agente";
+    el.crmConfigTitle.textContent = isChatOnly ? "Setup del chat" : "Editor del agente";
   }
   if (el.crmConfigCopy) {
     el.crmConfigCopy.textContent = isChatOnly
       ? "Configura marca, fuentes, mensajes, automatizaciones e integraciones para dejar el asistente listo sin depender del CRM comercial."
-      : "Gestiona marca, canales, tono, servicios y bootstrap desde web sin invadir la operativa comercial.";
+      : "Configura cómo trabaja, comprueba el resultado y publica los cambios cuando estén listos.";
   }
 
   document.title = `CRM ${brandName}`;
@@ -4290,6 +4307,66 @@ function collectSalesScoring() {
   };
 }
 
+function humanizeSalesValue(value = "", fallback = "sin definir") {
+  const normalized = String(value || "").trim();
+  if (!normalized) return fallback;
+  return normalized
+    .replaceAll("_", " ")
+    .replace(/\s+/g, " ")
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function renderSalesStrategyOverview(config = null) {
+  const profile = config?.business_profile || collectBusinessProfile();
+  const qualification = collectQualificationBuilder();
+  const actions = collectActionsBuilder();
+  const scoring = collectSalesScoring();
+  const activeActions = Object.values(actions).filter((action) => action?.enabled !== false);
+  const requiredFields = qualification.filter((field) => field?.required !== false);
+  const profileReady = Boolean(
+    String(profile?.industry || "").trim() &&
+      String(profile?.primary_conversion_goal || "").trim() &&
+      String(profile?.value_proposition || "").trim()
+  );
+  const audience = String(profile?.audience || "").trim() || "su público objetivo";
+  const proposition = String(profile?.value_proposition || "").trim() || "la propuesta de valor configurada";
+  const goal = humanizeSalesValue(profile?.primary_conversion_goal, "un siguiente paso comercial").toLowerCase();
+  const team = String(profile?.human_team_label || "").trim() || "el equipo humano";
+
+  if (el.configSalesStrategySummary) {
+    el.configSalesStrategySummary.textContent = `Atenderá a ${audience}, presentará ${proposition} y buscará ${goal}. Antes de actuar comprobará ${requiredFields.length} dato${requiredFields.length === 1 ? " obligatorio" : "s obligatorios"}; si hace falta, derivará a ${team}.`;
+  }
+  if (el.configSalesProfileStatus) {
+    el.configSalesProfileStatus.textContent = profileReady ? "Completo" : "Faltan datos";
+    el.configSalesProfileStatus.dataset.tone = profileReady ? "ok" : "pending";
+  }
+  if (el.configSalesQualificationCount) {
+    el.configSalesQualificationCount.textContent = `${qualification.length} campo${qualification.length === 1 ? "" : "s"}`;
+  }
+  if (el.configSalesActionsCount) {
+    el.configSalesActionsCount.textContent = `${activeActions.length} activa${activeActions.length === 1 ? "" : "s"}`;
+  }
+  if (el.configSalesTestsStatus) {
+    const summary = state.lastScenarioRunSummary;
+    el.configSalesTestsStatus.textContent = summary?.total
+      ? `${summary.passed}/${summary.total} correctas`
+      : "Sin ejecutar";
+    el.configSalesTestsStatus.dataset.tone = summary?.total
+      ? summary.failed > 0
+        ? "warning"
+        : "ok"
+      : "pending";
+  }
+  if (el.configScoringPlainSummary) {
+    const hot = (scoring.hot_intents || []).map((item) => humanizeSalesValue(item)).join(", ");
+    const warm = (scoring.warm_intents || []).map((item) => humanizeSalesValue(item)).join(", ");
+    el.configScoringPlainSummary.innerHTML = `
+      <div><span>Prioridad alta</span><strong>${escapeHtml(hot || "Sin intenciones configuradas")}</strong><small>y como máximo ${escapeHtml(String(scoring.hot_max_missing_required_fields))} datos obligatorios pendientes</small></div>
+      <div><span>Interés medio</span><strong>${escapeHtml(warm || "Sin intenciones configuradas")}</strong><small>${scoring.contact_makes_warm ? "dejar un dato de contacto eleva la prioridad" : "el contacto por sí solo no cambia la prioridad"}</small></div>
+    `;
+  }
+}
+
 function linesToList(value = "") {
   return String(value || "")
     .split(/\r?\n/)
@@ -4314,8 +4391,8 @@ function createPersonalizationRuleItem(rule = {}) {
       </label>
       <label title="Como se compara el campo con los valores: contiene, igual, dentro de lista o existe.">Condición
         <select data-field="operator">
-          ${["contains", "equals", "in", "exists"].map(
-            (option) => `<option value="${option}"${operator === option ? " selected" : ""}>${option}</option>`
+          ${Object.entries({ contains: "Contiene", equals: "Es igual a", in: "Está en la lista", exists: "Tiene algún valor" }).map(
+            ([value, label]) => `<option value="${value}"${operator === value ? " selected" : ""}>${label}</option>`
           ).join("")}
         </select>
       </label>
@@ -4383,6 +4460,8 @@ function renderPersonalizationBuilder(rules = []) {
 function syncPersonalizationJsonFromBuilder() {
   if (!el.configPersonalizationRules) return;
   el.configPersonalizationRules.value = stringifyJsonField(collectPersonalizationBuilder(), "[]");
+  markConfigDirty();
+  renderSalesStrategyOverview();
 }
 
 function createQualificationFieldItem(field = {}) {
@@ -4399,8 +4478,8 @@ function createQualificationFieldItem(field = {}) {
       <label title="Nombre visible del dato que quieres recoger.">Etiqueta <input type="text" data-field="label" value="${escapeHtml(field.label || "")}" placeholder="Idioma de interes" /></label>
       <label title="Formato del dato: texto, numero, fecha, selector o booleano.">Tipo
         <select data-field="type">
-          ${["text", "number", "date", "time", "datetime", "select", "boolean"].map(
-            (option) => `<option value="${option}"${type === option ? " selected" : ""}>${option}</option>`
+          ${Object.entries({ text: "Texto", number: "Número", date: "Fecha", time: "Hora", datetime: "Fecha y hora", select: "Lista de opciones", boolean: "Sí / No" }).map(
+            ([value, label]) => `<option value="${value}"${type === value ? " selected" : ""}>${label}</option>`
           ).join("")}
         </select>
       </label>
@@ -4460,6 +4539,8 @@ function renderQualificationBuilder(schema = []) {
 function syncQualificationJsonFromBuilder() {
   if (!el.configQualificationSchema) return;
   el.configQualificationSchema.value = stringifyJsonField(collectQualificationBuilder(), "[]");
+  markConfigDirty();
+  renderSalesStrategyOverview();
 }
 
 function getActionTemplateOptionsMarkup(selected = "") {
@@ -4486,15 +4567,15 @@ function createActionItem(actionKey = "", action = {}) {
       <label title="Nombre claro de la accion para el CRM.">Etiqueta <input type="text" data-field="label" value="${escapeHtml(action.label || "")}" placeholder="Reservar primera visita" /></label>
       <label title="Que debe hacer el sistema cuando esta accion este lista.">Tipo
         <select data-field="type">
-          ${["calendar_booking", "human_handoff", "send_information", "quote", "internal_task"].map(
-            (option) => `<option value="${option}"${(action.type || "internal_task") === option ? " selected" : ""}>${option}</option>`
+          ${Object.entries({ calendar_booking: "Reservar una cita", human_handoff: "Pasar a una persona", send_information: "Enviar información", quote: "Preparar una propuesta", internal_task: "Crear una tarea interna" }).map(
+            ([value, label]) => `<option value="${value}"${(action.type || "internal_task") === value ? " selected" : ""}>${label}</option>`
           ).join("")}
         </select>
       </label>
       <label title="Canal preferido para ejecutar o preparar la accion. preferred usa lo que haya indicado el lead.">Canal
         <select data-field="channel">
-          ${["preferred", "whatsapp", "email", "crm"].map(
-            (option) => `<option value="${option}"${(action.channel || "preferred") === option ? " selected" : ""}>${option}</option>`
+          ${Object.entries({ preferred: "Canal elegido por el lead", whatsapp: "WhatsApp", email: "Email", crm: "Solo dentro del CRM" }).map(
+            ([value, label]) => `<option value="${value}"${(action.channel || "preferred") === value ? " selected" : ""}>${label}</option>`
           ).join("")}
         </select>
       </label>
@@ -4557,6 +4638,8 @@ function renderActionsBuilder(actions = {}) {
 function syncActionsJsonFromBuilder() {
   if (!el.configActionsCatalog) return;
   el.configActionsCatalog.value = stringifyJsonField(collectActionsBuilder(), "{}");
+  markConfigDirty();
+  renderSalesStrategyOverview();
 }
 
 function buildSimulationLeadTemplate(config = {}) {
@@ -4731,6 +4814,8 @@ function syncScenarioJsonFromBuilder() {
   if (!el.configScenarioTests) return;
   state.lastScenarioRunSummary = null;
   el.configScenarioTests.value = stringifyJsonField(collectScenarioBuilder(), "[]");
+  markConfigDirty();
+  renderSalesStrategyOverview();
 }
 
 function ensureSimulationDefaults(config = {}) {
@@ -4839,6 +4924,7 @@ function renderScenarioResults(payload = {}) {
     passed: Number(summary.passed || 0),
     failed: Number(summary.failed || 0),
   };
+  renderSalesStrategyOverview();
   renderSetupHealth(buildConfigPayload());
   if (!results.length) {
     el.configScenarioResults.innerHTML = '<div class="config-simulation-loading">No hay escenarios para ejecutar.</div>';
@@ -5102,7 +5188,12 @@ async function publishAgentConfig() {
 
   el.configPublishAgentBtn.disabled = true;
   el.configPublishAgentBtn.classList.add("is-busy");
+  if (el.configFooterPublishBtn) {
+    el.configFooterPublishBtn.disabled = true;
+    el.configFooterPublishBtn.classList.add("is-busy");
+  }
   setStatus(el.configPublishAgentStatus, "Publicando agente...");
+  setStatus(el.configSaveStatus, "Publicando cambios en el agente...");
 
   try {
     const data = await fetchJson(`${API_BASE}/config/publish-agent`, {
@@ -5124,11 +5215,14 @@ async function publishAgentConfig() {
       publishedAt ? `Agente publicado. ${publishedAt}` : "Agente publicado.",
       "ok"
     );
+    setStatus(el.configSaveStatus, "Cambios publicados y activos en el agente.", "ok");
   } catch (error) {
     setStatus(el.configPublishAgentStatus, `No se pudo publicar: ${error.message}`, "error");
+    setStatus(el.configSaveStatus, `No se pudo publicar: ${error.message}`, "error");
     renderSetupHealth(payload);
   } finally {
     el.configPublishAgentBtn.classList.remove("is-busy");
+    el.configFooterPublishBtn?.classList.remove("is-busy");
     renderSetupHealth(state.appConfig || payload);
   }
 }
@@ -5308,6 +5402,8 @@ function createAutomationStepItem(step = {}) {
   const channel = step.channel || "whatsapp";
   const templateKey = step.template_key || "";
   const active = step.active !== false;
+  const whatsappTemplateName = step.whatsapp_template_name || "";
+  const whatsappTemplateLanguage = step.whatsapp_template_language || "es";
   const channelLabel = channel === "email" ? "Email" : "WhatsApp";
 
   item.innerHTML = `
@@ -5315,8 +5411,9 @@ function createAutomationStepItem(step = {}) {
     <div class="automation-node-top">
       <span class="automation-node-icon">${channel === "email" ? "@" : "W"}</span>
       <div>
+        <span class="automation-step-number">Paso</span>
         <strong>${escapeHtml(channelLabel)}</strong>
-        <small>Despues de la espera</small>
+        <small>Enviar tras ${escapeHtml(formatAutomationDelay(delayValue, delayUnit))}</small>
       </div>
       <button type="button" class="service-remove-btn automation-step-remove" title="Quitar modulo">x</button>
     </div>
@@ -5343,6 +5440,20 @@ function createAutomationStepItem(step = {}) {
         Plantilla
         <select data-field="template_key">${getTemplateOptionsMarkup(templateKey)}</select>
       </label>
+      <div class="automation-whatsapp-template${channel === "whatsapp" ? "" : " is-hidden"}" data-role="whatsapp-template">
+        <div>
+          <strong>Fuera de la ventana de 24 horas</strong>
+          <small>Meta exige una plantilla de WhatsApp aprobada. Déjalo vacío solo si este mensaje siempre se enviará dentro de la ventana.</small>
+        </div>
+        <label class="automation-step-field">
+          Nombre en Meta
+          <input type="text" data-field="whatsapp_template_name" value="${escapeHtml(whatsappTemplateName)}" placeholder="seguimiento_lead" />
+        </label>
+        <label class="automation-step-field">
+          Idioma
+          <input type="text" data-field="whatsapp_template_language" value="${escapeHtml(whatsappTemplateLanguage)}" placeholder="es" />
+        </label>
+      </div>
       <label class="automation-step-field automation-step-toggle">
         <input type="checkbox" data-field="active"${active ? " checked" : ""} />
         <span>Paso activo</span>
@@ -5353,9 +5464,140 @@ function createAutomationStepItem(step = {}) {
 
   item
     .querySelector(".automation-step-remove")
-    ?.addEventListener("click", () => item.remove());
+    ?.addEventListener("click", () => {
+      item.remove();
+      renderAutomationOverview();
+    });
+
+  item.addEventListener("change", () => {
+    const selectedChannel = String(item.querySelector('[data-field="channel"]')?.value || "whatsapp");
+    const icon = item.querySelector(".automation-node-icon");
+    const title = item.querySelector(".automation-node-top strong");
+    const whatsappTemplate = item.querySelector('[data-role="whatsapp-template"]');
+    if (icon) icon.textContent = selectedChannel === "email" ? "@" : "W";
+    if (title) title.textContent = selectedChannel === "email" ? "Email" : "WhatsApp";
+    whatsappTemplate?.classList.toggle("is-hidden", selectedChannel !== "whatsapp");
+    renderAutomationOverview();
+  });
+  item.addEventListener("input", renderAutomationOverview);
 
   return item;
+}
+
+const AUTOMATION_FLOW_META = {
+  lead_recovery: {
+    eyebrow: "Recuperar una conversación",
+    trigger: "La última respuesta fue del agente y el lead sigue abierto, sin cualificar ni cerrar.",
+    stop: "Se detiene en cuanto la persona responde o el lead deja de estar abierto.",
+  },
+  quote_followup: {
+    eyebrow: "Seguir una propuesta",
+    trigger: "Existe una propuesta enviada y todavía no hay respuesta posterior del contacto.",
+    stop: "Se detiene en cuanto la persona responde o la oportunidad deja de ser elegible.",
+  },
+};
+
+function formatAutomationDelay(value, unit) {
+  const safeValue = Math.max(0, Number(value || 0));
+  const labels = {
+    minutes: safeValue === 1 ? "minuto" : "minutos",
+    hours: safeValue === 1 ? "hora" : "horas",
+    days: safeValue === 1 ? "día" : "días",
+  };
+  return `${safeValue} ${labels[unit] || labels.hours}`;
+}
+
+function updateAutomationFlowCard(card) {
+  if (!card) return { enabled: false, activeSteps: 0, errors: [] };
+  const flowKey = card.dataset.flowKey || "";
+  const enabled = Boolean(card.querySelector('[data-field="enabled"]')?.checked);
+  const items = [...card.querySelectorAll(".automation-step-item")];
+  const errors = [];
+  let activeSteps = 0;
+
+  items.forEach((item, index) => {
+    const active = Boolean(item.querySelector('[data-field="active"]')?.checked);
+    const channel = String(item.querySelector('[data-field="channel"]')?.value || "whatsapp");
+    const template = String(item.querySelector('[data-field="template_key"]')?.value || "").trim();
+    const whatsappTemplate = String(item.querySelector('[data-field="whatsapp_template_name"]')?.value || "").trim();
+    const delayValue = item.querySelector('[data-field="delay_value"]')?.value || "0";
+    const delayUnit = item.querySelector('[data-field="delay_unit"]')?.value || "hours";
+    const delayInHours =
+      delayUnit === "days"
+        ? Number(delayValue || 0) * 24
+        : delayUnit === "minutes"
+          ? Number(delayValue || 0) / 60
+          : Number(delayValue || 0);
+    const stepNumber = item.querySelector(".automation-step-number");
+    const stepCopy = item.querySelector(".automation-node-top small");
+    item.dataset.active = String(active);
+    if (stepNumber) stepNumber.textContent = `Paso ${index + 1}`;
+    if (stepCopy) {
+      stepCopy.textContent = `${active ? "Enviar" : "Pausado"} tras ${formatAutomationDelay(delayValue, delayUnit)}`;
+    }
+    if (active) {
+      activeSteps += 1;
+      if (!template) errors.push(`El paso ${index + 1} no tiene plantilla.`);
+      if (
+        channel === "whatsapp" &&
+        delayInHours >= 24 &&
+        !whatsappTemplate
+      ) {
+        errors.push(`El paso ${index + 1} de WhatsApp puede necesitar una plantilla aprobada de Meta.`);
+      }
+    }
+    if (channel === "whatsapp" && !hasConfiguredWhatsApp(buildConfigPayload())) {
+      item.dataset.channelWarning = "true";
+    } else {
+      delete item.dataset.channelWarning;
+    }
+  });
+
+  if (enabled && !activeSteps) errors.push("El flujo está activo pero no tiene mensajes activos.");
+  const summary = card.querySelector("[data-role='flow-summary']");
+  if (summary) {
+    summary.textContent = !enabled
+      ? "Flujo pausado: no programará ningún mensaje."
+      : activeSteps
+        ? `${activeSteps} mensaje${activeSteps === 1 ? "" : "s"} activo${activeSteps === 1 ? "" : "s"}. ${AUTOMATION_FLOW_META[flowKey]?.stop || "Se detiene cuando el contacto responde."}`
+        : "Activa al menos un mensaje para que el flujo pueda ejecutarse.";
+  }
+  const count = card.querySelector(".automation-flow-head-meta em");
+  if (count) count.textContent = `${activeSteps}/${items.length} mensajes activos`;
+  card.dataset.tone = !enabled ? "paused" : errors.length ? "warning" : "ready";
+  return { enabled, activeSteps, errors };
+}
+
+function renderAutomationOverview() {
+  const cards = [...(el.configAutomationFlowsList?.querySelectorAll(".automation-flow-card") || [])];
+  if (!cards.length) return;
+  const summaries = cards.map(updateAutomationFlowCard);
+  const enabledFlows = summaries.filter((item) => item.enabled).length;
+  const activeSteps = summaries.reduce((total, item) => total + item.activeSteps, 0);
+  const errors = summaries.flatMap((item) => item.errors);
+
+  if (el.configAutomationActiveFlows) {
+    el.configAutomationActiveFlows.textContent = `${enabledFlows} de ${cards.length}`;
+  }
+  if (el.configAutomationActiveSteps) {
+    el.configAutomationActiveSteps.textContent = String(activeSteps);
+  }
+  if (el.configAutomationHealthBadge) {
+    const tone = errors.length ? "warning" : enabledFlows ? "ready" : "paused";
+    el.configAutomationHealthBadge.dataset.tone = tone;
+    el.configAutomationHealthBadge.textContent = errors.length
+      ? `${errors.length} ajuste${errors.length === 1 ? "" : "s"} pendiente${errors.length === 1 ? "" : "s"}`
+      : enabledFlows
+        ? "Listo para probar"
+        : "Todos los flujos pausados";
+  }
+  if (el.configAutomationValidation) {
+    const tone = errors.length ? "warning" : "ready";
+    el.configAutomationValidation.dataset.tone = tone;
+    el.configAutomationValidation.innerHTML = errors.length
+      ? `<strong>Antes de publicar:</strong> ${escapeHtml(errors.join(" "))}`
+      : `<strong>Configuración coherente.</strong> El sistema comprobará respuesta, estado y consentimiento antes de cada envío.`;
+  }
 }
 
 function createAutomationFlowCard(key, flow = {}) {
@@ -5416,12 +5658,17 @@ function createAutomationFlowCanvasCard(key, flow = {}) {
   card.className = "automation-flow-card automation-flow-card-canvas";
   card.dataset.flowKey = key;
   const steps = Array.isArray(flow.steps) && flow.steps.length ? flow.steps : [];
-  const flowLabel = flow.label || key;
+  const flowMeta = AUTOMATION_FLOW_META[key] || {
+    eyebrow: "Seguimiento automático",
+    trigger: "El contacto entra en este flujo.",
+    stop: "Se detiene cuando el contacto responde.",
+  };
+  const flowLabel = flow.label || flowMeta.eyebrow;
 
   card.innerHTML = `
     <div class="automation-flow-head">
       <div class="automation-flow-head-copy">
-        <span>Flujo</span>
+        <span>${escapeHtml(flowMeta.eyebrow)}</span>
         <strong>${escapeHtml(flowLabel)}</strong>
         <p>${escapeHtml(flow.description || "Secuencia automatica para mover la oportunidad sin depender de seguimiento manual.")}</p>
       </div>
@@ -5432,6 +5679,10 @@ function createAutomationFlowCanvasCard(key, flow = {}) {
           <span>Activo</span>
         </label>
       </div>
+    </div>
+    <div class="automation-flow-logic">
+      <div><span>CUANDO</span><p>${escapeHtml(flowMeta.trigger)}</p></div>
+      <div><span>SE DETIENE SI</span><p>${escapeHtml(flowMeta.stop)}</p></div>
     </div>
     <div class="automation-flow-fields">
       <label class="automation-flow-field">
@@ -5446,21 +5697,22 @@ function createAutomationFlowCanvasCard(key, flow = {}) {
     <div class="automation-canvas">
       <div class="automation-canvas-head">
         <div>
-          <strong>Canvas de automatizacion</strong>
-          <p>Modulos ordenados por espera, canal y plantilla.</p>
+          <strong>Secuencia de mensajes</strong>
+          <p>Configura el tiempo, canal y mensaje de cada paso.</p>
         </div>
-        <button type="button" class="crm-secondary-btn automation-add-step-btn">+ Añadir modulo</button>
+        <button type="button" class="crm-secondary-btn automation-add-step-btn">+ Añadir mensaje</button>
       </div>
       <div class="automation-node-layer">
         <div class="automation-start-node">
           <span class="automation-node-handle automation-node-handle-out"></span>
-          <span>Inicio</span>
-          <strong>${escapeHtml(flowLabel)}</strong>
-          <small>Cuando el lead entra en este flujo</small>
+          <span>Evento</span>
+          <strong>Se cumplen las condiciones</strong>
+          <small>${escapeHtml(flowMeta.trigger)}</small>
         </div>
         <div class="automation-steps-list"></div>
       </div>
     </div>
+    <div class="automation-flow-summary" data-role="flow-summary"></div>
   `;
 
   const stepsList = card.querySelector(".automation-steps-list");
@@ -5472,7 +5724,11 @@ function createAutomationFlowCanvasCard(key, flow = {}) {
     .querySelector(".automation-add-step-btn")
     ?.addEventListener("click", () => {
       stepsList?.appendChild(createAutomationStepItem());
+      renderAutomationOverview();
     });
+
+  card.addEventListener("input", renderAutomationOverview);
+  card.addEventListener("change", renderAutomationOverview);
 
   return card;
 }
@@ -5486,6 +5742,7 @@ function renderAutomationFlows(flows = {}) {
       createAutomationFlowCanvasCard(key, flows?.[key] || {})
     );
   }
+  renderAutomationOverview();
 }
 
 function collectAutomationFlows() {
@@ -5508,6 +5765,8 @@ function collectAutomationFlows() {
         delay_unit: value("delay_unit"),
         channel: value("channel"),
         template_key: value("template_key"),
+        whatsapp_template_name: value("whatsapp_template_name"),
+        whatsapp_template_language: value("whatsapp_template_language") || "es",
         active: Boolean(item.querySelector('[data-field="active"]')?.checked),
       };
     }).filter((step) => step.template_key);
@@ -5983,7 +6242,14 @@ function renderConfig() {
   if (el.configBusinessModel) el.configBusinessModel.value = businessProfile.business_model || "";
   if (el.configBusinessAudience) el.configBusinessAudience.value = businessProfile.audience || "";
   if (el.configPrimaryConversionGoal) {
-    el.configPrimaryConversionGoal.value = businessProfile.primary_conversion_goal || "";
+    const goalValue = businessProfile.primary_conversion_goal || "";
+    if (goalValue && ![...el.configPrimaryConversionGoal.options].some((option) => option.value === goalValue)) {
+      const option = document.createElement("option");
+      option.value = goalValue;
+      option.textContent = `Objetivo personalizado: ${humanizeSalesValue(goalValue)}`;
+      el.configPrimaryConversionGoal.appendChild(option);
+    }
+    el.configPrimaryConversionGoal.value = goalValue;
   }
   if (el.configSecondaryGoals) {
     el.configSecondaryGoals.value = Array.isArray(businessProfile.secondary_goals)
@@ -6278,16 +6544,10 @@ function renderConfig() {
     el.configBootstrapSummary.value = "";
   }
   updateKnowledgeOnboardingState();
+  renderSalesStrategyOverview(config);
 }
 
 function setConfigTab(tabName) {
-  if (
-    state.currentConfigTab &&
-    state.currentConfigTab !== tabName &&
-    !confirmConfigNavigation("Hay cambios sin guardar en la configuracion. ¿Cambiar de seccion de todos modos?")
-  ) {
-    return false;
-  }
   const isGeneral = tabName === "general";
   const isSalesSystem = tabName === "sales_system";
   const isPipeline = tabName === "pipeline";
@@ -7488,6 +7748,10 @@ async function saveConfig() {
   }
   el.configSaveBtn.disabled = true;
   el.configSaveBtn.classList.add("is-busy");
+  if (el.configFooterSaveBtn) {
+    el.configFooterSaveBtn.disabled = true;
+    el.configFooterSaveBtn.classList.add("is-busy");
+  }
   setStatus(el.configSaveStatus, "Guardando configuracion...");
 
   try {
@@ -7504,7 +7768,6 @@ async function saveConfig() {
     state.configDirty = false;
     renderConfig();
     highlightSuggestedKnowledgeFlow();
-    highlightSuggestedKnowledgeFlow();
     renderAccounts();
     setStatus(el.configSaveStatus, "Configuracion guardada.", "ok");
   } catch (error) {
@@ -7512,6 +7775,10 @@ async function saveConfig() {
   } finally {
     el.configSaveBtn.disabled = false;
     el.configSaveBtn.classList.remove("is-busy");
+    if (el.configFooterSaveBtn) {
+      el.configFooterSaveBtn.disabled = false;
+      el.configFooterSaveBtn.classList.remove("is-busy");
+    }
   }
 }
 
@@ -8580,6 +8847,8 @@ el.accountSelect?.addEventListener("change", () =>
   })
 );
 el.configSaveBtn.addEventListener("click", saveConfig);
+el.configFooterSaveBtn?.addEventListener("click", saveConfig);
+el.configFooterPublishBtn?.addEventListener("click", publishAgentConfig);
 el.configAddServiceBtn.addEventListener("click", () => {
   el.configServicesList.appendChild(createServiceEditorItem());
   markConfigDirty();
@@ -8772,7 +9041,7 @@ el.configGoToServicesBtn?.addEventListener("click", () => {
   }
 });
 document.querySelector(".config-tabs")?.addEventListener("keydown", (event) => {
-  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
   const tabs = [...document.querySelectorAll('.config-tabs [role="tab"]')];
   const currentIndex = tabs.indexOf(document.activeElement);
   if (currentIndex < 0) return;
@@ -8781,7 +9050,7 @@ document.querySelector(".config-tabs")?.addEventListener("keydown", (event) => {
     ? 0
     : event.key === "End"
       ? tabs.length - 1
-      : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+      : (currentIndex + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + tabs.length) % tabs.length;
   const nextTab = tabs[nextIndex];
   if (setConfigTab(nextTab.dataset.configTab)) nextTab.focus();
 });
@@ -8877,6 +9146,14 @@ el.configScenarioTests?.addEventListener("change", () => {
 });
 el.configRunScenariosBtn?.addEventListener("click", runSalesSystemScenarios);
 el.configPublishAgentBtn?.addEventListener("click", publishAgentConfig);
+document.querySelectorAll("[data-sales-target]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.getElementById(button.dataset.salesTarget || "")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  });
+});
 el.configForm?.addEventListener("input", (event) => {
   if (event.target?.closest?.('[data-config-runtime-control="true"]')) return;
   markConfigDirty();
@@ -8889,6 +9166,8 @@ el.configForm?.addEventListener("input", (event) => {
     ...payload,
     deployment: state.appConfig?.deployment || payload.deployment || {},
   });
+  renderSalesStrategyOverview(payload);
+  renderAutomationOverview();
 });
 el.configForm?.addEventListener("change", (event) => {
   if (event.target?.closest?.('[data-config-runtime-control="true"]')) return;
@@ -8902,6 +9181,8 @@ el.configForm?.addEventListener("change", (event) => {
     ...payload,
     deployment: state.appConfig?.deployment || payload.deployment || {},
   });
+  renderSalesStrategyOverview(payload);
+  renderAutomationOverview();
 });
 el.configWidgetEmbedMode?.addEventListener("change", refreshWidgetInstallPreview);
 el.configWidgetAllowedDomains?.addEventListener("input", refreshWidgetInstallPreview);
