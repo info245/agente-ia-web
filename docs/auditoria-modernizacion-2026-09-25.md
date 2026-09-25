@@ -81,16 +81,22 @@ La dirección de producto combina:
 
 ## Activación en producción
 
-1. Ejecutar `sql/012_reliable_runtime_foundation.sql` en Supabase.
-2. Añadir `SECRETS_ENCRYPTION_KEY` y `CHANNEL_INBOX_INTERVAL_MS=5000` al entorno.
-3. Desplegar el backend actualizado.
-4. En CRM, configurar y probar el canal WhatsApp de cada cuenta.
-5. Configurar una plantilla aprobada para primer contacto y para seguimientos fuera de 24 horas.
-6. Sincronizar las fuentes de conocimiento.
-7. Ejecutar escenarios del Agent Studio y publicar la versión.
-8. Configurar cada formulario server-side con `x-integrations-secret` e `Idempotency-Key`.
+La base técnica quedó activada el 25 de septiembre de 2026:
 
-La migración es aditiva y reparadora, pero debe ejecutarse antes de activar los nuevos workers. No se aplicó automáticamente desde esta sesión porque el entorno local solo contiene la clave de servicio de la aplicación; no hay `DATABASE_URL`, token de administración de Supabase ni credencial de despliegue.
+- `sql/012_reliable_runtime_foundation.sql` aplicado correctamente al proyecto Supabase `BETA CHAT`.
+- Secretos de autenticación, cifrado, integraciones y tareas generados y guardados directamente en Render.
+- `CHANNEL_INBOX_INTERVAL_MS=5000` configurado.
+- Commit `edd3b07` desplegado en `agente-ia-web-backend` y marcado `Live`.
+- `/health` y configuración pública del widget verificados con HTTP `200`; configuración privada del CRM devuelve `401` sin sesión.
+- Workers de inbox y automatizaciones verificados en logs, sin errores y con ejecución cada cinco segundos.
+
+La activación funcional por cliente requiere completar desde el CRM:
+
+1. Configurar y probar el canal WhatsApp de cada cuenta con las credenciales de Meta.
+2. Elegir plantillas aprobadas para primer contacto y seguimientos fuera de 24 horas.
+3. Sincronizar las fuentes de conocimiento.
+4. Ejecutar escenarios del Agent Studio y publicar la versión.
+5. Configurar cada formulario server-side con `x-integrations-secret` e `Idempotency-Key`.
 
 ## Endurecimiento posterior recomendado
 
