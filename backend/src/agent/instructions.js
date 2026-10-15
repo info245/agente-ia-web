@@ -62,9 +62,26 @@ const FIELD_LABELS = {
   main_goal: "objetivo principal",
 };
 
+// Campos personalizados con la misma clave que uno estándar (p. ej. main_goal) se capturan como ese campo.
+function customFields(appConfig = null) {
+  return (appConfig?.lead_capture?.custom_fields || []).filter((field) => field?.key && field?.label);
+}
+
 export function getCaptureFields(appConfig = null) {
   const enabled = appConfig?.lead_capture?.fields || {};
-  return Object.keys(FIELD_LABELS).filter((field) => enabled[field] === true);
+  const custom = customFields(appConfig).map((field) => field.key);
+  return Object.keys(FIELD_LABELS).filter((field) => enabled[field] === true || custom.includes(field));
+}
+
+// Lo que falta para dar el lead por completo. Como en legacy, con email y teléfono pedidos basta uno.
+export function getMissingFields(lead = {}, appConfig = null) {
+  const enabled = appConfig?.lead_capture?.fields || {};
+  const requiredCustom = customFields(appConfig).filter((field) => field.required).map((field) => field.key);
+  const required = Object.keys(FIELD_LABELS).filter((field) => enabled[field] === true || requiredCustom.includes(field));
+  const has = (field) => String(lead?.[field] || "").trim();
+  const missing = required.filter((field) => !has(field));
+  const eitherContact = required.includes("email") && required.includes("phone") && (has("email") || has("phone"));
+  return eitherContact ? missing.filter((field) => field !== "email" && field !== "phone") : missing;
 }
 
 function offerNames(appConfig = null) {
@@ -89,7 +106,7 @@ export function buildAccountContext(appConfig = null) {
   const agent = appConfig?.agent || {};
   const contact = appConfig?.contact || {};
   const offers = offerNames(appConfig);
-  const customFields = (appConfig?.lead_capture?.custom_fields || []).filter((field) => field?.key && field?.label);
+  const otherCustomFields = customFields(appConfig).filter((field) => !FIELD_LABELS[field.key]);
 
   return [
     "CONTEXTO DE LA CUENTA",
@@ -113,7 +130,7 @@ export function buildAccountContext(appConfig = null) {
       "CAMPOS A CAPTURAR",
       [
         ...getCaptureFields(appConfig).map((field) => `- ${field} (${FIELD_LABELS[field]})`),
-        ...customFields.map((field) => `- ${field.label} (anótalo en main_goal o pregúntalo solo si encaja)`),
+        ...otherCustomFields.map((field) => `- ${field.label} (anótalo en main_goal o pregúntalo solo si encaja)`),
       ].join("\n") || "- Ninguno"
     ),
     section(
@@ -134,9 +151,8 @@ export function buildAccountContext(appConfig = null) {
 
 // Cambia en cada turno: va en la entrada, no en las instrucciones, para no romper la caché.
 export function buildTurnState({ lead = {}, appConfig = null, channel = "web", now = new Date(), tools = [] } = {}) {
-  const fields = getCaptureFields(appConfig);
-  const known = fields.filter((field) => String(lead?.[field] || "").trim());
-  const missing = fields.filter((field) => !known.includes(field));
+  const known = getCaptureFields(appConfig).filter((field) => String(lead?.[field] || "").trim());
+  const missing = getMissingFields(lead, appConfig);
   const timezone = appConfig?.agent?.meeting?.timezone || "Europe/Madrid";
   return [
     "ESTADO DEL LEAD (actualizado por el sistema)",

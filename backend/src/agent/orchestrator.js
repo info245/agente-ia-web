@@ -17,7 +17,7 @@ import { searchKnowledge } from "../lib/kbRetriever.js";
 import { decideEmailSend } from "../lib/leadEmailPolicy.js";
 import { supabase } from "../lib/supabase.js";
 import { runAgentTurn } from "./engine.js";
-import { getCaptureFields } from "./instructions.js";
+import { getCaptureFields, getMissingFields } from "./instructions.js";
 import { createGoogleCalendar, isCalendarConnected } from "./googleCalendar.js";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -94,8 +94,7 @@ function buildHandlers(context, state) {
     async save_lead_fields(args) {
       const { patch, ignored } = cleanLeadPatch(args, appConfig);
       if (Object.keys(patch).length) await saveLead(patch);
-      const missing = getCaptureFields(appConfig).filter((field) => !String(state.lead?.[field] || "").trim());
-      return { ok: true, saved: Object.keys(patch), ignored, missing };
+      return { ok: true, saved: Object.keys(patch), ignored, missing: getMissingFields(state.lead, appConfig) };
     },
 
     async handoff_to_human({ reason }) {
@@ -151,10 +150,9 @@ function buildHandlers(context, state) {
   return handlers;
 }
 
-// El lead está completo cuando tiene todo lo que la cuenta pide capturar.
+// El lead está completo cuando no falta nada de lo que la cuenta exige capturar.
 export function isLeadComplete(lead = {}, appConfig = null) {
-  const fields = getCaptureFields(appConfig);
-  return fields.length > 0 && fields.every((field) => String(lead?.[field] || "").trim());
+  return getCaptureFields(appConfig).length > 0 && getMissingFields(lead, appConfig).length === 0;
 }
 
 async function notifyLeadChanges(context, leadBefore, leadAfter, { chatCompleted = false } = {}) {

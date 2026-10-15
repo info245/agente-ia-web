@@ -145,6 +145,23 @@ test("el lead se cierra solo cuando tiene todo lo que la cuenta captura", () => 
   assert.deepEqual(cleanLeadPatch({ business_type: "Ecommerce" }, withType).patch, { business_type: "Ecommerce" });
 });
 
+test("con email y teléfono pedidos basta uno; los campos personalizados estándar cuentan", () => {
+  const config = {
+    lead_capture: {
+      fields: { name: true, email: true, phone: true },
+      custom_fields: [
+        { key: "main_goal", label: "Objetivo", required: true },
+        { key: "urgency", label: "Urgencia", required: false },
+      ],
+    },
+  };
+  assert.equal(isLeadComplete({ name: "Ana", email: "ana@acme.com" }, config), false);
+  assert.equal(isLeadComplete({ name: "Ana", email: "ana@acme.com", main_goal: "Vender" }, config), true);
+  assert.equal(isLeadComplete({ name: "Ana", phone: "600111222", main_goal: "Vender" }, config), true);
+  // urgency es opcional: se puede guardar, pero no bloquea el cierre.
+  assert.deepEqual(cleanLeadPatch({ urgency: "este mes" }, config).patch, { urgency: "este mes" });
+});
+
 test("huecos libres: horario laboral en la zona de la cuenta, sin solapes ni pasado", () => {
   const now = new Date("2026-10-19T06:00:00Z"); // lunes 08:00 en Madrid (CEST)
   const meeting = { timezone: "Europe/Madrid", duration_minutes: 60, days: [1, 2, 3, 4, 5], start_hour: 9, end_hour: 12 };
