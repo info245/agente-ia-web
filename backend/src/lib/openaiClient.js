@@ -14,6 +14,8 @@ console.log("✅ OPENAI_API_KEY cargada en openaiClient.js");
 
 // Único sitio del modelo: cambiarlo es cambiar OPENAI_AGENT_MODEL en Render.
 export const AGENT_MODEL = process.env.OPENAI_AGENT_MODEL || "gpt-4.1-mini";
+// El motor v2 (src/agent) decide con un solo modelo y tolera uno de razonamiento; por defecto, el mismo.
+export const AGENT_V2_MODEL = process.env.OPENAI_AGENT_V2_MODEL || AGENT_MODEL;
 // Ligado a vector(1536) en kb_docs: cambiarlo exige migrar y re-indexar.
 export const EMBEDDING_MODEL = "text-embedding-3-small";
 

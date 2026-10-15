@@ -57,9 +57,14 @@ const CONFIG_SECRET_PATHS = [
 function transformConfigSecrets(config, transformer) {
   const clone = JSON.parse(JSON.stringify(config || {}));
   const email = clone?.integrations?.email;
-  if (!email) return clone;
-  for (const key of CONFIG_SECRET_PATHS) {
-    if (email[key]) email[key] = transformer(email[key]);
+  if (email) {
+    for (const key of CONFIG_SECRET_PATHS) {
+      if (email[key]) email[key] = transformer(email[key]);
+    }
+  }
+  const calendar = clone?.integrations?.calendar;
+  if (calendar?.google_refresh_token) {
+    calendar.google_refresh_token = transformer(calendar.google_refresh_token);
   }
   return clone;
 }

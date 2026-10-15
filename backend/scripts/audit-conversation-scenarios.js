@@ -1,4 +1,6 @@
+// Uso: node scripts/audit-conversation-scenarios.js [--engine=v2] [--only=id1,id2]
 import "dotenv/config";
+import fs from "node:fs";
 
 import { listAccounts } from "../src/lib/accountStore.js";
 import { getAppConfig } from "../src/lib/appConfigStore.js";
@@ -10,6 +12,12 @@ import { runSalesQualificationAgent } from "../src/agents/tmedia/salesQualificat
 import { runServiceExpertAgent } from "../src/agents/tmedia/serviceExpertAgent.js";
 import { runConversationAgent } from "../src/agents/tmedia/conversationAgent.js";
 import { __tmediaChatOrchestratorTestables } from "../src/agents/orchestrators/tmediaChatOrchestrator.js";
+import { runAgentTurn } from "../src/agent/engine.js";
+import { cleanLeadPatch } from "../src/agent/orchestrator.js";
+import { searchKnowledge } from "../src/lib/kbRetriever.js";
+
+const ENGINE = process.argv.find((arg) => arg.startsWith("--engine="))?.split("=")[1] || "legacy";
+const ONLY = process.argv.find((arg) => arg.startsWith("--only="))?.split("=")[1]?.split(",") || null;
 
 const {
   guardAgainstReplyLoop,
@@ -231,6 +239,42 @@ function assertTurn(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+// v2 sin efectos: conocimiento real (solo lectura), CRM en memoria, derivación simulada.
+async function respondV2(session, text, appConfig, accountId) {
+  const userMessage = { role: "user", content: text };
+  const messages = [...session.messages, userMessage];
+  const turn = await runAgentTurn({
+    appConfig,
+    lead: session.lead,
+    messages,
+    channel: "web",
+    handlers: {
+      search_knowledge: async ({ query }) => ({
+        ok: true,
+        results: (await searchKnowledge(query, { accountId, topK: 5 })).map((doc) => ({
+          title: doc.title,
+          url: doc.url,
+          text: String(doc.chunk || "").slice(0, 1200),
+        })),
+      }),
+      save_lead_fields: async (args) => {
+        const { patch, ignored } = cleanLeadPatch(args, appConfig);
+        session.lead = { ...session.lead, ...patch };
+        return { ok: true, saved: Object.keys(patch), ignored };
+      },
+      handoff_to_human: async () => ({ ok: true, registered: true, team_notified: true, other_channels: ["email (hola@heysancho.com)"] }),
+      send_quote: async () => ({ ok: true, registered: true, team_notified: true }),
+    },
+  });
+  session.messages.push(userMessage, { role: "assistant", content: turn.reply });
+  return {
+    reply: turn.reply,
+    routerResult: { intent: turn.intent },
+    selectedAgent: turn.tool_calls.map((call) => call.name).join(",") || "v2",
+    lead: session.lead,
+  };
+}
+
 async function respond(session, text, appConfig) {
   const userMessage = { role: "user", content: text };
   const messages = [...session.messages, userMessage];
@@ -317,15 +361,26 @@ async function main() {
   const account = accounts.find((item) => item.slug === "sancho");
   if (!account) throw new Error("No se encontró la cuenta Sancho para la auditoría");
   const appConfig = await getAppConfig({ force: true, accountId: account.id });
+  if (ENGINE === "v2" && !appConfig.agent?.policy) {
+    // Hasta aplicar scripts/apply-agent-policy.js, se audita con la política del repo.
+    const policy = JSON.parse(fs.readFileSync(new URL("../config/agent-policies/sancho.json", import.meta.url), "utf8"));
+    appConfig.agent = { ...appConfig.agent, ...policy.agent };
+  }
+  console.log(`Motor: ${ENGINE}`);
 
   const results = [];
-  for (const scenario of scenarios) {
+  const turnTimes = [];
+  for (const scenario of scenarios.filter((item) => !ONLY || ONLY.includes(item.id))) {
     const session = { id: scenario.id, lead: {}, messages: [] };
     const priorReplies = new Set();
     const transcript = [];
     try {
       for (const turn of scenario.turns) {
-        const result = await respond(session, turn.text, appConfig);
+        const startedAt = Date.now();
+        const result = ENGINE === "v2"
+          ? await respondV2(session, turn.text, appConfig, account.id)
+          : await respond(session, turn.text, appConfig);
+        turnTimes.push(Date.now() - startedAt);
         validateCommon({ scenario, turn, result, priorReplies });
         priorReplies.add(normalize(result.reply));
         transcript.push({
@@ -345,7 +400,13 @@ async function main() {
 
   const failed = results.filter((item) => !item.ok);
   console.log("\nRESUMEN");
-  console.log(JSON.stringify({ total: results.length, passed: results.length - failed.length, failed: failed.length }, null, 2));
+  console.log(JSON.stringify({
+    total: results.length,
+    passed: results.length - failed.length,
+    failed: failed.length,
+    avg_turn_ms: Math.round(turnTimes.reduce((sum, ms) => sum + ms, 0) / (turnTimes.length || 1)),
+    p95_turn_ms: turnTimes.sort((a, b) => a - b)[Math.floor(turnTimes.length * 0.95)] || 0,
+  }, null, 2));
   if (failed.length) {
     console.log("\nFALLOS");
     console.log(JSON.stringify(failed, null, 2));

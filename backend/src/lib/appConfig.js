@@ -1340,6 +1340,19 @@ function sanitizeAutomationFlows(value = {}) {
   return result;
 }
 
+function sanitizeMeetingConfig(value = {}) {
+  const days = Array.isArray(value?.days)
+    ? value.days.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+    : [];
+  return {
+    duration_minutes: clampNumber(value?.duration_minutes, 30, 10, 240),
+    timezone: cleanString(value?.timezone) || "Europe/Madrid",
+    days: days.length ? [...new Set(days)] : [1, 2, 3, 4, 5],
+    start_hour: clampNumber(value?.start_hour, 9, 0, 23),
+    end_hour: clampNumber(value?.end_hour, 18, 1, 24),
+  };
+}
+
 export function sanitizeAppConfig(input = {}, options = {}) {
   const services = sanitizeServices(input?.services);
   const offersInput = Object.prototype.hasOwnProperty.call(input || {}, "offers")
@@ -1427,7 +1440,13 @@ export function sanitizeAppConfig(input = {}, options = {}) {
           defaults.agent.handoff_target_channel
         ),
         prompt_additions: resolveString(input?.agent?.prompt_additions),
+        // Motor v2: el comportamiento propio de cada cliente vive aquí, no en código.
+        policy: resolveString(input?.agent?.policy),
+        offer_meeting_when: resolveString(input?.agent?.offer_meeting_when),
+        handoff_when: resolveString(input?.agent?.handoff_when),
+        meeting: sanitizeMeetingConfig(input?.agent?.meeting),
       },
+      agent_engine: input?.agent_engine === "v2" ? "v2" : "legacy",
       lead_capture,
       qualification_schema,
       personalization_rules,
@@ -1560,6 +1579,13 @@ export function sanitizeAppConfig(input = {}, options = {}) {
           input?.integrations?.automations?.validation,
           defaults.integrations.automations.validation
         ),
+      },
+      calendar: {
+        provider: cleanString(input?.integrations?.calendar?.provider),
+        calendar_id: cleanString(input?.integrations?.calendar?.calendar_id) || "primary",
+        google_refresh_token: cleanString(input?.integrations?.calendar?.google_refresh_token),
+        google_connected_email: cleanString(input?.integrations?.calendar?.google_connected_email),
+        connected_at: cleanString(input?.integrations?.calendar?.connected_at),
       },
       },
       message_templates,
