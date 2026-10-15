@@ -1392,7 +1392,8 @@ export async function upsertLeadFromConversation(lead = {}) {
     urgency: clean(lead.urgency),
     budget_range: clean(lead.budget_range),
     summary: clean(lead.summary),
-    lead_score: lead.lead_score ?? lead.lead_Score ?? null,
+    // La columna es NOT NULL DEFAULT 0 (sql/012): el motor v2 guarda datos antes de puntuar.
+    lead_score: lead.lead_score ?? lead.lead_Score ?? 0,
     consent:
       typeof lead.consent === "boolean"
         ? lead.consent
