@@ -30,7 +30,8 @@ export async function processIncomingMessage({
     message: messageText || message || text || "",
     metadata,
     accountId: accountId || account_id || null,
+    actionCallbacks,
   };
   if ((await resolveAgentEngine(input.accountId)) === "v2") return processAgentV2Message(input);
-  return processTmediaIncomingMessage({ ...input, actionCallbacks });
+  return processTmediaIncomingMessage(input);
 }

@@ -68,6 +68,7 @@ export const TOOL_DEFINITIONS = {
       email: nullableString,
       phone: nullableString,
       company: nullableString,
+      business_type: nullableString,
       interest_service: nullableString,
       budget_range: nullableString,
       urgency: nullableString,
@@ -158,7 +159,7 @@ export async function runAgentTurn({
   let input = [...history.slice(0, -1), state, ...history.slice(-1)];
   const toolCalls = [];
   const previousReplies = new Set(history.filter((item) => item.role === "assistant").map((item) => normalize(item.content)));
-  let retriedRepeat = false;
+  let repeatRetries = 0;
 
   for (let step = 0; step < maxSteps; step += 1) {
     const lastStep = step === maxSteps - 1;
@@ -177,12 +178,13 @@ export async function runAgentTurn({
     if (!calls.length) {
       const parsed = parseReply(response.output_text);
       // Repetir literalmente un mensaje anterior es el fallo que más irrita: una sola reescritura.
-      if (!retriedRepeat && !lastStep && previousReplies.has(normalize(parsed.reply))) {
-        retriedRepeat = true;
+      // Hasta dos reescrituras: con respuestas casi fijas (límites de seguridad) la primera a veces repite.
+      if (repeatRetries < 2 && !lastStep && previousReplies.has(normalize(parsed.reply))) {
+        repeatRetries += 1;
         input = [
           ...input,
           { role: "assistant", content: response.output_text },
-          { role: "developer", content: "Ese mensaje repite literalmente uno anterior. Reescríbelo con otras palabras respondiendo al último mensaje." },
+          { role: "developer", content: "Ese mensaje repite literalmente uno anterior. Reescríbelo respondiendo al último mensaje: si es una respuesta fija de la política, cambia las palabras de la parte que la política deja libre." },
         ];
         continue;
       }

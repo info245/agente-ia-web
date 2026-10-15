@@ -7,9 +7,12 @@ import {
   saveConversationEvent,
   saveMessage,
   updateConversationInboxState,
+  updateLeadCrmFields,
   upsertLeadFromConversation,
 } from "../lib/chatStore.js";
+import { executeConfiguredAction } from "../lib/actionExecutor.js";
 import { getAppConfig } from "../lib/appConfigStore.js";
+import { getNextBestAction } from "../lib/nextBestAction.js";
 import { searchKnowledge } from "../lib/kbRetriever.js";
 import { decideEmailSend } from "../lib/leadEmailPolicy.js";
 import { supabase } from "../lib/supabase.js";
@@ -148,24 +151,65 @@ function buildHandlers(context, state) {
   return handlers;
 }
 
-async function notifyLeadChanges(context, leadBefore, leadAfter) {
+// El lead está completo cuando tiene todo lo que la cuenta pide capturar.
+export function isLeadComplete(lead = {}, appConfig = null) {
+  const fields = getCaptureFields(appConfig);
+  return fields.length > 0 && fields.every((field) => String(lead?.[field] || "").trim());
+}
+
+async function notifyLeadChanges(context, leadBefore, leadAfter, { chatCompleted = false } = {}) {
   const events = await listConversationEventsByType(context.conversationId, "agent_notification_sent", 25, context.accountId).catch(() => []);
   const last = events.find((item) => item?.payload?.sent_internal === true || item?.payload?.internal?.ok === true);
-  const decision = decideEmailSend({
+  let decision = decideEmailSend({
     leadBefore,
     leadAfter,
     lastSignatureSent: last?.payload?.signature || null,
-    minMinutesBetween: 10,
+    minMinutesBetween: chatCompleted ? 0 : 10,
     lastSentAtMs: last?.created_at ? Date.parse(last.created_at) : 0,
   });
+  // Al cerrar, el equipo recibe el lead aunque no haya cambiado desde el último aviso.
+  if (chatCompleted && decision.sendType === "none" && !last) decision = { sendType: "new", changedFields: [] };
   if (decision.sendType === "none") return null;
   return runNotificationAgent({
     ...context,
     lead: leadAfter,
     notificationType: decision.sendType,
     changedFields: decision.changedFields,
-    sendClientConfirmation: false,
+    sendClientConfirmation: chatCompleted,
   }).catch((error) => ({ sent_internal: false, error: error.message }));
+}
+
+// Catálogo de acciones de la cuenta: misma lógica y deduplicación que el motor legacy.
+async function runConfiguredAction(context, state, { chatCompleted, actionCallbacks }) {
+  if (!actionCallbacks || !state.lead?.id) return null;
+  const { appConfig, accountId, conversationId, sourceChannel, externalUserId } = context;
+  const nextBestAction = getNextBestAction({
+    lead: state.lead,
+    text: context.message,
+    appConfig,
+    channel: sourceChannel,
+    phase: chatCompleted ? "close" : "capture",
+  });
+  const extra = { appConfig, accountId, conversationId, channel: sourceChannel, externalUserId };
+  return executeConfiguredAction({
+    lead: state.lead,
+    conversationId,
+    channel: sourceChannel,
+    externalUserId,
+    accountId,
+    nextBestAction,
+    recentActionEvents: await listConversationEventsByType(conversationId, "action_executed", 25, accountId).catch(() => []),
+    updateLeadCrmFields,
+    saveConversationEvent,
+    sendActionMessage: actionCallbacks.sendActionMessage && ((payload) => actionCallbacks.sendActionMessage({ ...payload, ...extra })),
+    // Si el equipo ya recibió un aviso en este turno, no se le manda otro email por la acción.
+    executeActionTask:
+      actionCallbacks.executeActionTask &&
+      ((payload) =>
+        state.notified
+          ? { ok: true, skipped: true, reason: "already-notified-by-agent", reused_existing_effect: true }
+          : actionCallbacks.executeActionTask({ ...payload, ...extra })),
+  }).catch((error) => ({ executed: false, reason: "execution-error", error: error?.message || String(error) }));
 }
 
 export async function processAgentV2Message({
@@ -175,6 +219,7 @@ export async function processAgentV2Message({
   message,
   metadata = {},
   accountId = null,
+  actionCallbacks = null,
 } = {}) {
   if (!message || typeof message !== "string") throw new Error("message es obligatorio y debe ser texto");
 
@@ -253,16 +298,36 @@ export async function processAgentV2Message({
     payload: { role: "assistant", text: reply.slice(0, 500), engine: "v2", intent: turn.intent, tools: toolsUsed },
   }).catch(() => null);
 
-  if (state.leadChanged && !state.notified) await notifyLeadChanges(context, leadBefore, state.lead);
+  // Cierre: con todos los datos, el lead pasa a completed una sola vez y el cliente recibe confirmación.
+  const chatCompleted =
+    state.lead?.current_step !== "completed" && !state.handoff && isLeadComplete(state.lead, context.appConfig);
+  if (chatCompleted) {
+    const saved = await upsertLeadFromConversation({
+      ...state.lead,
+      conversation_id: context.conversationId,
+      account_id: accountId,
+      current_step: "completed",
+    });
+    state.lead = { ...state.lead, ...saved };
+    state.leadChanged = true;
+  }
+  if ((state.leadChanged || chatCompleted) && !state.notified) {
+    const notification = await notifyLeadChanges(context, leadBefore, state.lead, { chatCompleted });
+    if (notification?.sent_internal) state.notified = true;
+  }
+  const actionExecution = await runConfiguredAction(context, state, { chatCompleted, actionCallbacks });
 
-  const finalLead = state.leadChanged
-    ? await getLeadByConversationId(context.conversationId, { accountId }).catch(() => state.lead)
-    : context.lead;
+  const finalLead =
+    state.leadChanged || actionExecution?.executed
+      ? await getLeadByConversationId(context.conversationId, { accountId }).catch(() => state.lead)
+      : context.lead;
   const handoffOptions = buildHandoffOptions({
     appConfig: context.appConfig,
     conversationId: context.conversationId,
     reply,
-    show: sourceChannel === "web" && (state.handoff || turn.intent === "human_request"),
+    show:
+      sourceChannel === "web" &&
+      (state.handoff || turn.intent === "human_request" || chatCompleted || finalLead?.current_step === "completed"),
   });
   const whatsappHandoff = handoffOptions.find((option) => option.type === "whatsapp") || null;
 
@@ -279,7 +344,8 @@ export async function processAgentV2Message({
     lead: finalLead,
     handoff_recorded: state.handoff,
     meeting_booked: state.booked,
-    chat_completed: false,
+    action_execution: actionExecution,
+    chat_completed: chatCompleted || finalLead?.current_step === "completed",
     handoff_options: handoffOptions,
     handoff_url: whatsappHandoff?.url || null,
     handoff_label: whatsappHandoff?.label || null,

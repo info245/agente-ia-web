@@ -8,7 +8,7 @@ process.env.OPENAI_API_KEY ||= "test-key";
 const { runAgentTurn, TOOL_DEFINITIONS } = await import("./engine.js");
 const { STATIC_INSTRUCTIONS } = await import("./instructions.js");
 const { computeFreeSlots, zonedTimeToUtc } = await import("./googleCalendar.js");
-const { cleanLeadPatch } = await import("./orchestrator.js");
+const { cleanLeadPatch, isLeadComplete } = await import("./orchestrator.js");
 const { getWhatsAppContactKey, isWhatsAppBsuid } = await import("../lib/whatsappMessage.js");
 const { sanitizeAppConfig } = await import("../lib/appConfig.js");
 
@@ -132,6 +132,17 @@ test("save_lead_fields guarda contacto siempre y el resto solo si la cuenta lo c
   );
   assert.deepEqual(patch, { name: "Ana", email: "ana@acme.com", main_goal: "Vender más" });
   assert.deepEqual(ignored.sort(), ["budget_range", "company_name", "phone"]);
+});
+
+test("el lead se cierra solo cuando tiene todo lo que la cuenta captura", () => {
+  assert.equal(isLeadComplete({ name: "Ana", email: "ana@acme.com" }, appConfig), false);
+  assert.equal(isLeadComplete({ name: "Ana", email: "ana@acme.com", main_goal: "Vender más" }, appConfig), true);
+  // Una cuenta que no captura nada nunca cierra conversaciones.
+  assert.equal(isLeadComplete({ name: "Ana" }, { lead_capture: { fields: {} } }), false);
+  // business_type cuenta si la cuenta lo pide y save_lead_fields lo admite.
+  const withType = { lead_capture: { fields: { name: true, business_type: true } } };
+  assert.equal(isLeadComplete({ name: "Ana" }, withType), false);
+  assert.deepEqual(cleanLeadPatch({ business_type: "Ecommerce" }, withType).patch, { business_type: "Ecommerce" });
 });
 
 test("huecos libres: horario laboral en la zona de la cuenta, sin solapes ni pasado", () => {
