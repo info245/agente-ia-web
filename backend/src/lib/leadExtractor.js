@@ -26,7 +26,7 @@ const SERVICE_ALIASES = [
     patterns: [
       /publicidad\s+en\s+redes/i,
       /redes\s+sociales/i,
-      /campa(?:Ã±|ñ|n)(a|as)\s+en\s+meta/i,
+      /campa[ñn](a|as)\s+en\s+meta/i,
       /\bmeta\b/i,
       /meta\s*ads/i,
       /facebook\s*ads/i,
@@ -248,7 +248,7 @@ const GENERIC_COMPANY_RESPONSES = new Set([
   "genial",
   "no",
   "si",
-  "sÃ­",
+  "sí",
 ]);
 
 export function isGenericService(service) {
@@ -1086,7 +1086,7 @@ function extractCompanyName(text = "") {
   if (looksLikeValidName(raw)) return null;
 
   if (/\b(sl|s\.l\.|sll|slu|sa|s\.a\.)\b/i.test(raw)) return raw;
-  if (/^(asesor[iÃ­]a|despacho|cl[iÃ­]nica|agencia|consultora|tienda|ecommerce)\s+[\p{L}\d&.' -]{2,60}$/iu.test(raw)) {
+  if (/^(asesor[ií]a|despacho|cl[ií]nica|agencia|consultora|tienda|ecommerce)\s+[\p{L}\d&.' -]{2,60}$/iu.test(raw)) {
     return raw;
   }
   if (/^[\p{L}\d&.' -]{2,40}$/u.test(raw) && raw.split(/\s+/).length <= 5) {

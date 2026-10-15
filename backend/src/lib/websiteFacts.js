@@ -98,7 +98,7 @@ function mapRowToOfferFacts(row = {}) {
   return {
     name,
     facts: {
-      category: findColumnValue(row, ["categoria", "categorÃ­a", "category"]),
+      category: findColumnValue(row, ["categoria", "categoría", "category"]),
       min_monthly_fee: findColumnValue(row, [
         "precio mensual",
         "tarifa mensual",

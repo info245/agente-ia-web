@@ -47,7 +47,7 @@ import {
   prefersWhatsAppChannel,
 } from "./lib/closeFlow.js";
 
-import { openai } from "./lib/openaiClient.js";
+import { openai, AGENT_MODEL } from "./lib/openaiClient.js";
 import { getAgentSystemPrompt } from "./lib/agentPrompt.js";
 import { getAppConfig, getPublishedAppConfig, saveAppConfig } from "./lib/appConfigStore.js";
 import {
@@ -704,7 +704,7 @@ function isUserQuestion(text) {
   if (!t) return false;
   if (t.includes("?")) return true;
 
-  return /^(que|quÃ©|como|cÃ³mo|cuanto|cuÃ¡nto|cual|cuÃ¡l|precio|precios|presupuesto|coste|costes|tarifa|tarifas)\b/i.test(
+  return /^(que|qué|como|cómo|cuanto|cuánto|cual|cuál|precio|precios|presupuesto|coste|costes|tarifa|tarifas)\b/i.test(
     t
   );
 }
@@ -719,12 +719,12 @@ function isLikelyServiceIntent(text) {
     t.includes("redes sociales") ||
     t.includes("publicidad") ||
     t.includes("diseno web") ||
-    t.includes("diseÃ±o web") ||
+    t.includes("diseño web") ||
     t.includes("consultoria") ||
-    t.includes("consultorÃ­a") ||
+    t.includes("consultoría") ||
     t.includes("web") ||
     t.includes("campanas") ||
-    t.includes("campaÃ±as")
+    t.includes("campañas")
   );
 }
 
@@ -738,7 +738,7 @@ function isLikelyQuestionOrIntent(text) {
     t.includes("busco") ||
     t.includes("me interesa") ||
     t.includes("cuanto cuesta") ||
-    t.includes("cuÃ¡nto cuesta") ||
+    t.includes("cuánto cuesta") ||
     t.includes("precio") ||
     t.includes("presupuesto")
   );
@@ -763,11 +763,11 @@ function isUnknownResponse(text) {
 
   return (
     t === "no lo se" ||
-    t === "no lo sÃ©" ||
+    t === "no lo sé" ||
     t === "ni idea" ||
     t === "depende" ||
     t === "aun no lo se" ||
-    t === "aÃºn no lo sÃ©"
+    t === "aún no lo sé"
   );
 }
 
@@ -778,7 +778,7 @@ function isGreeting(text) {
     t === "buenas" ||
     t === "buenas tardes" ||
     t === "buenos dias" ||
-    t === "buenos dÃ­as" ||
+    t === "buenos días" ||
     t === "buenas noches" ||
     t === "hey" ||
     t === "hello"
@@ -797,14 +797,14 @@ function isLikelyValidName(value) {
 
   const blockedPhrases = [
     "si",
-    "sÃ­",
+    "sí",
     "si si",
-    "sÃ­ sÃ­",
+    "sí sí",
     "si por favor",
-    "sÃ­ por favor",
+    "sí por favor",
     "por favor",
     "si gracias",
-    "sÃ­ gracias",
+    "sí gracias",
     "de acuerdo",
     "vale",
     "ok",
@@ -820,16 +820,16 @@ function isLikelyValidName(value) {
     "buenas",
     "buenas tardes",
     "buenos dias",
-    "buenos dÃ­as",
+    "buenos días",
     "buenas noches",
     "quiero",
     "necesito",
     "google ads",
     "seo",
     "diseno web",
-    "diseÃ±o web",
+    "diseño web",
     "consultoria",
-    "consultorÃ­a",
+    "consultoría",
     "publicidad",
     "redes sociales",
     "meta ads",
@@ -837,7 +837,7 @@ function isLikelyValidName(value) {
     "precio",
     "presupuesto",
     "cuanto cuesta",
-    "cuÃ¡nto cuesta",
+    "cuánto cuesta",
     "tienda online",
     "ecommerce",
     "emailing",
@@ -857,7 +857,7 @@ function isLikelyValidName(value) {
     "plugins",
     "cms",
     "soy autonomo",
-    "soy autÃ³nomo",
+    "soy autónomo",
     "captar",
     "captar nuevos usuarios",
     "captar nuevos ususarios",
@@ -1160,15 +1160,15 @@ function isClosingReply(reply) {
   if (!t) return false;
 
   return (
-    /te contactar[Ã©e]/i.test(t) ||
+    /te contactar[ée]/i.test(t) ||
     /gracias por confiar/i.test(t) ||
     /quedo atento/i.test(t) ||
-    /te escribir[Ã©e]/i.test(t) ||
+    /te escribir[ée]/i.test(t) ||
     /nos pondremos en contacto/i.test(t) ||
     /hemos recibido/i.test(t) ||
-    /en breve recibirÃ¡s/i.test(t) ||
+    /en breve recibirás/i.test(t) ||
     /te enviaremos/i.test(t) ||
-    /recibirÃ¡s la propuesta/i.test(t)
+    /recibirás la propuesta/i.test(t)
   );
 }
 
@@ -1261,22 +1261,22 @@ function detectService(text) {
   }
   if (
     t.includes("diseno web") ||
-    t.includes("diseÃ±o web") ||
+    t.includes("diseño web") ||
     t.includes("disenar pagina web") ||
     t.includes("diseñar página web") ||
     t.includes("paginas web") ||
     t.includes("páginas web") ||
     t.includes("pagina web") ||
-    t.includes("pÃ¡gina web") ||
+    t.includes("página web") ||
     t.includes("tienda online") ||
     t.includes("ecommerce") ||
     t.includes("e-commerce") ||
     t === "web"
   ) {
-    return "DiseÃ±o Web";
+    return "Diseño Web";
   }
-  if (t.includes("consultoria") || t.includes("consultorÃ­a")) {
-    return "ConsultorÃ­a Digital";
+  if (t.includes("consultoria") || t.includes("consultoría")) {
+    return "Consultoría Digital";
   }
 
   return null;
@@ -1383,7 +1383,7 @@ function detectBusinessType(text) {
   if (t.includes("negocio")) return "negocio";
   if (t.includes("proyecto")) return "proyecto";
   if (t.includes("tienda online") || t.includes("ecommerce")) return "ecommerce";
-  if (t.includes("clinica") || t.includes("clÃ­nica")) return "clinica";
+  if (t.includes("clinica") || t.includes("clínica")) return "clinica";
   if (t.includes("agencia")) return "agencia";
   if (t.includes("despacho")) return "despacho";
 
@@ -1461,11 +1461,11 @@ function detectBusinessActivity(text) {
   if (triggers.some((x) => t.includes(x))) return raw;
   if (t.includes("tienda online")) return raw;
   if (t.includes("ecommerce")) return raw;
-  if (t.includes("clinica") || t.includes("clÃ­nica")) return raw;
+  if (t.includes("clinica") || t.includes("clínica")) return raw;
   if (t.includes("abogado") || t.includes("bufete")) return raw;
   if (t.includes("dental") || t.includes("dentista")) return raw;
   if (
-    /\b(venta|ventas|fabricacion|fabricaciÃƒÂ³n|distribucion|distribuciÃƒÂ³n|comercio|tienda|negocio|servicio|servicios|consultoria|consultorÃƒÂ­a|asesoria|asesorÃƒÂ­a|reparacion|reparaciÃƒÂ³n|instalacion|instalaciÃƒÂ³n|alquiler|formacion|formaciÃƒÂ³n|marketing|publicidad|helados|ropa|comida|restauracion|restauraciÃƒÂ³n|cafeteria|cafeterÃƒÂ­a)\b/i.test(
+    /\b(venta|ventas|fabricacion|fabricación|distribucion|distribución|comercio|tienda|negocio|servicio|servicios|consultoria|consultoría|asesoria|asesoría|reparacion|reparación|instalacion|instalación|alquiler|formacion|formación|marketing|publicidad|helados|ropa|comida|restauracion|restauración|cafeteria|cafetería)\b/i.test(
       t
     )
   ) {
@@ -1491,7 +1491,7 @@ function detectMainGoal(text) {
     "necesito",
     "busco",
     "me gustaria",
-    "me gustarÃ­a",
+    "me gustaría",
     "mi objetivo",
     "captar",
     "conseguir",
@@ -1573,7 +1573,7 @@ function detectPhone(text) {
   if (digits.length >= 6) return digits;
   return null;
   if (
-    /\b(venta|ventas|fabricacion|fabricaciÃ³n|distribucion|distribuciÃ³n|comercio|tienda|negocio|servicio|servicios|consultoria|consultorÃ­a|asesoria|asesorÃ­a|reparacion|reparaciÃ³n|instalacion|instalaciÃ³n|alquiler|formacion|formaciÃ³n|marketing|publicidad|helados|ropa|comida|restauracion|restauraciÃ³n|cafeteria|cafeterÃ­a)\b/i.test(
+    /\b(venta|ventas|fabricacion|fabricación|distribucion|distribución|comercio|tienda|negocio|servicio|servicios|consultoria|consultoría|asesoria|asesoría|reparacion|reparación|instalacion|instalación|alquiler|formacion|formación|marketing|publicidad|helados|ropa|comida|restauracion|restauración|cafeteria|cafetería)\b/i.test(
       t
     )
   ) {
@@ -1908,7 +1908,7 @@ function summarizeAnalysisSnapshot(snapshot) {
     : "";
 
   return `
-SNAPSHOT DEL ANÃLISIS
+SNAPSHOT DEL ANÁLISIS
 URL: ${snapshot.url}
 Title: ${snapshot.title || "N/D"}
 Meta description: ${snapshot.meta_description || "N/D"}
@@ -2028,9 +2028,9 @@ function cleanReplyForChannelChoice(reply, { channel = "web", lead = null } = {}
     /me facilitas un email/i.test(text) ||
     /me dejas tu email/i.test(text) ||
     /comparteme tu email/i.test(text) ||
-    /compÃ¡rteme tu email/i.test(text) ||
+    /compárteme tu email/i.test(text) ||
     /pasame tu email/i.test(text) ||
-    /pÃ¡same tu email/i.test(text) ||
+    /pásame tu email/i.test(text) ||
     /por email/i.test(text);
 
   if (!asksForEmailDirectly) return text;
@@ -2151,12 +2151,12 @@ function buildValueThenAskNameReply(analysisSnapshot, lead = null) {
 
   const valueLine =
     focus
-      ? `Perfecto. El siguiente paso con mÃ¡s impacto serÃ­a trabajar primero ${focus}.`
+      ? `Perfecto. El siguiente paso con más impacto sería trabajar primero ${focus}.`
       : topPriority
-      ? `Perfecto. La prioridad mÃ¡s clara ahora mismo serÃ­a ${topPriority}.`
+      ? `Perfecto. La prioridad más clara ahora mismo sería ${topPriority}.`
       : summary
-      ? `Perfecto. Viendo lo detectado, hay margen real para mejorar captaciÃ³n y conversiÃ³n con unos ajustes bien enfocados.`
-      : `Perfecto. Entonces te aterrizo el siguiente paso de forma mÃ¡s concreta.`;
+      ? `Perfecto. Viendo lo detectado, hay margen real para mejorar captación y conversión con unos ajustes bien enfocados.`
+      : `Perfecto. Entonces te aterrizo el siguiente paso de forma más concreta.`;
 
   if (hasContact(lead) || norm(lead?.preferred_contact_channel)) {
     return `${valueLine}\n\nSi te va bien, sigo contigo desde aquí y te preparo el siguiente paso sin pedirte de nuevo los datos básicos.`;
@@ -2261,24 +2261,24 @@ function buildWhatsAppContinuationReply({
   const feeText = norm(serviceFacts?.min_monthly_fee || serviceFacts?.min_project_fee);
 
   const intro = safeName
-    ? `Hola ${safeName}, continÃºo por aquÃ­ con el contexto de lo que vimos en la web.`
-    : "Hola, continÃºo por aquÃ­ con el contexto de lo que vimos en la web.";
+    ? `Hola ${safeName}, continúo por aquí con el contexto de lo que vimos en la web.`
+    : "Hola, continúo por aquí con el contexto de lo que vimos en la web.";
 
   const summaryLine = summary
     ? `He visto que te interesa ${service} y que tu caso va orientado a ${summary}.`
-    : `He visto que te interesa ${service} y ya tengo el contexto previo del anÃ¡lisis.`;
+    : `He visto que te interesa ${service} y ya tengo el contexto previo del análisis.`;
 
   const serviceLine = serviceDescription
     ? `Nuestro servicio de ${service} consiste en ${serviceDescription.charAt(0).toLowerCase()}${serviceDescription.slice(1)}`
-    : `Nuestro servicio de ${service} estÃ¡ orientado a mejorar visibilidad, captaciÃ³n y resultados de forma sostenida.`;
+    : `Nuestro servicio de ${service} está orientado a mejorar visibilidad, captación y resultados de forma sostenida.`;
 
   const priorityLine = topPriority
-    ? `La primera prioridad que trabajarÃ­a serÃ­a ${topPriority}.`
+    ? `La primera prioridad que trabajaría sería ${topPriority}.`
     : null;
 
   const budgetLine = feeText
-    ? `Para orientarte bien, solemos partir desde ${feeText}. Â¿Con quÃ© presupuesto te gustarÃ­a plantearlo?`
-    : "Para orientarte bien, Â¿con quÃ© presupuesto te gustarÃ­a plantearlo?";
+    ? `Para orientarte bien, solemos partir desde ${feeText}. ¿Con qué presupuesto te gustaría plantearlo?`
+    : "Para orientarte bien, ¿con qué presupuesto te gustaría plantearlo?";
 
   return [intro, summaryLine, serviceLine, priorityLine, budgetLine]
     .filter(Boolean)
@@ -2688,7 +2688,7 @@ function buildExternalLeadIntroMessage(lead = {}, brandName = "TMedia Global") {
     goal
       ? `Vemos que te interesa ${service} y que tu objetivo va orientado a ${goal}.`
       : `Vemos que te interesa ${service}.`,
-    "Si quieres, seguimos por aquÃ­ y te doy una primera orientaciÃ³n para tu caso.",
+    "Si quieres, seguimos por aquí y te doy una primera orientación para tu caso.",
   ].join("\n\n");
 }
 
@@ -2815,7 +2815,8 @@ ${transcript}
 
   try {
     const result = await openai.responses.create({
-      model: "gpt-4.1-mini",
+      model: AGENT_MODEL,
+      max_output_tokens: 2000,
       input: prompt,
     });
 
@@ -3197,21 +3198,21 @@ function buildModeInstructions({ mode, phase, lead, analysisSnapshot, channel, t
   const modeGuidance = {
     diagnostic_web: `
 MODO: diagnostic_web
-- Este chat web debe reducir fricciÃ³n.
+- Este chat web debe reducir fricción.
 - Empieza ayudando, no interrogando.
 - ${servicePrompt}
-- Si hay URL o anÃ¡lisis, entrega un mini diagnÃ³stico Ãºtil y breve.
+- Si hay URL o análisis, entrega un mini diagnóstico útil y breve.
 - ${preferredChannelQuestion}
-- Si el servicio es Google Ads y todavÃ­a no has visto campaÃ±as ni datos reales, no hables de diagnosticar campaÃ±as como si ya las hubieras analizado.
-- En Google Ads, si aÃºn no hay contexto suficiente, pregunta si ya tienen campaÃ±as activas o si parten de cero.
-- Solo pide un dato de lead si el usuario ya recibiÃ³ valor o quiere seguir.
-${suggestWhatsApp ? "- Si encaja, propone seguir por WhatsApp como continuaciÃ³n cÃ³moda del anÃ¡lisis." : ""}
+- Si el servicio es Google Ads y todavía no has visto campañas ni datos reales, no hables de diagnosticar campañas como si ya las hubieras analizado.
+- En Google Ads, si aún no hay contexto suficiente, pregunta si ya tienen campañas activas o si parten de cero.
+- Solo pide un dato de lead si el usuario ya recibió valor o quiere seguir.
+${suggestWhatsApp ? "- Si encaja, propone seguir por WhatsApp como continuación cómoda del análisis." : ""}
 `,
     closer_whatsapp: `
 MODO: closer_whatsapp
-- Esto es una continuaciÃ³n natural de un contexto previo, normalmente desde web.
-- No reinicies la conversaciÃ³n ni repitas preguntas ya resueltas.
-- Usa el anÃ¡lisis previo como punto de partida.
+- Esto es una continuación natural de un contexto previo, normalmente desde web.
+- No reinicies la conversación ni repitas preguntas ya resueltas.
+- Usa el análisis previo como punto de partida.
 - Resuelve dudas, profundiza solo lo necesario y orienta a cierre o siguiente paso.
 - Si falta un dato clave para avanzar, pide solo uno.
 `,
@@ -3219,7 +3220,7 @@ MODO: closer_whatsapp
 MODO: hybrid_whatsapp
 - Este usuario ha llegado directo a WhatsApp o no hay contexto previo fiable.
 - WhatsApp debe descubrir y diagnosticar con tono cercano.
-- Puedes ofrecer opciones guiadas, pedir URL o problema y dar un mini diagnÃ³stico si hay material.
+- Puedes ofrecer opciones guiadas, pedir URL o problema y dar un mini diagnóstico si hay material.
 - No dependas del chat web para ayudarle.
 `,
   };
@@ -3227,33 +3228,33 @@ MODO: hybrid_whatsapp
   const phaseGuidance = {
     discover: `
 FASE: descubrimiento
-- Tu prioridad es captar atenciÃ³n y orientar.
+- Tu prioridad es captar atención y orientar.
 - No pidas nombre, empresa, urgencia ni contacto al inicio.
-- Si aÃºn no hay URL ni problema claro, guÃ­a con opciones muy concretas.
-- Haz como mÃ¡ximo una pregunta clara al final.
+- Si aún no hay URL ni problema claro, guía con opciones muy concretas.
+- Haz como máximo una pregunta clara al final.
 `,
     diagnose: `
-FASE: diagnÃ³stico ligero
-- Resume quÃ© has detectado.
-- Explica por quÃ© puede afectar a captaciÃ³n, conversiÃ³n o visibilidad.
-- SeÃ±ala 2 o 3 prioridades.
-- Invita a profundizar o a seguir por un canal cÃ³modo.
+FASE: diagnóstico ligero
+- Resume qué has detectado.
+- Explica por qué puede afectar a captación, conversión o visibilidad.
+- Señala 2 o 3 prioridades.
+- Invita a profundizar o a seguir por un canal cómodo.
 - No inventes datos ni exageres.
 `,
     deepen: `
-FASE: profundizaciÃ³n
-- Ya puedes afinar el problema y recoger informaciÃ³n comercial de forma progresiva.
-- Pide solo el dato que mÃ¡s desbloquee el siguiente paso.
+FASE: profundización
+- Ya puedes afinar el problema y recoger información comercial de forma progresiva.
+- Pide solo el dato que más desbloquee el siguiente paso.
 - No conviertas el mensaje en un formulario.
-- No entregues anÃ¡lisis largos adicionales si ya has dado un primer diagnÃ³stico Ãºtil.
-- Si todavÃ­a no tienes el nombre, pÃ­delo antes de plantear contacto o continuidad formal.
+- No entregues análisis largos adicionales si ya has dado un primer diagnóstico útil.
+- Si todavía no tienes el nombre, pídelo antes de plantear contacto o continuidad formal.
 ${missingLeadQuestion ? `- Si necesitas pedir un dato, la mejor pregunta ahora es: "${missingLeadQuestion}"` : ""}
 `,
     close: `
-FASE: cierre o transiciÃ³n
+FASE: cierre o transición
 - Orienta a un siguiente paso claro segun el objetivo configurado: WhatsApp, email, llamada, cita, demo, prueba, inscripcion, propuesta o derivacion humana.
-- Si faltan datos mÃ­nimos para avanzar, pide solo uno.
-- En WhatsApp, cierra por ahÃ­ si el usuario ya viene con intenciÃ³n.
+- Si faltan datos mínimos para avanzar, pide solo uno.
+- En WhatsApp, cierra por ahí si el usuario ya viene con intención.
 - Antes de pedir contacto o proponer seguimiento, intenta tener al menos el nombre.
 ${missingLeadQuestion ? `- Si necesitas pedir un dato, la mejor pregunta ahora es: "${missingLeadQuestion}"` : ""}
 `,
@@ -3284,40 +3285,6 @@ function buildTranscript(messages = []) {
         ).trim()}`
     )
     .join("\n");
-}
-
-async function generateFinalConversationSummary({ lead, messages }) {
-  const transcript = buildTranscript(messages);
-
-  const prompt = `
-Eres un asistente comercial de TMedia Global.
-
-Tu tarea es redactar un resumen final Ãºnico de todo el lead usando TODA la conversaciÃ³n, no solo el Ãºltimo tramo.
-
-REGLAS:
-- Escribe el resumen en espaÃ±ol.
-- Haz un resumen comercial Ãºtil, claro y breve.
-- Longitud: 4 a 7 frases.
-- Incluye solo informaciÃ³n Ãºtil para ventas.
-- Si falta un dato, no lo inventes.
-- Prioriza: servicio de interÃ©s, necesidad principal, urgencia, presupuesto, datos de contacto, contexto del negocio, actividad y siguiente paso comercial.
-- No pongas etiquetas tipo "Nombre:", "Email:", etc.
-- No repitas literalmente frases vacÃ­as como "gracias" o "ok".
-- Devuelve solo el resumen final, sin introducciones ni viÃ±etas.
-
-Lead estructurado actual:
-${JSON.stringify(lead || {}, null, 2)}
-
-ConversaciÃ³n completa:
-${transcript}
-`;
-
-  const result = await openai.responses.create({
-    model: "gpt-4.1-mini",
-    input: prompt,
-  });
-
-  return result.output_text?.trim() || "";
 }
 
 async function sendWhatsAppText(to, bodyText, options = {}) {
@@ -3833,7 +3800,7 @@ function inferBrandNameFromSnapshot(snapshot = {}) {
     .filter(Boolean);
 
   for (const candidate of candidates) {
-    const first = candidate.split(/[\|\-Â·]/)[0]?.trim();
+    const first = candidate.split(/[\|\-·]/)[0]?.trim();
     if (first && first.length >= 3) return first;
   }
 
@@ -3863,7 +3830,7 @@ function inferServicesFromSnapshot(snapshot = {}, appConfig = null) {
   };
 
   maybeAdd("SEO", ["seo", "posicionamiento", "google organic", "buscadores"]);
-  maybeAdd("Google Ads", ["google ads", "sem", "ppc", "campanas de google", "campaÃ±as de google"]);
+  maybeAdd("Google Ads", ["google ads", "sem", "ppc", "campanas de google", "campañas de google"]);
   maybeAdd("Redes Sociales", [
     "facebook ads",
     "instagram ads",
@@ -3872,8 +3839,8 @@ function inferServicesFromSnapshot(snapshot = {}, appConfig = null) {
     "instagram",
     "facebook",
   ]);
-  maybeAdd("DiseÃ±o Web", ["diseno web", "diseÃ±o web", "web corporativa", "landing page", "pagina web", "pÃ¡gina web"]);
-  maybeAdd("ConsultorÃ­a Digital", ["consultoria", "consultorÃ­a", "estrategia digital", "consultor"]);
+  maybeAdd("Diseño Web", ["diseno web", "diseño web", "web corporativa", "landing page", "pagina web", "página web"]);
+  maybeAdd("Consultoría Digital", ["consultoria", "consultoría", "estrategia digital", "consultor"]);
 
   return Object.keys(selected).length ? selected : defaultServices;
 }
@@ -4207,7 +4174,7 @@ async function validateIntegrationConfig(type, config = {}) {
 
     return buildValidationResult(
       "connected",
-      messages.join(" Â· ") || "Lead forms configurados para entrada unificada.",
+      messages.join(" · ") || "Lead forms configurados para entrada unificada.",
       checkedAt
     );
   }
@@ -4291,7 +4258,7 @@ async function validateIntegrationConfig(type, config = {}) {
     if (!TASK_SECRET) {
       return buildValidationResult(
         "warning",
-        "El workspace responde, pero falta TASK_SECRET para ejecutar tareas automÃ¡ticas.",
+        "El workspace responde, pero falta TASK_SECRET para ejecutar tareas automáticas.",
         checkedAt
       );
     }
@@ -4393,7 +4360,7 @@ function applyFlowPatch(
     (
       normalizeText(text).includes("urgente") ||
       normalizeText(text).includes("cuanto antes") ||
-      normalizeText(text).includes("cuÃ¡nto antes") ||
+      normalizeText(text).includes("cuánto antes") ||
       normalizeText(text).includes("ya") ||
       normalizeText(text).includes("esta semana")
     )
@@ -4413,7 +4380,7 @@ function applyFlowPatch(
     (
       normalizeText(text).includes("sin prisa") ||
       normalizeText(text).includes("mas adelante") ||
-      normalizeText(text).includes("mÃ¡s adelante") ||
+      normalizeText(text).includes("más adelante") ||
       isUnknownResponse(text)
     )
   ) {
@@ -4515,7 +4482,7 @@ function applyFlowPatch(
       if (
         normalizeText(text).includes("urgente") ||
         normalizeText(text).includes("cuanto antes") ||
-        normalizeText(text).includes("cuÃ¡nto antes") ||
+        normalizeText(text).includes("cuánto antes") ||
         normalizeText(text).includes("ya") ||
         normalizeText(text).includes("esta semana")
       ) {
@@ -4529,7 +4496,7 @@ function applyFlowPatch(
       } else if (
         normalizeText(text).includes("sin prisa") ||
         normalizeText(text).includes("mas adelante") ||
-        normalizeText(text).includes("mÃ¡s adelante") ||
+        normalizeText(text).includes("más adelante") ||
         isUnknownResponse(text)
       ) {
         patch.urgency = "baja";
@@ -4687,860 +4654,6 @@ function sanitizeAnalysisForClient(analysis = {}, lead = {}) {
       lead?.interest_service ||
       "",
     source_url: String(source.source_url || "").trim(),
-  };
-}
-
-async function processIncomingMessage({
-  text,
-  conversation_id,
-  external_user_id,
-  channel,
-  account_id = null,
-}) {
-  if (!text || typeof text !== "string") {
-    throw new Error("El campo 'text' es obligatorio y debe ser texto.");
-  }
-
-  const handoffExtraction =
-    channel === "whatsapp"
-      ? extractHandoffContext(text)
-      : { sanitizedText: text, handoff: null };
-  const userText =
-    String(handoffExtraction?.sanitizedText || "").trim() || String(text).trim();
-  const handoffContext = handoffExtraction?.handoff || null;
-
-  let currentConversationId = conversation_id;
-  let createdConversation = false;
-  const scopedAccountId = String(account_id || "").trim() || null;
-  const loadLeadForConversation = () =>
-    getLeadByConversationId(currentConversationId, { accountId: scopedAccountId });
-  const trackEventScoped = (params = {}) =>
-    trackConversationEvent({
-      ...params,
-      account_id: scopedAccountId,
-    });
-
-  if (!currentConversationId) {
-    const conversation = await createConversation({
-      channel: channel || "web",
-      external_user_id: external_user_id || null,
-      account_id: scopedAccountId,
-    });
-    currentConversationId = conversation.id;
-    createdConversation = true;
-  }
-
-  if (createdConversation) {
-    await trackEventScoped({
-      conversation_id: currentConversationId,
-      event_type: "conversation_started",
-      channel: channel || "web",
-      external_user_id: external_user_id || null,
-      payload: {
-        first_message: String(userText || "").slice(0, 500),
-      },
-    });
-  }
-
-  await saveMessage({
-    conversation_id: currentConversationId,
-    role: "user",
-    content: userText,
-    account_id: scopedAccountId,
-  });
-
-  await trackEventScoped({
-    conversation_id: currentConversationId,
-    event_type: "message_received",
-    channel: channel || "web",
-    external_user_id: external_user_id || null,
-    payload: {
-      role: "user",
-      text: String(userText || "").slice(0, 500),
-      handoff_source: handoffContext?.payload?.source || null,
-    },
-  });
-
-  const history = await getConversationMessages(currentConversationId, 30);
-  const leadBefore = await loadLeadForConversation();
-  const historicalSalesContext = extractSalesContextFromHistory(history, leadBefore);
-  const leadContext =
-    Object.keys(historicalSalesContext).length > 0
-      ? mergeLeadData({
-          currentLead: leadBefore || {},
-          extractedLead: historicalSalesContext,
-          lastUserMessage: "",
-        })
-      : leadBefore;
-  const leadSignatureBefore = buildLeadSignature(leadBefore || {});
-  const whatsappPhone =
-    channel === "whatsapp"
-      ? normalizeWhatsAppPhone(external_user_id)
-      : null;
-
-  const extracted = extractLeadDataFromText(userText, leadContext);
-
-  const incoming = {
-    conversation_id: currentConversationId,
-    name: extracted?.name ?? null,
-    email: extracted?.email ?? null,
-    phone: extracted?.phone ?? whatsappPhone ?? leadContext?.phone ?? null,
-    interest_service: extracted?.interest_service ?? null,
-    urgency: extracted?.urgency ?? null,
-    budget_range: extracted?.budget_range ?? null,
-    summary: leadContext?.summary ?? null,
-    lead_score: extracted?.lead_score ?? extracted?.lead_Score ?? null,
-    consent: extracted?.consent ?? null,
-    consent_at: extracted?.consent_at ?? null,
-    business_type: extracted?.business_type ?? null,
-    business_activity: extracted?.business_activity ?? null,
-    company_name: extracted?.company_name ?? null,
-    main_goal: extracted?.main_goal ?? null,
-    current_situation: extracted?.current_situation ?? null,
-    pain_points: extracted?.pain_points ?? null,
-      preferred_contact_channel:
-        extracted?.preferred_contact_channel ??
-        (channel === "whatsapp" ? "whatsapp" : null),
-      last_intent: extracted?.last_intent ?? null,
-      custom_fields: leadContext?.custom_fields || {},
-      current_step: leadContext?.current_step ?? null,
-      last_question: leadContext?.last_question ?? null,
-    };
-
-  const detectedBudget = normalizeBudget(userText, leadContext);
-  if (detectedBudget) {
-    incoming.budget_range = detectedBudget;
-  }
-
-  if (
-    incoming.budget_range &&
-    !looksLikeExplicitBudgetMessage(userText, leadContext)
-  ) {
-    incoming.budget_range = null;
-  }
-
-  const mergedLeadBase = mergeLeadData({
-    currentLead: leadContext || {},
-    extractedLead: incoming,
-    lastUserMessage: userText,
-  });
-
-  const memoryPatch = buildMemoryPatch({
-    text: userText,
-    leadBefore: leadContext,
-    extracted,
-    mergedLead: mergedLeadBase,
-  });
-
-  const mergedLead = mergeLeadData({
-    currentLead: mergedLeadBase,
-    extractedLead: memoryPatch || {},
-    lastUserMessage: userText,
-  });
-
-  await upsertLeadFromConversation({
-    ...mergedLead,
-    account_id: scopedAccountId,
-    conversation_id: currentConversationId,
-    business_activity:
-      mergedLead?.business_activity ?? leadContext?.business_activity ?? null,
-    company_name: mergedLead?.company_name ?? leadContext?.company_name ?? null,
-    current_step: mergedLead?.current_step ?? leadContext?.current_step ?? null,
-    last_question: mergedLead?.last_question ?? leadContext?.last_question ?? null,
-  });
-
-  let leadAfter = await loadLeadForConversation();
-
-  if (!isLikelyValidName(leadAfter?.name) && leadAfter?.name) {
-    await upsertLeadFromConversation({
-      ...leadAfter,
-      account_id: scopedAccountId,
-      conversation_id: currentConversationId,
-      name: null,
-    });
-
-    leadAfter = await loadLeadForConversation();
-  }
-
-  let relatedWebLead = null;
-  let relatedWebAnalysis = null;
-
-  if (channel === "whatsapp") {
-    try {
-      if (handoffContext?.code) {
-        const handoffEvent = await findConversationEventByHandoffCode(
-          handoffContext.code
-        );
-
-        if (handoffEvent?.conversation_id) {
-          relatedWebLead = await getLeadByConversationId(
-            handoffEvent.conversation_id,
-            { accountId: scopedAccountId }
-          );
-          handoffContext.payload = handoffEvent.payload || null;
-        }
-      }
-
-      if (!relatedWebLead) {
-        relatedWebLead = await findLatestWebLeadByContact({
-          email: leadAfter?.email,
-          phone: whatsappPhone || leadAfter?.phone,
-          accountId: scopedAccountId,
-        });
-      }
-
-      if (relatedWebLead?.conversation_id) {
-        relatedWebAnalysis = await getLatestConversationEvent(
-          relatedWebLead.conversation_id,
-          "analysis_snapshot"
-        );
-      }
-
-      if (handoffContext?.code && relatedWebLead?.conversation_id) {
-        await trackEventScoped({
-          conversation_id: currentConversationId,
-          event_type: "channel_handoff",
-          channel: channel || "whatsapp",
-          external_user_id: external_user_id || null,
-          payload: {
-            source_channel: "web",
-            source_conversation_id: relatedWebLead.conversation_id,
-            handoff_code: handoffContext.code,
-          },
-        });
-      }
-    } catch (e) {
-      console.log("related web context error", e.message);
-    }
-  }
-
-  if (channel === "whatsapp" && relatedWebLead) {
-    const hydratedLead = mergeLeadData({
-      currentLead: relatedWebLead,
-      extractedLead: {
-        name: leadAfter?.name || relatedWebLead?.name,
-        email: leadAfter?.email || relatedWebLead?.email,
-        phone: leadAfter?.phone || whatsappPhone || relatedWebLead?.phone,
-        interest_service:
-          leadAfter?.interest_service || relatedWebLead?.interest_service,
-        urgency: leadAfter?.urgency || relatedWebLead?.urgency,
-        budget_range: leadAfter?.budget_range || relatedWebLead?.budget_range,
-        summary: leadAfter?.summary || relatedWebLead?.summary,
-        business_type: leadAfter?.business_type || relatedWebLead?.business_type,
-        business_activity:
-          leadAfter?.business_activity || relatedWebLead?.business_activity,
-        main_goal: leadAfter?.main_goal || relatedWebLead?.main_goal,
-        current_situation:
-          leadAfter?.current_situation || relatedWebLead?.current_situation,
-        pain_points: leadAfter?.pain_points || relatedWebLead?.pain_points,
-        preferred_contact_channel:
-          leadAfter?.preferred_contact_channel ||
-          relatedWebLead?.preferred_contact_channel ||
-          "whatsapp",
-        last_intent: leadAfter?.last_intent || relatedWebLead?.last_intent,
-        custom_fields: {
-          ...(relatedWebLead?.custom_fields || {}),
-          ...(leadAfter?.custom_fields || {}),
-        },
-      },
-      lastUserMessage: userText,
-    });
-
-    await upsertLeadFromConversation({
-      ...hydratedLead,
-      account_id: scopedAccountId,
-      conversation_id: currentConversationId,
-      summary: leadAfter?.summary || relatedWebLead?.summary || null,
-      business_type: leadAfter?.business_type || relatedWebLead?.business_type,
-      business_activity:
-        leadAfter?.business_activity || relatedWebLead?.business_activity,
-      main_goal: leadAfter?.main_goal || relatedWebLead?.main_goal,
-      current_situation:
-        leadAfter?.current_situation || relatedWebLead?.current_situation,
-      pain_points: leadAfter?.pain_points || relatedWebLead?.pain_points,
-      custom_fields: {
-        ...(relatedWebLead?.custom_fields || {}),
-        ...(leadAfter?.custom_fields || {}),
-      },
-      current_step: leadAfter?.current_step ?? relatedWebLead?.current_step ?? null,
-      last_question: leadAfter?.last_question ?? relatedWebLead?.last_question ?? null,
-    });
-
-    leadAfter = await loadLeadForConversation();
-  }
-
-  const currentAnalysisEvent =
-    (await getLatestConversationEvent(currentConversationId, "analysis_snapshot").catch(
-      () => null
-    )) || null;
-  let analysisSnapshot = currentAnalysisEvent?.payload || null;
-  const hadAnalysisSnapshotBeforeTurn =
-    hasAnalysisSnapshot(analysisSnapshot) ||
-    hasAnalysisSnapshot(relatedWebAnalysis?.payload || null);
-
-  const detectedUrl = extractFirstUrlFromText(userText);
-  const snapshotUrl = analysisSnapshot?.url || relatedWebAnalysis?.payload?.url || null;
-  const shouldRunAnalysis =
-    !!detectedUrl &&
-    (!snapshotUrl ||
-      normalizeText(snapshotUrl) !== normalizeText(detectedUrl));
-
-  if (shouldRunAnalysis) {
-    try {
-      const newSnapshot = await runLightSiteAnalysis(detectedUrl);
-      if (newSnapshot) {
-        analysisSnapshot = newSnapshot;
-        await trackEventScoped({
-          conversation_id: currentConversationId,
-          event_type: "analysis_snapshot",
-          channel: channel || "web",
-          external_user_id: external_user_id || null,
-          payload: newSnapshot,
-        });
-      }
-    } catch (e) {
-      console.log("light site analysis error", e.message);
-    }
-  } else if (!analysisSnapshot && relatedWebAnalysis?.payload) {
-    analysisSnapshot = relatedWebAnalysis.payload;
-  }
-
-  const appConfig = await getAppConfig({ accountId: scopedAccountId }).catch(() => null);
-
-  const flow = applyFlowPatch(leadAfter || {}, userText, {
-    channel: channel || "web",
-    analysisSnapshot,
-    appConfig,
-  });
-
-  if (Object.keys(flow.patch || {}).length > 0) {
-    const updatedLead = {
-      ...leadAfter,
-      ...flow.patch,
-      current_step: flow.nextStep,
-      last_question: flow.nextQuestion,
-    };
-
-    await upsertLeadFromConversation({
-      ...updatedLead,
-      account_id: scopedAccountId,
-      conversation_id: currentConversationId,
-    });
-
-    leadAfter = await loadLeadForConversation();
-  } else {
-    await upsertLeadFromConversation({
-      ...leadAfter,
-      account_id: scopedAccountId,
-      conversation_id: currentConversationId,
-      current_step: flow.nextStep,
-      last_question: flow.nextQuestion,
-    });
-
-    leadAfter = await loadLeadForConversation();
-  }
-
-  console.log("---- LEAD DEBUG ----");
-  console.log("text:", userText);
-  console.log("leadBefore:", leadBefore);
-  console.log("extracted:", extracted);
-  console.log("incoming:", incoming);
-  console.log("memoryPatch:", memoryPatch);
-  console.log("mergedLead:", mergedLead);
-  console.log("flowPatch:", flow.patch);
-  console.log("flowNextStep:", flow.nextStep);
-  console.log("analysisSnapshot:", analysisSnapshot);
-  console.log("leadAfter:", leadAfter);
-  console.log("--------------------");
-
-  let reply = null;
-  const ambiguousProductPromotionReply = buildAmbiguousProductPromotionReply(
-    userText,
-    appConfig
-  );
-  const conversationMode = getConversationMode({
-    channel: channel || "web",
-    currentAnalysis: analysisSnapshot,
-    relatedWebLead,
-    relatedWebAnalysis: relatedWebAnalysis?.payload || null,
-  });
-  const handoffCandidate =
-    shouldOfferWhatsAppTransition({
-      channel: channel || "web",
-      snapshot: analysisSnapshot,
-      lead: leadAfter || {},
-      text: userText,
-    })
-      ? (() => {
-          const handoffCode = createHandoffCode();
-          return buildWhatsAppHandoff({
-            conversationId: currentConversationId,
-            lead: leadAfter || {},
-            analysisSnapshot,
-            handoffCode,
-            appConfig,
-          });
-        })()
-      : null;
-  const conversationPhase = getConversationPhase({
-    mode: conversationMode,
-    lead: leadAfter || {},
-    analysisSnapshot,
-    text: userText,
-  });
-  const nextBestAction = getNextBestAction({
-    lead: leadAfter || {},
-    text: userText,
-    appConfig,
-    channel: channel || "web",
-    phase: conversationPhase,
-  });
-  const isWhatsAppWebContinuation =
-    channel === "whatsapp" &&
-    !!relatedWebLead &&
-    !!handoffContext?.code &&
-    createdConversation;
-
-  if (isWhatsAppWebContinuation) {
-    reply = buildWhatsAppContinuationReply({
-      lead: leadAfter || relatedWebLead || {},
-      analysisSnapshot,
-    });
-  }
-
-  if (!reply && ambiguousProductPromotionReply) {
-    reply = ambiguousProductPromotionReply;
-  }
-
-  if (!reply) {
-    const affirmativeContinuationReply = buildAffirmativeContinuationReply({
-      text: userText,
-      history,
-      lead: leadAfter || {},
-      appConfig,
-      analysisSnapshot,
-    });
-
-    if (affirmativeContinuationReply) {
-      reply = affirmativeContinuationReply;
-    }
-  }
-
-  if (!reply) {
-    const leadForAi = leadAfter || relatedWebLead || {};
-    const serviceFacts = getServiceFacts(leadForAi.interest_service, appConfig);
-    const noPublicPriceReply = buildNoPublicPriceReply({
-      text: userText,
-      lead: leadForAi,
-      serviceFacts,
-    });
-
-    if (noPublicPriceReply) {
-      reply = noPublicPriceReply;
-    } else {
-
-    let factsBlock = "";
-
-    if (serviceFacts) {
-      const priceLabel =
-        serviceFacts.min_monthly_fee || serviceFacts.min_project_fee || "Precio personalizado/no publicado";
-      factsBlock = `
-INFORMACIÃ“N VERIFICADA DE LA WEB
-
-Servicio: ${leadForAi.interest_service}
-
-Precio mÃ­nimo: ${priceLabel}
-
-PÃ¡gina oficial:
-${serviceFacts.url}
-
-Notas:
-${serviceFacts.notes}
-`;
-    }
-
-    let ragContext = "";
-
-    if (
-      conversationPhase !== "discover" &&
-      shouldUseWebsiteRagContext({
-        text: userText,
-        detectedUrl,
-        analysisSnapshot,
-      })
-    ) {
-      try {
-        const docs = await retrieveWebsiteContext(
-          `
-Servicio: ${leadForAi.interest_service || ""}
-Pregunta usuario: ${userText}
-Presupuesto: ${leadForAi.budget_range || ""}
-Objetivo: ${leadForAi.main_goal || ""}
-Negocio: ${leadForAi.business_type || ""}
-Actividad: ${leadForAi.business_activity || ""}
-`,
-          { accountId: scopedAccountId }
-        );
-
-        ragContext = docs
-          .map(
-            (d) => `
-Fuente: ${d.url}
-
-${d.chunk}
-`
-          )
-          .join("\n");
-      } catch (e) {
-        console.log("RAG error", e.message);
-      }
-    }
-
-    const memoryContext = buildLeadMemoryContext(leadAfter);
-    const nextBestActionContext = buildNextBestActionPromptBlock(nextBestAction);
-    const modeInstructions = buildModeInstructions({
-      mode: conversationMode,
-      phase: conversationPhase,
-      lead: leadAfter || {},
-      analysisSnapshot,
-      channel: channel || "web",
-      text: userText,
-      appConfig,
-    });
-
-    const systemPrompt = `
-${getAgentSystemPrompt(appConfig)}
-
-REGLAS IMPORTANTES
-
-1. RESPONDE SIEMPRE LA PREGUNTA DEL USUARIO
-2. USA INFORMACIÃ“N DE LA WEB Y DEL SNAPSHOT SI ESTÃ DISPONIBLE
-3. LOS PRECIOS SIEMPRE DEBEN INCLUIR "+ IVA"
-4. NO INVENTES PRECIOS
-5. USA LA MEMORIA DEL LEAD PARA DAR CONTINUIDAD
-6. SI EL USUARIO HACE UNA PREGUNTA DIRECTA, RESPÃ“NDELA PRIMERO
-7. DESPUÃ‰S DE RESPONDER, HAZ COMO MÃXIMO UNA PREGUNTA COMERCIAL
-8. SI EXISTE INFORMACIÃ“N VERIFICADA DE LA WEB, USA SOLO ESA INFORMACIÃ“N PARA HABLAR DE PRECIOS
-9. NO DES RANGOS DE PRECIOS SI NO ESTÃN EXPLÃCITAMENTE EN LA INFORMACIÃ“N VERIFICADA
-10. RESPUESTAS BREVES: MÃXIMO 2 PÃRRAFOS CORTOS
-11. NO HAGAS VARIAS PREGUNTAS SEGUIDAS EN EL MISMO MENSAJE
-12. NO EMPIECES COMO FORMULARIO
-13. DA VALOR ANTES DE PEDIR DATOS
-14. SI EL CANAL ES WEB, PRIORIZA DIAGNÃ“STICO Y REDUCCIÃ“N DE FRICCIÃ“N
-15. SI EL CANAL ES WHATSAPP CON CONTEXTO PREVIO, CONTINÃšA SIN REINICIAR
-16. SI EL CANAL ES WHATSAPP SIN CONTEXTO, COMBINA DESCUBRIMIENTO Y DIAGNÃ“STICO
-17. NO PREGUNTES NOMBRE, EMPRESA, URGENCIA O CONTACTO AL PRINCIPIO SI TODAVÃA NO HAS APORTADO VALOR
-18. NO SOBRESCRIBAS DATOS CONFIRMADOS CON SUPOSICIONES DÃ‰BILES
-19. SI ESTÃS EN WEB, NO DIGAS "TE ESCRIBIRÃ‰ POR WHATSAPP" NI PROMETAS UN CONTACTO SALIENTE MANUAL
-20. SI EL USUARIO QUIERE SEGUIR POR WHATSAPP DESDE WEB, PLANTÃ‰ALO COMO CONTINUACIÃ“N POR UN BOTÃ“N O ENLACE
-21. SI TODAVÃA NO SE HA ELEGIDO CANAL DE CONTACTO, NO PIDAS EMAIL DIRECTAMENTE: PRIMERO PREGUNTA SI PREFIERE WHATSAPP O EMAIL PARA RECIBIR LA PROPUESTA
-
-${modeInstructions}
-
-${nextBestActionContext}
-
-${memoryContext}
-
-${factsBlock}
-
-CONTEXTO WEB
-
-${ragContext}
-`;
-
-    const openaiInput = buildOpenAIInput(systemPrompt, history);
-
-    try {
-      const ai = await openai.responses.create({
-        model: "gpt-4.1-mini",
-        input: openaiInput,
-      });
-
-      reply = ai.output_text?.trim();
-    } catch (e) {
-      console.log("openai reply error", e.message);
-      reply =
-        "He recibido tu mensaje, pero ahora mismo estoy teniendo un problema puntual para responder. Si quieres, vuelve a escribirme en unos segundos.";
-    }
-
-    if (!reply) {
-      reply =
-        conversationPhase === "discover"
-          ? buildConfiguredServicesPrompt(appConfig)
-          : "Si quieres, sigo contigo sobre ese punto y te digo cuÃ¡l serÃ­a la prioridad mÃ¡s sensata.";
-    }
-
-    reply = sanitizeGoogleAdsWebReply(reply, {
-      lead: leadAfter || {},
-      text: userText,
-    });
-
-    const structuredCloseReply = buildStructuredCloseReply({
-      channel: channel || "web",
-      lead: leadAfter || {},
-      text: userText,
-      handoff: handoffCandidate,
-      analysisSnapshot,
-      allowCloseAdvance: hadAnalysisSnapshotBeforeTurn,
-      appConfig,
-    });
-
-    if (structuredCloseReply) {
-      reply = structuredCloseReply;
-    }
-    }
-
-    reply = cleanReply(reply);
-    reply = cleanReplyForChannelChoice(reply, {
-      channel: channel || "web",
-      lead: leadAfter || {},
-    });
-    reply = cleanReplyForWebHandoff(reply, {
-      handoffAvailable: !!handoffCandidate,
-      channel: channel || "web",
-    });
-    reply = preventRepeatedLeadQuestion(reply, {
-      lead: leadAfter || {},
-      appConfig,
-    });
-  }
-
-  await saveMessage({
-    conversation_id: currentConversationId,
-    role: "assistant",
-    content: reply,
-    account_id: scopedAccountId,
-  });
-
-  await trackEventScoped({
-    conversation_id: currentConversationId,
-    event_type: "message_sent",
-    channel: channel || "web",
-    external_user_id: external_user_id || null,
-    payload: {
-      role: "assistant",
-      text: String(reply || "").slice(0, 500),
-    },
-  });
-
-  if (nextBestAction) {
-    await trackEventScoped({
-      conversation_id: currentConversationId,
-      event_type: "next_best_action",
-      channel: channel || "web",
-      external_user_id: external_user_id || null,
-      payload: nextBestAction,
-    });
-  }
-
-  let actionExecution = null;
-  if (nextBestAction?.action_ready && nextBestAction?.action_config) {
-    try {
-      const recentActionEvents = await listConversationEventsByType(
-        currentConversationId,
-        "action_executed",
-        20,
-        scopedAccountId
-      ).catch(() => []);
-
-      actionExecution = await executeConfiguredAction({
-        lead: leadAfter || {},
-        conversationId: currentConversationId,
-        channel: channel || "web",
-        externalUserId: external_user_id || null,
-        accountId: scopedAccountId,
-        nextBestAction,
-        recentActionEvents,
-        updateLeadCrmFields,
-        saveConversationEvent,
-        sendActionMessage: ({ lead, nextBestAction, actionConfig }) =>
-          sendConfiguredActionMessage({
-            lead,
-            nextBestAction,
-            actionConfig,
-            appConfig,
-            accountId: scopedAccountId,
-            conversationId: currentConversationId,
-          }),
-        executeActionTask: ({ lead, actionConfig, plan, task }) =>
-          notifyConfiguredActionTask({
-            lead,
-            actionConfig,
-            plan,
-            task,
-            appConfig,
-            accountId: scopedAccountId,
-            conversationId: currentConversationId,
-          }),
-      });
-    } catch (e) {
-      console.log("action execution error", e.message);
-      await trackEventScoped({
-        conversation_id: currentConversationId,
-        event_type: "action_execution_error",
-        channel: channel || "web",
-        external_user_id: external_user_id || null,
-        payload: {
-          action_key: nextBestAction?.next_best_action || null,
-          error: e.message,
-        },
-      });
-    }
-  }
-
-    leadAfter = await loadLeadForConversation();
-  const leadSignatureAfter = buildLeadSignature(leadAfter || {});
-
-  if (leadSignatureBefore !== leadSignatureAfter) {
-    await trackEventScoped({
-      conversation_id: currentConversationId,
-      event_type: "lead_updated",
-      channel: channel || "web",
-      external_user_id: external_user_id || null,
-      payload: {
-        lead_score: leadAfter?.lead_score ?? null,
-        interest_service: leadAfter?.interest_service || null,
-        budget_range: leadAfter?.budget_range || null,
-        urgency: leadAfter?.urgency || null,
-        has_name: !!leadAfter?.name,
-        has_email: !!leadAfter?.email,
-        has_phone: !!leadAfter?.phone,
-      },
-    });
-  }
-
-  const chatCompleted =
-    shouldMarkChatCompleted(leadAfter, reply) ||
-    (
-      isCompletedLeadData(leadAfter) &&
-      normalizeText(leadAfter?.current_step || "") === "close_ready" &&
-      isFarewellOrThanks(userText)
-    );
-
-  if (chatCompleted) {
-    try {
-      const fullMessages = await getConversationMessages(currentConversationId, 100);
-
-      const finalSummary = await generateFinalConversationSummary({
-        lead: leadAfter,
-        messages: fullMessages,
-      });
-
-      if (finalSummary) {
-        await upsertLeadFromConversation({
-          ...leadAfter,
-          account_id: scopedAccountId,
-          conversation_id: currentConversationId,
-          summary: finalSummary,
-        });
-
-        leadAfter = await loadLeadForConversation();
-      }
-    } catch (e) {
-      console.log("final summary error", e.message);
-    }
-  }
-
-  if (chatCompleted) {
-    await trackEventScoped({
-      conversation_id: currentConversationId,
-      event_type: "chat_completed",
-      channel: channel || "web",
-      external_user_id: external_user_id || null,
-      payload: {
-        lead_score: leadAfter?.lead_score ?? null,
-        interest_service: leadAfter?.interest_service || null,
-      },
-    });
-  }
-
-  try {
-    const latestLead = await loadLeadForConversation();
-    const signature = buildLeadSignature(latestLead);
-    const previousSignature = lastLeadEmailSent.get(currentConversationId);
-    const notificationRecipients = getNotificationRecipients(appConfig);
-    const isUpdateNotification = Boolean(previousSignature);
-    const notificationsEnabled = isUpdateNotification
-      ? appConfig?.notifications?.notify_chat_summary !== false
-      : appConfig?.notifications?.notify_new_lead !== false;
-    const shouldNotify =
-      notificationsEnabled &&
-      (hasUsefulLeadDataForNotification(latestLead) ||
-        (chatCompleted && !previousSignature));
-
-    if (shouldNotify && signature !== previousSignature) {
-      const notificationMessages = await getConversationMessages(
-        currentConversationId,
-        40
-      ).catch(() => []);
-
-      await sendLeadEmail({
-        lead: latestLead,
-        conversation_id: currentConversationId,
-        type: previousSignature ? "update" : "new",
-        changedFields: [],
-        emailConfig: appConfig?.integrations?.email || null,
-        recipients: notificationRecipients,
-        conversationMessages: notificationMessages,
-      });
-
-      lastLeadEmailSent.set(currentConversationId, signature);
-    }
-  } catch (e) {
-    console.log("lead email error", e.message);
-  }
-
-  try {
-    const latestLead = await loadLeadForConversation();
-
-    if (
-      latestLead?.email &&
-      chatCompleted &&
-      !clientConfirmationSent.get(currentConversationId)
-    ) {
-      const emailResult = await sendClientConfirmationEmail({
-        lead: latestLead,
-        conversation_id: currentConversationId,
-        emailConfig: appConfig?.integrations?.email || null,
-        brandName: appConfig?.brand?.name || "TMedia Global",
-      });
-
-      clientConfirmationSent.set(currentConversationId, true);
-    }
-  } catch (e) {
-    console.log("client email error", e.message);
-  }
-
-  if (handoffCandidate?.handoff_code) {
-    await trackEventScoped({
-      conversation_id: currentConversationId,
-      event_type: "channel_handoff_offer",
-      channel: channel || "web",
-      external_user_id: external_user_id || null,
-      payload: {
-        handoff_code: handoffCandidate.handoff_code,
-        target_channel: "whatsapp",
-        analysis_url: analysisSnapshot?.url || null,
-        service: leadAfter?.interest_service || null,
-        goal: leadAfter?.main_goal || null,
-      },
-    });
-  }
-
-  const handoff = handoffCandidate;
-
-  return {
-    ok: true,
-    build: BUILD_TAG,
-    conversation_id: currentConversationId,
-    reply,
-    lead: leadAfter || null,
-    chat_completed: chatCompleted,
-    mode: conversationMode,
-    phase: conversationPhase,
-    next_best_action: nextBestAction,
-    action_execution: actionExecution,
-    handoff,
   };
 }
 
@@ -7475,7 +6588,7 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
 
     const via = String(req.body?.via || "").trim().toLowerCase();
     if (!["email", "whatsapp"].includes(via)) {
-      return res.status(400).json({ ok: false, error: "Canal de envÃ­o no vÃ¡lido" });
+      return res.status(400).json({ ok: false, error: "Canal de envío no válido" });
     }
 
     const baseUrl = `${req.protocol}://${req.get("host")}`;
@@ -7531,15 +6644,15 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
         channel: lead?.conversations?.channel || null,
       });
       if (!phone) {
-        return res.status(400).json({ ok: false, error: "Este lead no tiene telÃ©fono vÃ¡lido para WhatsApp" });
+        return res.status(400).json({ ok: false, error: "Este lead no tiene teléfono válido para WhatsApp" });
       }
 
       const message = [
         `Hola${lead?.name ? ` ${lead.name}` : ""}, te compartimos tu propuesta de ${lead?.interest_service || "TMedia Global"}.`,
         quote?.title ? `Propuesta: ${quote.title}` : null,
-        `Puedes revisarla aquÃ­: ${previewUrl}`,
+        `Puedes revisarla aquí: ${previewUrl}`,
         "Si quieres, la comentamos contigo y la ajustamos antes de cerrarla.",
-        `Si prefieres hablar con un agente humano, puedes escribir aquÃ­: ${humanAgentUrl}`,
+        `Si prefieres hablar con un agente humano, puedes escribir aquí: ${humanAgentUrl}`,
       ]
         .filter(Boolean)
         .join("\n\n");
@@ -7743,13 +6856,12 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         ...(parsedIntake.value.custom_fields || {}),
       },
     };
-    const authorizedBySecret = isAuthorizedIntegrationRequest(req);
-    const { account, accountConfig, matchedBy } = await resolveExternalLeadAccount(req, payload, {
-      allowDefault: authorizedBySecret,
-    });
-    if (!authorizedBySecret) {
+    if (!isAuthorizedIntegrationRequest(req)) {
       return res.status(401).json({ ok: false, error: "Unauthorized integration request" });
     }
+    const { account, accountConfig } = await resolveExternalLeadAccount(req, payload, {
+      allowDefault: true,
+    });
 
     const brandName = norm(accountConfig?.brand?.name || account.name || "TMedia Global");
     const sourcePlatform = normalizeSourcePlatform(
@@ -7915,7 +7027,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       follow_up_at: null,
       internal_notes: [
         `Lead importado desde ${sourcePlatform}`,
-        sourceCampaign ? `CampaÃ±a: ${sourceCampaign}` : null,
+        sourceCampaign ? `Campaña: ${sourceCampaign}` : null,
         sourceFormName ? `Formulario: ${sourceFormName}` : null,
         internalNotes ? `Notas: ${internalNotes}` : null,
       ].filter(Boolean).join(" | "),
@@ -8003,7 +7115,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       autoStart === "1" ||
       autoStart === "yes" ||
       autoStart === "si" ||
-      autoStart === "sÃ­";
+      autoStart === "sí";
 
     let autoContact = null;
 
@@ -8091,7 +7203,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       conversation_id: conversation.id,
       lead_id: lead.id,
       account_id: account.id,
-      intake_mode: authorizedBySecret ? "secret" : matchedBy,
+      intake_mode: "secret",
       auto_contact: autoContact,
       notification: internalNotification,
     });

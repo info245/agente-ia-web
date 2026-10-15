@@ -1,8 +1,7 @@
-import { openai } from "./openaiClient.js";
+import { openai, EMBEDDING_MODEL } from "./openaiClient.js";
 import { supabase } from "./supabase.js";
 import { fetchPublicHttpText } from "./safeHttpFetch.js";
 
-const EMBEDDING_MODEL = "text-embedding-3-small";
 const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 
 function stripHtml(html) {

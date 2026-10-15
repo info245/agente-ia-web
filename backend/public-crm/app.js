@@ -925,14 +925,14 @@ function setAuthMode(mode = "login") {
   el.crmAuthSwitchBtn?.classList.toggle("is-hidden", !isBootstrap && !isPasswordSetup);
   if (el.crmAuthTitle) {
     el.crmAuthTitle.textContent = isPasswordSetup
-      ? "Establecer contraseÃ±a"
+      ? "Establecer contraseña"
       : isBootstrap
         ? "Crear super admin"
         : "Acceso CRM";
   }
   if (el.crmAuthCopy) {
     el.crmAuthCopy.textContent = isPasswordSetup
-      ? "Crea tu contraseÃ±a para activar el acceso a tu cuenta."
+      ? "Crea tu contraseña para activar el acceso a tu cuenta."
       : isBootstrap
         ? "Este es el primer acceso. Crea la cuenta administradora principal del sistema."
         : "Entra como super admin o como administrador de una cuenta cliente.";
@@ -2883,7 +2883,7 @@ async function setupCrmPassword(event) {
     return;
   }
   if (password !== confirmPassword) {
-    setStatus(el.crmAuthStatus, "Las contraseÃ±as no coinciden.", "error");
+    setStatus(el.crmAuthStatus, "Las contraseñas no coinciden.", "error");
     return;
   }
 

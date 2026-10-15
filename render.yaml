@@ -16,6 +16,14 @@ services:
         value: /opt/render/project/.cache/puppeteer
       - key: OPENAI_API_KEY
         sync: false
+      - key: OPENAI_AGENT_MODEL
+        value: gpt-4.1-mini
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_BASE_URL
+        value: https://cloud.langfuse.com
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
