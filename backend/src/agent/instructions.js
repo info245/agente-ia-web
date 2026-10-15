@@ -55,6 +55,7 @@ const FIELD_LABELS = {
   email: "email",
   phone: "teléfono",
   company_name: "empresa",
+  business_type: "tipo de negocio",
   interest_service: "servicio o producto de interés",
   budget_range: "presupuesto",
   urgency: "urgencia",
