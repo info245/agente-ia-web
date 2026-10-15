@@ -154,7 +154,7 @@ export async function setCrmUserPasswordFromToken(token, password) {
   const available = await hasCrmUsersTable();
   if (!available) {
     throw new Error(
-      "Falta la tabla crm_users en Supabase. Ejecuta sql/007_crm_auth.sql antes de establecer contraseÃ±as."
+      "Falta la tabla crm_users en Supabase. Ejecuta sql/007_crm_auth.sql antes de establecer contraseñas."
     );
   }
 
@@ -162,7 +162,7 @@ export async function setCrmUserPasswordFromToken(token, password) {
   const nextPassword = String(password || "");
   if (!safeToken) throw new Error("El enlace no es valido.");
   if (!nextPassword || nextPassword.length < 8) {
-    throw new Error("La contraseÃ±a debe tener al menos 8 caracteres.");
+    throw new Error("La contraseña debe tener al menos 8 caracteres.");
   }
 
   const { data, error } = await supabase

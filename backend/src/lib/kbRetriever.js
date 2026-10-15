@@ -1,8 +1,6 @@
 // backend/src/lib/kbRetriever.js
 import { supabase } from "./supabase.js";
-import { openai } from "./openaiClient.js";
-
-const EMBEDDING_MODEL = "text-embedding-3-small"; // 1536 dims
+import { openai, EMBEDDING_MODEL } from "./openaiClient.js";
 
 function hasMissingScopedRpcError(error) {
   const message = String(error?.message || "").toLowerCase();

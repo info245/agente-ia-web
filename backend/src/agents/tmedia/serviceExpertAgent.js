@@ -1,4 +1,4 @@
-import { openai } from "../../lib/openaiClient.js";
+import { openai, AGENT_MODEL } from "../../lib/openaiClient.js";
 import { getServiceFacts } from "../tools/websiteKbTools.js";
 import { compactString } from "../core/agentResponseSchema.js";
 import { extractLeadDataFromText } from "../../lib/leadExtractor.js";
@@ -372,7 +372,8 @@ export async function runServiceExpertAgent(context = {}) {
 
   try {
     const response = await openai.responses.create({
-      model: process.env.OPENAI_AGENT_MODEL || "gpt-4.1-mini",
+      model: AGENT_MODEL,
+      max_output_tokens: 500,
       input: [
         {
           role: "system",
