@@ -344,7 +344,8 @@ function buildSalesDecisionLead({
     }
   }
 
-  if (sourceChannel === "whatsapp" && !projected.phone && externalUserId) {
+  // Con BSUID (usuario sin número visible) el external_user_id no es un teléfono.
+  if (sourceChannel === "whatsapp" && !projected.phone && externalUserId && !/[a-z]/i.test(String(externalUserId))) {
     projected.phone = String(externalUserId).replace(/\D/g, "") || null;
   }
 
@@ -457,7 +458,7 @@ function normalizePhone(value = "") {
   return String(value || "").replace(/\D/g, "");
 }
 
-function buildHandoffOptions({ appConfig = null, conversationId = "", reply = "", show = false } = {}) {
+export function buildHandoffOptions({ appConfig = null, conversationId = "", reply = "", show = false } = {}) {
   if (!show) return [];
 
   const options = [];

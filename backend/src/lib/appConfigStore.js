@@ -177,6 +177,15 @@ export async function saveAppConfig(input = {}, { accountId = null } = {}) {
         ...(currentConfig?.integrations?.automations || {}),
         ...(input?.integrations?.automations || {}),
       },
+      calendar: {
+        ...(currentConfig?.integrations?.calendar || {}),
+        ...(input?.integrations?.calendar || {}),
+        // El CRM recibe el token redactado: un guardado normal no debe desconectar el calendario.
+        google_refresh_token:
+          String(input?.integrations?.calendar?.google_refresh_token || "").trim() ||
+          currentConfig?.integrations?.calendar?.google_refresh_token ||
+          "",
+      },
     },
     knowledge_sources: {
       ...(currentConfig?.knowledge_sources || {}),

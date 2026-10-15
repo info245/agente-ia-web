@@ -17,11 +17,69 @@ function stripHtml(html) {
     .trim();
 }
 
-function chunks(text, size = 1200, overlap = 200) {
+function decodeEntities(text = "") {
+  return String(text)
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&amp;/gi, "&");
+}
+
+// Divide la página por encabezados h1-h6 para que cada fragmento lleve su contexto
+// ("Precios > Plan Growth") en vez de cortarla a ciegas por número de caracteres.
+export function htmlToSections(html = "") {
+  const marked = String(html || "")
+    .replace(/<(script|style|noscript|nav|footer)\b[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<!--([\s\S]*?)-->/g, " ")
+    .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, level, inner) => `\n\u0001${level}\u0002${inner.replace(/<[^>]+>/g, " ")}\n`)
+    .replace(/<br\s*\/?>|<\/(p|div|li|section|article|tr|ul|ol|table|blockquote)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ");
+
+  const sections = [];
+  const path = [];
+  let current = { path: [], paragraphs: [] };
+  for (const rawLine of decodeEntities(marked).split("\n")) {
+    const heading = rawLine.match(/^\s*\u0001(\d)\u0002(.*)$/);
+    if (heading) {
+      const level = Number(heading[1]);
+      const title = heading[2].replace(/\s+/g, " ").trim();
+      if (!title) continue;
+      if (current.paragraphs.length) sections.push(current);
+      path.length = Math.min(path.length, level - 1);
+      path[level - 1] = title;
+      current = { path: path.filter(Boolean), paragraphs: [] };
+      continue;
+    }
+    const line = rawLine.replace(/\s+/g, " ").trim();
+    if (line) current.paragraphs.push(line);
+  }
+  if (current.paragraphs.length) sections.push(current);
+  return sections;
+}
+
+export function chunkSections(sections = [], size = 1200, overlap = 200) {
   const result = [];
-  for (let start = 0; start < text.length; start += Math.max(1, size - overlap)) {
-    const value = text.slice(start, start + size).trim();
-    if (value) result.push(value);
+  for (const section of sections) {
+    const prefix = section.path.length ? `${section.path.join(" > ")}\n` : "";
+    let buffer = "";
+    const flush = () => {
+      if (buffer) result.push(`${prefix}${buffer}`);
+      buffer = "";
+    };
+    for (const paragraph of section.paragraphs) {
+      if (paragraph.length > size) {
+        flush();
+        for (let start = 0; start < paragraph.length; start += size - overlap) {
+          result.push(`${prefix}${paragraph.slice(start, start + size).trim()}`);
+        }
+        continue;
+      }
+      if (buffer && buffer.length + paragraph.length + 1 > size) flush();
+      buffer = buffer ? `${buffer}\n${paragraph}` : paragraph;
+    }
+    flush();
   }
   return result.slice(0, 200);
 }
@@ -31,10 +89,10 @@ async function fetchPage(rawUrl) {
     timeoutMs: 15_000,
     maxBytes: MAX_PAGE_BYTES,
     maxRedirects: 3,
-    headers: { "User-Agent": "SanchoKnowledgeSync/2.0", Accept: "text/html,application/xhtml+xml" },
+    headers: { "User-Agent": "AgentKnowledgeSync/2.0", Accept: "text/html,application/xhtml+xml" },
   });
   const title = page.text.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, " ").trim() || null;
-  return { url: page.url, title, text: stripHtml(page.text) };
+  return { url: page.url, title, text: stripHtml(page.text), sections: htmlToSections(page.text) };
 }
 
 export async function syncKnowledgeUrl(rawUrl, { accountId } = {}) {
@@ -42,7 +100,8 @@ export async function syncKnowledgeUrl(rawUrl, { accountId } = {}) {
   if (!safeAccountId) throw new Error("accountId es obligatorio.");
   const page = await fetchPage(rawUrl);
   if (page.text.length < 100) throw new Error("La fuente no contiene texto suficiente.");
-  const pageChunks = chunks(page.text);
+  const pageChunks = chunkSections(page.sections);
+  if (!pageChunks.length) throw new Error("La fuente no contiene texto suficiente.");
   const embeddings = await openai.embeddings.create({
     model: EMBEDDING_MODEL,
     input: pageChunks,

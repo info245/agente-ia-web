@@ -86,7 +86,12 @@ import {
   completeExternalLeadIntake,
   failExternalLeadIntake,
 } from "./lib/externalLeadIntakeStore.js";
-import { processTmediaIncomingMessage } from "./agents/orchestrators/tmediaChatOrchestrator.js";
+import { processIncomingMessage } from "./core/processIncomingMessage.js";
+import {
+  getWhatsAppContactKey,
+  isWhatsAppBsuid,
+  transcribeWhatsAppAudio,
+} from "./lib/whatsappMessage.js";
 import { syncConfiguredKnowledge } from "./lib/knowledgeIngestor.js";
 import { createTokenBucketRateLimiter } from "./lib/rateLimiter.js";
 import {
@@ -1542,7 +1547,8 @@ async function sendWhatsAppText(to, bodyText, options = {}) {
 
   const payload = {
     messaging_product: "whatsapp",
-    to,
+    // Sin teléfono visible, Meta entrega al BSUID mediante "recipient".
+    ...(isWhatsAppBsuid(to) ? { recipient: to } : { to }),
     type: "text",
     text: {
       body: String(bodyText || "").slice(0, 4096),
@@ -3106,6 +3112,13 @@ function redactAppConfigForClient(config = {}) {
       email[key] = "";
     }
   }
+  const calendar = safe?.integrations?.calendar;
+  if (calendar) {
+    calendar.google_refresh_token_configured = Boolean(
+      String(config?.integrations?.calendar?.google_refresh_token || "").trim()
+    );
+    calendar.google_refresh_token = "";
+  }
   return safe;
 }
 
@@ -3551,6 +3564,84 @@ app.post("/api/crm/integrations/email/google/connect-url", async (req, res) => {
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
   }
+});
+
+// Google Calendar para que el agente v2 consulte huecos y reserve. Mismo cliente OAuth que Gmail;
+// en Google Cloud hay que registrar también /oauth/google/calendar/callback como redirect URI.
+function buildGoogleCalendarRedirectUri(req) {
+  return `${buildPublicBaseUrl(req)}/oauth/google/calendar/callback`;
+}
+
+app.post("/api/crm/integrations/calendar/google/connect-url", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const { clientId, clientSecret } = getGlobalGoogleOauthCredentials();
+    if (!clientId || !clientSecret) {
+      return res.status(400).json({ ok: false, error: "Google OAuth no esta configurado todavia." });
+    }
+    const stateToken = createGoogleEmailOauthState({ accountId: account.id, userId: req.crmUser?.id || "" });
+    const authUrl = new URL(buildGoogleEmailAuthUrl({
+      clientId,
+      redirectUri: buildGoogleCalendarRedirectUri(req),
+      stateToken,
+    }));
+    authUrl.searchParams.set(
+      "scope",
+      "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/userinfo.email"
+    );
+    return res.json({ ok: true, auth_url: authUrl.toString() });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/oauth/google/calendar/callback", async (req, res) => {
+  const callbackState = consumeGoogleEmailOauthState(String(req.query?.state || "").trim());
+  const redirectUrl = new URL(`${buildPublicBaseUrl(req)}/crm`);
+  try {
+    const code = String(req.query?.code || "").trim();
+    if (!code || !callbackState?.accountId) {
+      throw new Error("La autorizacion de Google no devolvio un estado valido.");
+    }
+    const account = await resolveAccount(callbackState.accountId);
+    const current = await getAppConfig({ accountId: account.id });
+    const { clientId, clientSecret } = getGlobalGoogleOauthCredentials();
+    const tokenPayload = await exchangeGoogleEmailCode({
+      code,
+      clientId,
+      clientSecret,
+      redirectUri: buildGoogleCalendarRedirectUri(req),
+    });
+    const refreshToken =
+      String(tokenPayload?.refresh_token || "").trim() ||
+      String(current?.integrations?.calendar?.google_refresh_token || "").trim();
+    if (!refreshToken) {
+      throw new Error("Google no devolvio refresh token. Vuelve a conectar aceptando todos los permisos.");
+    }
+    const connectedEmail = await fetchGoogleConnectedEmail(String(tokenPayload?.access_token || ""));
+    await saveAppConfig(
+      {
+        integrations: {
+          calendar: {
+            provider: "google_calendar",
+            calendar_id: current?.integrations?.calendar?.calendar_id || "primary",
+            google_refresh_token: refreshToken,
+            google_connected_email: connectedEmail,
+            connected_at: new Date().toISOString(),
+          },
+        },
+      },
+      { accountId: account.id }
+    );
+    redirectUrl.searchParams.set("account_id", account.id);
+    redirectUrl.searchParams.set("calendar_oauth", "connected");
+    redirectUrl.searchParams.set("calendar_oauth_message", connectedEmail);
+  } catch (error) {
+    redirectUrl.searchParams.set("calendar_oauth", "error");
+    redirectUrl.searchParams.set("calendar_oauth_message", String(error?.message || "No se pudo conectar Google Calendar."));
+    if (callbackState?.accountId) redirectUrl.searchParams.set("account_id", callbackState.accountId);
+  }
+  return res.redirect(302, redirectUrl.toString());
 });
 
 app.get("/api/widget/config", async (req, res) => {
@@ -4778,7 +4869,7 @@ app.post("/messages", async (req, res) => {
     }
     const { text, message, conversation_id, external_user_id, channel, metadata } = req.body || {};
 
-    const result = await processTmediaIncomingMessage({
+    const result = await processIncomingMessage({
       conversationId: conversation_id,
       externalUserId: external_user_id,
       sourceChannel: channel || "web",
@@ -5572,15 +5663,23 @@ async function processWhatsAppInboxEvent(event) {
   }
 
   const message = payload.message || {};
-  const from = String(message.from || "").trim();
-  if (!from || !message.id) throw new Error("Mensaje WhatsApp sin from o id");
-  const text = getWhatsAppTextFromMessage(message);
-
-  if (!text) {
-    return { kind: "message", unsupported_type: message.type || "unknown" };
+  // Teléfono o, si el usuario lo oculta, su BSUID.
+  const from = String(payload.contact_key || getWhatsAppContactKey(message) || "").trim();
+  if (!from || !message.id) throw new Error("Mensaje WhatsApp sin remitente o id");
+  const checkpoint = event?.result && typeof event.result === "object" ? event.result : {};
+  let text = getWhatsAppTextFromMessage(message);
+  // Con la respuesta ya generada no hace falta volver a transcribir en el reintento.
+  if (!text && message.type === "audio" && message.audio?.id && !checkpoint.agent_reply_generated) {
+    text = await transcribeWhatsAppAudio({
+      mediaId: message.audio.id,
+      accessToken: whatsappChannel.access_token || WHATSAPP_TOKEN,
+      apiVersion: whatsappChannel.api_version || WHATSAPP_API_VERSION,
+    });
   }
 
-  const checkpoint = event?.result && typeof event.result === "object" ? event.result : {};
+  if (!text && !checkpoint.agent_reply_generated) {
+    return { kind: "message", unsupported_type: message.type || "unknown" };
+  }
   if (checkpoint.send_started_at) {
     return {
       kind: "message",
@@ -5598,7 +5697,7 @@ async function processWhatsAppInboxEvent(event) {
       }
     : null;
   if (!result) {
-    result = await processTmediaIncomingMessage({
+    result = await processIncomingMessage({
       conversationId: null,
       externalUserId: from,
       sourceChannel: "whatsapp",
@@ -5608,6 +5707,7 @@ async function processWhatsAppInboxEvent(event) {
         whatsappPhoneNumberId: phoneNumberId,
         whatsappBusinessAccountId: whatsappChannel.waba_id || null,
         whatsappProfileName: payload.profile_name || null,
+        transcribed_audio: message.type === "audio" || undefined,
         raw: message,
       },
       accountId: event.account_id,
@@ -5931,9 +6031,10 @@ app.post("/webhooks/whatsapp", async (req, res) => {
         }
 
         for (const message of value?.messages || []) {
-          if (!message?.id || !message?.from) continue;
-          const contact = (value?.contacts || []).find(
-            (item) => String(item?.wa_id || "") === String(message.from)
+          const contactKey = getWhatsAppContactKey(message, value?.contacts);
+          if (!message?.id || !contactKey) continue;
+          const contact = (value?.contacts || []).find((item) =>
+            [item?.wa_id, item?.user_id].map(String).includes(contactKey)
           );
           const queued = await enqueueChannelInboxEvent({
             accountId: webhookAccountId,
@@ -5944,6 +6045,7 @@ app.post("/webhooks/whatsapp", async (req, res) => {
               kind: "message",
               phone_number_id: phoneNumberId,
               profile_name: contact?.profile?.name || null,
+              contact_key: contactKey,
               message,
             },
           });
