@@ -5165,13 +5165,8 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         });
     }
 
-    const autoStart = normalizeText(payload.auto_start || payload.auto_contact || "");
-    const shouldAutoStart =
-      autoStart === "true" ||
-      autoStart === "1" ||
-      autoStart === "yes" ||
-      autoStart === "si" ||
-      autoStart === "sí";
+    // Solo el valor validado: parseExternalLeadIntake exige consentimiento para contactar.
+    const shouldAutoStart = parsedIntake.value.auto_start === true;
 
     let autoContact = null;
 
@@ -5216,7 +5211,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         }
       }
     } else if (shouldAutoStart && preferredContactChannel.includes("email")) {
-      await sendClientConfirmationEmail({
+      const emailResult = await sendClientConfirmationEmail({
         lead: {
           ...lead,
           ...leadPayload,
