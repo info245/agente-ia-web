@@ -5,8 +5,6 @@ import type { NextConfig } from "next";
 const apiUrl = (process.env.CRM_API_URL || "http://localhost:3000").replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
-  cacheComponents: true,
-  partialPrefetching: true,
   turbopack: {
     rules: {
       "*.css": {
