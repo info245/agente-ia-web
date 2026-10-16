@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildFormLeadTemplateParams,
+  decideFormLeadWhatsApp,
   deriveExternalLeadIdempotencyKey,
   normalizeExternalLeadPayload,
   parseExternalLeadIntake,
   parseStrictConsent,
+  renderWhatsAppTemplateBody,
   validateExternalLeadPayload,
   validateIdempotencyKey,
 } from "./externalLeadIntake.js";
@@ -121,3 +124,62 @@ test("external identity wins over mutable payload data for retries", () => {
   assert.equal(first, retry);
 });
 
+
+test("form lead WhatsApp never goes out without explicit consent", () => {
+  const whatsappConfig = { form_autocontact_enabled: true, intro_template_name: "bienvenida_formulario" };
+  const phone = "34600111222";
+  const withoutConsent = parseExternalLeadIntake({ name: "Ana", phone, consent: "no", auto_start: true }).value;
+  const missingConsent = parseExternalLeadIntake({ name: "Ana", phone }).value;
+  const withConsent = parseExternalLeadIntake({ name: "Ana", phone, consent: "sí" }).value;
+
+  assert.deepEqual(decideFormLeadWhatsApp({ intake: withoutConsent, whatsappConfig, phone }), {
+    send: false,
+    reason: "no_consent",
+  });
+  assert.equal(decideFormLeadWhatsApp({ intake: missingConsent, whatsappConfig, phone }).send, false);
+  // Con el interruptor activo basta el consentimiento: no hace falta auto_start.
+  assert.equal(decideFormLeadWhatsApp({ intake: withConsent, whatsappConfig, phone }).send, true);
+  assert.equal(decideFormLeadWhatsApp({ intake: withConsent, whatsappConfig, phone: null }).reason, "no_phone");
+  assert.equal(
+    decideFormLeadWhatsApp({ intake: withConsent, whatsappConfig: { form_autocontact_enabled: true }, phone }).reason,
+    "whatsapp_template_required"
+  );
+  assert.equal(
+    decideFormLeadWhatsApp({ intake: withConsent, whatsappConfig: { intro_template_name: "x" }, phone }).reason,
+    "disabled"
+  );
+  // Sin interruptor se mantiene el auto_start del formulario con canal WhatsApp.
+  const autoStart = parseExternalLeadIntake({
+    phone,
+    consent: true,
+    auto_start: true,
+    preferred_contact_channel: "WhatsApp",
+  }).value;
+  assert.equal(decideFormLeadWhatsApp({ intake: autoStart, whatsappConfig: { intro_template_name: "x" }, phone }).send, true);
+});
+
+test("template params fit Meta limits and render the sent text", () => {
+  const params = buildFormLeadTemplateParams({
+    name: "  María José López ",
+    service: "Diseño web\ncorporativo",
+    requestSummary: `quieres\ttraer más clientes${" ".repeat(8)}a tu clínica ${"x".repeat(400)}`,
+  });
+  assert.equal(params.length, 3);
+  assert.equal(params[0], "María");
+  assert.equal(params[1], "Diseño web corporativo");
+  assert.ok(params[2].length <= 180);
+  for (const param of params) assert.doesNotMatch(param, /[\n\t]| {5,}/);
+
+  assert.deepEqual(buildFormLeadTemplateParams({ count: 3 }), ["👋", "tu proyecto", "quieres que te contactemos"]);
+  assert.deepEqual(buildFormLeadTemplateParams({ name: "Ana", count: 1 }), ["Ana"]);
+  assert.deepEqual(buildFormLeadTemplateParams({ name: "Ana", count: 0 }), []);
+
+  assert.equal(
+    renderWhatsAppTemplateBody("Hola {{1}}, gracias por escribirnos sobre {{2}}. Hemos visto tu consulta: {{3}}.", [
+      "Ana",
+      "SEO",
+      "quieres salir en Google",
+    ]),
+    "Hola Ana, gracias por escribirnos sobre SEO. Hemos visto tu consulta: quieres salir en Google."
+  );
+});
