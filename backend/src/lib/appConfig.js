@@ -174,6 +174,8 @@ export const DEFAULT_APP_CONFIG = {
       business_account_id: "",
       intro_template_name: "",
       intro_template_language: "es",
+      quote_template_name: "",
+      quote_template_language: "es",
       status_label: "Pendiente de conectar",
       validation: {
         status: "pending",
@@ -603,6 +605,8 @@ export const BLANK_APP_CONFIG = {
       business_account_id: "",
       intro_template_name: "",
       intro_template_language: "es",
+      quote_template_name: "",
+      quote_template_language: "es",
       status_label: "Pendiente de conectar",
       validation: {
         status: "pending",
@@ -1478,6 +1482,9 @@ export function sanitizeAppConfig(input = {}, options = {}) {
         intro_template_name: cleanString(input?.integrations?.whatsapp?.intro_template_name),
         intro_template_language:
           cleanString(input?.integrations?.whatsapp?.intro_template_language) || "es",
+        quote_template_name: cleanString(input?.integrations?.whatsapp?.quote_template_name),
+        quote_template_language:
+          cleanString(input?.integrations?.whatsapp?.quote_template_language) || "es",
         status_label:
           cleanString(input?.integrations?.whatsapp?.status_label) ||
           defaults.integrations.whatsapp.status_label,

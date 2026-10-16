@@ -107,6 +107,7 @@ function buildHandlers(context, state) {
 
     async send_quote({ summary }) {
       await event("quote_requested", { summary });
+      state.quoteRequested = true;
       const teamNotified = await notifyTeam("quote_request", `Preparar presupuesto: ${summary}`);
       return { ok: true, registered: true, team_notified: teamNotified };
     },
@@ -265,6 +266,7 @@ export async function processAgentV2Message({
     notified: false,
     handoff: false,
     booked: false,
+    quoteRequested: false,
     liveConfig: await getAppConfig({ accountId }).catch(() => null),
   };
 
@@ -319,6 +321,14 @@ export async function processAgentV2Message({
     state.leadChanged || actionExecution?.executed
       ? await getLeadByConversationId(context.conversationId, { accountId }).catch(() => state.lead)
       : context.lead;
+  // Presupuesto pedido: el servidor prepara el análisis como borrador sin esperar (no retrasa la respuesta).
+  if (state.quoteRequested && finalLead?.id) {
+    try {
+      actionCallbacks?.onQuoteRequested?.({ leadId: finalLead.id, accountId });
+    } catch (error) {
+      console.log("[agent-v2] analysis draft not started:", error.message);
+    }
+  }
   const handoffOptions = buildHandoffOptions({
     appConfig: context.appConfig,
     conversationId: context.conversationId,
