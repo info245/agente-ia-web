@@ -48,8 +48,11 @@ function isLeadRecoveryStateEligible(lead = {}) {
 
 export function canRecoverLead({ lead = {}, messages = [] } = {}) {
   if (!isLeadRecoveryStateEligible(lead)) return false;
-  const latest = getLatestConversationMessage(messages);
-  return latest?.role === "assistant";
+  // Los mensajes "tool" son notas internas (p. ej. el alta de un formulario), no turnos de la charla.
+  const latest = getLatestConversationMessage((messages || []).filter((message) => message?.role !== "tool"));
+  // Lead de formulario al que aún no se ha escrito: también espera nuestro contacto.
+  if (!latest) return (messages || []).some((message) => message?.role === "tool");
+  return latest.role === "assistant";
 }
 
 export function canContinueLeadRecovery({ lead = {}, messages = [], sentEvents = [] } = {}) {

@@ -174,6 +174,10 @@ export const DEFAULT_APP_CONFIG = {
       business_account_id: "",
       intro_template_name: "",
       intro_template_language: "es",
+      // Texto aprobado en Meta con {{1}} nombre, {{2}} servicio y {{3}} resumen; se guarda tal cual se envía.
+      intro_template_body: "",
+      intro_template_variables: 0,
+      form_autocontact_enabled: false,
       status_label: "Pendiente de conectar",
       validation: {
         status: "pending",
@@ -603,6 +607,10 @@ export const BLANK_APP_CONFIG = {
       business_account_id: "",
       intro_template_name: "",
       intro_template_language: "es",
+      // Texto aprobado en Meta con {{1}} nombre, {{2}} servicio y {{3}} resumen; se guarda tal cual se envía.
+      intro_template_body: "",
+      intro_template_variables: 0,
+      form_autocontact_enabled: false,
       status_label: "Pendiente de conectar",
       validation: {
         status: "pending",
@@ -1478,6 +1486,12 @@ export function sanitizeAppConfig(input = {}, options = {}) {
         intro_template_name: cleanString(input?.integrations?.whatsapp?.intro_template_name),
         intro_template_language:
           cleanString(input?.integrations?.whatsapp?.intro_template_language) || "es",
+        intro_template_body: cleanString(input?.integrations?.whatsapp?.intro_template_body),
+        intro_template_variables: Math.max(
+          0,
+          Math.min(3, Math.trunc(Number(input?.integrations?.whatsapp?.intro_template_variables) || 0))
+        ),
+        form_autocontact_enabled: input?.integrations?.whatsapp?.form_autocontact_enabled === true,
         status_label:
           cleanString(input?.integrations?.whatsapp?.status_label) ||
           defaults.integrations.whatsapp.status_label,
