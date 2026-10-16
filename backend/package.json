@@ -22,7 +22,6 @@
     "express": "^5.2.1",
     "nodemailer": "^10.0.10",
     "openai": "^6.49.0",
-    "pdfkit": "^0.17.2",
     "puppeteer": "^25.12.0"
   }
 }

@@ -141,10 +141,15 @@ import {
   renderAnalysisEmailHtml,
 } from "./lib/analysisTemplate.js";
 import { renderHtmlToPdfBuffer } from "./lib/htmlPdf.js";
+import { runLightSiteAnalysis } from "./lib/lightSiteAnalyzer.js";
 import {
-  extractFirstUrlFromText,
-  runLightSiteAnalysis,
-} from "./lib/lightSiteAnalyzer.js";
+  buildQuoteResponseNotice,
+  buildWhatsAppTemplateWarnings,
+  describeStepsWithoutTemplate,
+  findLeadWebsite,
+  findWhatsAppStepsWithoutTemplate,
+  planQuoteWhatsAppSend,
+} from "./lib/quoteAnalysisFlow.js";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -1460,21 +1465,22 @@ ${transcript}
 }
 
 async function buildAnalysisForLead({ lead, account }) {
-  const [messages, analysisEvent] = await Promise.all([
+  const [messages, analysisEvent, formEvent] = await Promise.all([
     getConversationMessages(lead.conversation_id, 50).catch(() => []),
     getLatestConversationEvent(lead.conversation_id, "analysis_snapshot").catch(
+      () => null
+    ),
+    getLatestConversationEvent(lead.conversation_id, "external_lead_imported").catch(
       () => null
     ),
   ]);
 
   let snapshot = analysisEvent?.payload || null;
   if (!hasAnalysisSnapshot(snapshot)) {
-    const urlCandidate =
-      extractFirstUrlFromText(lead?.internal_notes || "") ||
-      extractFirstUrlFromText(lead?.summary || "") ||
-      extractFirstUrlFromText(
-        (messages || []).map((item) => String(item?.content || "")).join("\n")
-      );
+    const urlCandidate = findLeadWebsite(lead, {
+      messages,
+      formData: formEvent?.payload?.custom_fields || {},
+    });
 
     if (urlCandidate) {
       snapshot = await runLightSiteAnalysis(urlCandidate).catch(() => null);
@@ -1512,6 +1518,56 @@ async function buildAnalysisForLead({ lead, account }) {
     messages,
     appConfig,
   };
+}
+
+// Genera el análisis y lo guarda como borrador para que el equipo lo revise y lo envíe.
+async function generateAnalysisDraft({ lead, account, trigger }) {
+  const result = await buildAnalysisForLead({ lead, account });
+  const saved = await upsertLatestAnalysisForLead(lead, {
+    title:
+      result.analysis?.title ||
+      `Analisis inicial de ${lead?.interest_service || "la oportunidad"}`,
+    recommended_service:
+      result.analysis?.recommended_service || lead?.interest_service || "",
+    source_url:
+      result.analysis?.source_url ||
+      result.snapshot?.final_url ||
+      result.snapshot?.url ||
+      "",
+    content_json: result.analysis,
+    status: "draft",
+  });
+
+  await trackConversationEvent({
+    conversation_id: lead.conversation_id,
+    event_type: "analysis_generated",
+    channel: lead?.conversations?.channel || "crm",
+    external_user_id:
+      lead?.conversations?.external_user_id || lead?.email || lead?.phone || null,
+    payload: {
+      analysis_id: saved.id,
+      lead_id: lead.id,
+      recommended_service: saved.recommended_service || null,
+      trigger,
+    },
+    account_id: account.id,
+  });
+  return saved;
+}
+
+// Borrador automático en segundo plano: no retrasa la respuesta y no pisa un análisis existente.
+function draftAnalysisInBackground({ leadId, accountId = null, trigger }) {
+  if (!leadId) return;
+  setImmediate(async () => {
+    try {
+      if (await getLatestAnalysisByLeadId(leadId)) return;
+      const lead = await getCrmLeadById(leadId, { accountId });
+      if (!lead) return;
+      await generateAnalysisDraft({ lead, account: { id: accountId || lead.account_id || null }, trigger });
+    } catch (error) {
+      console.log("analysis auto-draft error", { leadId, trigger, message: error?.message || error });
+    }
+  });
 }
 
 async function trackConversationEvent(params) {
@@ -1685,7 +1741,7 @@ function buildAutomationBaseUrl(req) {
   );
 }
 
-function buildAutomationTemplateVars({ lead, appConfig, previewUrl }) {
+function buildAutomationTemplateVars({ lead, appConfig, previewUrl, analysisUrl = "" }) {
   const customVars =
     lead?.custom_fields && typeof lead.custom_fields === "object"
       ? Object.fromEntries(
@@ -1708,7 +1764,7 @@ function buildAutomationTemplateVars({ lead, appConfig, previewUrl }) {
     email: lead?.email || "",
     telefono: lead?.phone || "",
     link_presupuesto: previewUrl || "",
-    link_analisis: previewUrl || "",
+    link_analisis: analysisUrl || "",
     resumen_analisis: lead?.summary || "",
     whatsapp_humano: buildHumanAgentWhatsAppUrl(
       lead?.interest_service || "",
@@ -3140,7 +3196,12 @@ app.get("/api/crm/config", async (_req, res) => {
   try {
     const account = await resolveRequestAccount(_req);
     const config = await getAppConfig({ accountId: account.id });
-    res.json({ ok: true, config: redactAppConfigForClient(config), account });
+    res.json({
+      ok: true,
+      config: redactAppConfigForClient(config),
+      account,
+      warnings: buildWhatsAppTemplateWarnings(config),
+    });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -3184,6 +3245,7 @@ function buildPublishReadiness(appConfig = {}, readinessInput = {}) {
     readinessInput?.scenario_summary && typeof readinessInput.scenario_summary === "object"
       ? readinessInput.scenario_summary
       : null;
+  const whatsappStepsWithoutTemplate = findWhatsAppStepsWithoutTemplate(appConfig);
 
   const checks = [
     {
@@ -3265,6 +3327,15 @@ function buildPublishReadiness(appConfig = {}, readinessInput = {}) {
       severity: "warning",
       ready: personalizationRules.length > 0,
       hint: `${personalizationRules.length} reglas activas`,
+    },
+    {
+      key: "whatsapp_templates",
+      label: "Plantillas WhatsApp",
+      severity: "warning",
+      ready: whatsappStepsWithoutTemplate.length === 0,
+      hint:
+        describeStepsWithoutTemplate(whatsappStepsWithoutTemplate) ||
+        "Todos los pasos de WhatsApp tienen plantilla aprobada",
     },
   ];
 
@@ -3818,6 +3889,7 @@ app.post("/api/crm/config", async (req, res) => {
       ok: true,
       config,
       account,
+      warnings: buildWhatsAppTemplateWarnings(config),
       version: { id: version.id, version: version.version, status: version.status },
     });
   } catch (error) {
@@ -4278,10 +4350,8 @@ app.get("/api/crm/service-facts/:serviceName", async (req, res) => {
 app.get("/crm/quotes/:leadId/preview", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-      const appConfig = await getAppConfig({ accountId: account.id });
-      const leads = await listCrmLeads({ limit: 500, accountId: account.id });
-    const lead =
-      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+    const appConfig = await getAppConfig({ accountId: account.id });
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
 
     if (!lead) {
       return res.status(404).send("Lead no encontrado");
@@ -4364,9 +4434,7 @@ app.get("/crm/analysis/:leadId/preview", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
     const appConfig = await getAppConfig({ accountId: account.id });
-    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
-    const lead =
-      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
 
     if (!lead) {
       return res.status(404).send("Lead no encontrado");
@@ -4415,9 +4483,7 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
       return res.status(400).send("Accion no valida");
     }
 
-    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
-    const lead =
-      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
 
     if (!lead) {
       return res.status(404).send("Lead no encontrado");
@@ -4488,6 +4554,28 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
       crm_status: response.lead?.crm_status || lead.crm_status,
     };
 
+    // Aviso interno al equipo: el estado CRM ya se actualizó en markLatestQuoteResponse.
+    const notice = buildQuoteResponseNotice({
+      action: response.action,
+      lead: updatedLead,
+      quote: response.quote,
+      crmUrl: previewUrl,
+    });
+    // Si el cliente repite el clic, no se avisa dos veces.
+    if (quote.status !== response.action) {
+      const recipients = getNotificationRecipients(appConfig);
+      await sendLeadEmail({
+        lead: { ...updatedLead, next_action: notice.nextAction, summary: notice.text },
+        conversation_id: lead.conversation_id,
+        type: "update",
+        changedFields: ["quote_status", "crm_status"],
+        emailConfig: appConfig?.integrations?.email || null,
+        recipients: recipients.length ? recipients : null,
+        subject: notice.subject,
+      }).catch((error) => console.log("quote response notify error", error.message));
+      await updateLeadCrmFields(lead.id, { next_action: notice.nextAction }).catch(() => null);
+    }
+
     const html = renderQuoteResponseHtml({
       action: response.action,
       lead: updatedLead,
@@ -4508,9 +4596,7 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
 app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-    const leads = await listCrmLeads({ limit: 500, accountId: account.id });
-    const lead =
-      leads.find((item) => String(item.id) === String(req.params.leadId)) || null;
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
 
     if (!lead) {
       return res.status(404).send("Lead no encontrado");
@@ -4566,36 +4652,7 @@ app.post("/api/crm/leads/:leadId/analysis/generate", async (req, res) => {
       return res.status(404).json({ ok: false, error: "Lead no encontrado" });
     }
 
-    const result = await buildAnalysisForLead({ lead, account });
-    const saved = await upsertLatestAnalysisForLead(lead, {
-      title:
-        result.analysis?.title ||
-        `Analisis inicial de ${lead?.interest_service || "la oportunidad"}`,
-      recommended_service:
-        result.analysis?.recommended_service || lead?.interest_service || "",
-      source_url:
-        result.analysis?.source_url ||
-        result.snapshot?.final_url ||
-        result.snapshot?.url ||
-        "",
-      content_json: result.analysis,
-      status: "draft",
-    });
-
-    await trackConversationEvent({
-      conversation_id: lead.conversation_id,
-      event_type: "analysis_generated",
-      channel: lead?.conversations?.channel || "crm",
-      external_user_id:
-        lead?.conversations?.external_user_id || lead?.email || lead?.phone || null,
-      payload: {
-        analysis_id: saved.id,
-        lead_id: lead.id,
-        recommended_service: saved.recommended_service || null,
-      },
-      account_id: account.id,
-    });
-
+    const saved = await generateAnalysisDraft({ lead, account, trigger: "crm" });
     res.json({ ok: true, analysis: saved });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -4717,17 +4774,51 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
         return res.status(400).json({ ok: false, error: "Este lead no tiene teléfono válido para WhatsApp" });
       }
 
-      const message = [
-        `Hola${lead?.name ? ` ${lead.name}` : ""}, te compartimos tu propuesta de ${lead?.interest_service || "TMedia Global"}.`,
-        quote?.title ? `Propuesta: ${quote.title}` : null,
-        `Puedes revisarla aquí: ${previewUrl}`,
-        "Si quieres, la comentamos contigo y la ajustamos antes de cerrarla.",
-        `Si prefieres hablar con un agente humano, puedes escribir aquí: ${humanAgentUrl}`,
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-
-      await sendWhatsAppText(phone, message, { accountId: account.id });
+      const quoteTemplateVars = buildAutomationTemplateVars({ lead, appConfig, previewUrl });
+      const templateBody = renderTemplateString(
+        appConfig?.message_templates?.quote_whatsapp?.body || "",
+        quoteTemplateVars
+      ).trim();
+      const message =
+        templateBody ||
+        [
+          `Hola${lead?.name ? ` ${lead.name}` : ""}, te compartimos tu propuesta de ${lead?.interest_service || "TMedia Global"}.`,
+          `Puedes revisarla aquí: ${previewUrl}`,
+          `Si prefieres hablar con un agente humano, puedes escribir aquí: ${humanAgentUrl}`,
+        ].join("\n\n");
+      const plan = planQuoteWhatsAppSend({
+        // La ventana de 24h solo cuenta si el cliente escribió por WhatsApp, no por la web.
+        windowOpen:
+          lead?.conversations?.channel === "whatsapp" &&
+          (await isWhatsAppCustomerWindowOpen(lead.conversation_id)),
+        whatsappConfig: appConfig?.integrations?.whatsapp || {},
+        body: message,
+        vars: quoteTemplateVars,
+      });
+      if (plan.type === "blocked") {
+        return res.status(409).json({
+          ok: false,
+          reason: plan.reason,
+          error:
+            "El cliente no ha escrito en las últimas 24h. Configura una plantilla aprobada de WhatsApp para propuestas (integrations.whatsapp.quote_template_name) o envíala por email.",
+        });
+      }
+      if (plan.type === "template") {
+        await sendWhatsAppTemplate(phone, plan.name, plan.language, {
+          accountId: account.id,
+          bodyParams: plan.params,
+        });
+      } else {
+        await sendWhatsAppText(phone, plan.body, { accountId: account.id });
+      }
+      if (lead.conversation_id) {
+        await saveMessage({
+          conversation_id: lead.conversation_id,
+          role: "assistant",
+          content: plan.type === "template" ? `[Plantilla WhatsApp: ${plan.name}] ${previewUrl}` : plan.body,
+          account_id: account.id,
+        }).catch(() => null);
+      }
     }
 
     const updatedQuote = await markLatestQuoteAsSent(lead.id, via);
@@ -4788,7 +4879,7 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
     );
 
     const analysisTemplateVars = {
-      ...buildAutomationTemplateVars({ lead, appConfig, previewUrl }),
+      ...buildAutomationTemplateVars({ lead, appConfig, analysisUrl: previewUrl }),
       resumen_analisis:
         analysis?.content_json?.summary ||
         lead?.summary ||
@@ -4893,6 +4984,8 @@ app.post("/messages", async (req, res) => {
       actionCallbacks: {
         sendActionMessage: sendConfiguredActionMessage,
         executeActionTask: notifyConfiguredActionTask,
+        onQuoteRequested: ({ leadId, accountId }) =>
+          draftAnalysisInBackground({ leadId, accountId, trigger: "quote_requested" }),
       },
     });
 
@@ -5314,6 +5407,11 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       leadId: lead.id,
     });
 
+    // Si el formulario trae web, se deja el análisis preparado como borrador.
+    if (findLeadWebsite({ ...leadPayload, internal_notes: internalNotes }, { formData: customFields })) {
+      draftAnalysisInBackground({ leadId: lead.id, accountId: account.id, trigger: "external_lead" });
+    }
+
     return res.json({
       ok: true,
       conversation_id: conversation.id,
@@ -5393,6 +5491,7 @@ async function runAutomationFlowsForAccount({
         lead,
         appConfig,
         previewUrl,
+        analysisUrl: `${baseUrl}/crm/analysis/${lead.id}/preview?account_id=${encodeURIComponent(account.id)}`,
       });
 
       const steps = Array.isArray(flow?.steps) ? flow.steps : [];
@@ -5774,6 +5873,8 @@ async function processWhatsAppInboxEvent(event) {
       actionCallbacks: {
         sendActionMessage: sendConfiguredActionMessage,
         executeActionTask: notifyConfiguredActionTask,
+        onQuoteRequested: ({ leadId, accountId }) =>
+          draftAnalysisInBackground({ leadId, accountId, trigger: "quote_requested" }),
       },
     });
     await updateChannelInboxEventResult(event.id, {
