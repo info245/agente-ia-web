@@ -167,3 +167,19 @@ test("retryable skips are explicit operational attention states", () => {
   assert.equal(isRetryableAutomationSkipReason("contact-not-authorized"), true);
   assert.equal(isRetryableAutomationSkipReason("provider-timeout"), false);
 });
+
+test("form leads enter recovery even though intake saves an internal tool message", () => {
+  const lead = { crm_status: "nuevo" };
+  const toolOnly = [{ role: "tool", created_at: "2026-08-01T10:00:00Z" }];
+  const toolAfterAssistant = [
+    { role: "assistant", created_at: "2026-08-01T10:00:00Z" },
+    { role: "tool", created_at: "2026-08-01T10:00:01Z" },
+  ];
+  assert.equal(canRecoverLead({ lead, messages: toolOnly }), true);
+  assert.equal(canRecoverLead({ lead, messages: toolAfterAssistant }), true);
+  assert.equal(
+    canRecoverLead({ lead, messages: [...toolOnly, { role: "user", created_at: "2026-08-01T10:05:00Z" }] }),
+    false
+  );
+  assert.equal(canRecoverLead({ lead, messages: [] }), false);
+});

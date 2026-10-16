@@ -407,3 +407,39 @@ export function deriveExternalLeadIdempotencyKey({
   return `lead:${digest}`;
 }
 
+
+// Primer contacto por WhatsApp a un lead de formulario. Sin consentimiento explícito nunca se envía.
+export function decideFormLeadWhatsApp({ intake = {}, whatsappConfig = {}, phone = null } = {}) {
+  if (intake.consent !== true) return { send: false, reason: "no_consent" };
+  const wantsWhatsApp =
+    whatsappConfig.form_autocontact_enabled === true ||
+    (intake.auto_start === true && String(intake.preferred_contact_channel || "").includes("whatsapp"));
+  if (!wantsWhatsApp) return { send: false, reason: "disabled" };
+  if (!phone) return { send: false, reason: "no_phone" };
+  if (!String(whatsappConfig.intro_template_name || "").trim()) {
+    return { send: false, reason: "whatsapp_template_required" };
+  }
+  return { send: true, reason: null };
+}
+
+// Meta rechaza variables vacías, con saltos de línea, tabuladores o más de 4 espacios seguidos.
+export function cleanTemplateParam(value, maxLength = 200) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+// {{1}} nombre, {{2}} servicio, {{3}} resumen de lo que escribió; solo las que use la plantilla.
+export function buildFormLeadTemplateParams({ name, service, requestSummary, count = 3 } = {}) {
+  const values = [
+    cleanTemplateParam(String(name || "").trim().split(/\s+/)[0], 60) || "👋",
+    cleanTemplateParam(service, 80) || "tu proyecto",
+    cleanTemplateParam(requestSummary, 180) || "quieres que te contactemos",
+  ];
+  const safeCount = Math.max(0, Math.min(values.length, Number(count) || 0));
+  return values.slice(0, safeCount);
+}
+
+export function renderWhatsAppTemplateBody(body, params = []) {
+  return String(body || "").replace(/\{\{(\d+)\}\}/g, (match, index) => params[Number(index) - 1] ?? match);
+}
