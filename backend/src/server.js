@@ -18,6 +18,7 @@ import {
   listInboxConversations,
   updateConversationInboxState,
   getLeadByConversationId,
+  getConversationById,
   getLatestConversationEvent,
   listConversationEventsByType,
   listCrmLeads,
@@ -268,6 +269,8 @@ const CRM_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const CRM_PUBLIC_BASE_URL = String(
   process.env.CRM_PUBLIC_BASE_URL || process.env.PUBLIC_APP_URL || "https://tmedia-global-ai.onrender.com"
 ).replace(/\/$/, "");
+// App CRM nueva (crm-app). Si está configurada, el OAuth de Calendar iniciado desde ella vuelve allí.
+const CRM_APP_URL = String(process.env.CRM_APP_URL || "").trim().replace(/\/$/, "");
 const GOOGLE_OAUTH_CLIENT_ID = String(process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim();
 const GOOGLE_OAUTH_CLIENT_SECRET = String(process.env.GOOGLE_OAUTH_CLIENT_SECRET || "").trim();
 
@@ -397,6 +400,7 @@ function createGoogleEmailOauthState({
   accountId = "",
   userId = "",
   pendingEmailConfig = null,
+  returnTo = "",
 } = {}) {
   cleanupGoogleEmailOauthStates();
   const token = crypto.randomBytes(24).toString("hex");
@@ -404,6 +408,7 @@ function createGoogleEmailOauthState({
     accountId,
     userId,
     pendingEmailConfig,
+    returnTo,
     expiresAt: Date.now() + GOOGLE_EMAIL_OAUTH_TTL_MS,
   });
   return token;
@@ -3664,7 +3669,11 @@ app.post("/api/crm/integrations/calendar/google/connect-url", async (req, res) =
     if (!clientId || !clientSecret) {
       return res.status(400).json({ ok: false, error: "Google OAuth no esta configurado todavia." });
     }
-    const stateToken = createGoogleEmailOauthState({ accountId: account.id, userId: req.crmUser?.id || "" });
+    const stateToken = createGoogleEmailOauthState({
+      accountId: account.id,
+      userId: req.crmUser?.id || "",
+      returnTo: req.body?.return_to === "app" && CRM_APP_URL ? `${CRM_APP_URL}/agente` : "",
+    });
     const authUrl = new URL(buildGoogleEmailAuthUrl({
       clientId,
       redirectUri: buildGoogleCalendarRedirectUri(req),
@@ -3682,7 +3691,7 @@ app.post("/api/crm/integrations/calendar/google/connect-url", async (req, res) =
 
 app.get("/oauth/google/calendar/callback", async (req, res) => {
   const callbackState = consumeGoogleEmailOauthState(String(req.query?.state || "").trim());
-  const redirectUrl = new URL(`${buildPublicBaseUrl(req)}/crm`);
+  const redirectUrl = new URL(callbackState?.returnTo || `${buildPublicBaseUrl(req)}/crm`);
   try {
     const code = String(req.query?.code || "").trim();
     if (!code || !callbackState?.accountId) {
@@ -4228,10 +4237,21 @@ app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
     if (!lead) {
       return res.status(404).json({ ok: false, error: "Conversacion no encontrada" });
     }
-    const messages = await getConversationMessages(req.params.conversationId, 200, {
-      accountId: account.id,
+    const [messages, conversation] = await Promise.all([
+      getConversationMessages(req.params.conversationId, 200, { accountId: account.id }),
+      getConversationById(req.params.conversationId).catch(() => null),
+    ]);
+    res.json({
+      ok: true,
+      messages,
+      lead,
+      conversation: conversation && {
+        channel: conversation.channel,
+        ai_status: conversation.ai_status || "active",
+        inbox_status: conversation.inbox_status || "new",
+        assigned_to: conversation.assigned_to || null,
+      },
     });
-    res.json({ ok: true, messages, lead });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -6010,6 +6030,11 @@ function startInternalScheduler() {
 }
 
 function startChannelInboxWorker() {
+  // Local runs against the production database must not claim real inbox events.
+  if (process.env.CHANNEL_INBOX_WORKER === "off") {
+    console.log("[channel-inbox] worker disabled (CHANNEL_INBOX_WORKER=off)");
+    return;
+  }
   console.log("[channel-inbox] durable worker enabled", {
     interval_ms: CHANNEL_INBOX_INTERVAL_MS,
   });
