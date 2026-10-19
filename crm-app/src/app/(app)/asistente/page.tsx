@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSession } from "@/components/app-shell";
+import { ConfigPending, useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import type { AppConfig, Faq, Offer } from "@/lib/types";
 
@@ -52,8 +52,8 @@ function patchFrom(config: AppConfig, draft: Draft) {
 }
 
 export default function AsistentePage() {
-  const { config, reloadConfig } = useSession();
-  if (!config) return <p className="loading">Cargando…</p>;
+  const { config, configError, reloadConfig } = useSession();
+  if (!config) return <ConfigPending error={configError} />;
   return <Editor config={config} reloadConfig={reloadConfig} />;
 }
 

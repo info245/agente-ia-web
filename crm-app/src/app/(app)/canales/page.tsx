@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { useSession } from "@/components/app-shell";
+import { ConfigPending, useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
 
 type WhatsAppChannel = { configured?: boolean; status?: string; display_phone_number?: string; verified_name?: string };
@@ -18,7 +18,7 @@ function hours(meeting?: { days?: number[]; start_hour?: number; end_hour?: numb
 }
 
 export default function CanalesPage() {
-  const { account, config, leads } = useSession();
+  const { account, config, configError, leads } = useSession();
   const params = useSearchParams();
   const [whatsapp, setWhatsapp] = useState<WhatsAppChannel | null>(null);
   const [copied, setCopied] = useState(false);
@@ -31,7 +31,7 @@ export default function CanalesPage() {
       .catch(() => setWhatsapp({}));
   }, []);
 
-  if (!config) return <p className="loading">Cargando…</p>;
+  if (!config) return <ConfigPending error={configError} />;
 
   const snippet = `<script src="${WIDGET_SRC}" data-account-slug="${account.slug || account.id}"></script>`;
   const calendar = config.integrations?.calendar;

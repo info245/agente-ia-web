@@ -13,9 +13,18 @@ type Session = {
   leads: Lead[] | null;
   reloadLeads: () => Promise<void>;
   config: AppConfig | null;
+  configError: string;
   reloadConfig: () => Promise<void>;
 };
 const SessionContext = createContext<Session | null>(null);
+
+export function ConfigPending({ error }: { error: string }) {
+  return error ? (
+    <p className="alert error" role="alert" style={{ margin: 32 }}>No se pudo cargar la configuración de esta cuenta: {error}</p>
+  ) : (
+    <p className="loading">Cargando…</p>
+  );
+}
 
 export function useSession() {
   const session = useContext(SessionContext);
@@ -47,14 +56,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [configError, setConfigError] = useState("");
 
   const reloadLeads = useCallback(async () => {
     const data = await api<{ leads: Lead[] }>(LEADS_PATH).catch(() => null);
     if (data) setLeads(data.leads);
   }, []);
   const reloadConfig = useCallback(async () => {
-    const data = await api<{ config: AppConfig }>("/crm/config").catch(() => null);
-    if (data) setConfig(data.config);
+    try {
+      const data = await api<{ config: AppConfig }>("/crm/config");
+      setConfig(data.config);
+      setConfigError("");
+    } catch (err) {
+      setConfigError((err as Error).message);
+    }
   }, []);
 
   useEffect(() => {
@@ -90,7 +105,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SessionContext.Provider value={{ user, account, leads, reloadLeads, config, reloadConfig }}>
+    <SessionContext.Provider value={{ user, account, leads, reloadLeads, config, configError, reloadConfig }}>
       <div className="app">
         <nav className="side" aria-label="Secciones">
           <div className="brand">

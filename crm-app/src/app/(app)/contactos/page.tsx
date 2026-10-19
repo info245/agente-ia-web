@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "@/components/app-shell";
+import { ConfigPending, useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import { channelOf, leadName, OWNER_PILL, ownerOf, shortTime } from "@/lib/format";
 import type { Lead } from "@/lib/types";
 
 export default function ContactosPage() {
-  const { leads, config, reloadLeads } = useSession();
+  const { leads, config, configError, reloadLeads } = useSession();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"board" | "list">("board");
@@ -17,7 +17,8 @@ export default function ContactosPage() {
   const [moved, setMoved] = useState<Record<string, string>>({});
 
   const stages = (config?.pipeline?.stages || []).filter((s) => s.is_active !== false);
-  if (!leads || !config) return <p className="loading">Cargando…</p>;
+  if (!config) return <ConfigPending error={configError} />;
+  if (!leads) return <p className="loading">Cargando…</p>;
 
   const q = query.trim().toLowerCase();
   const visible = leads
