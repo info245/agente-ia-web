@@ -5,19 +5,15 @@ import type { NextConfig } from "next";
 const apiUrl = (process.env.CRM_API_URL || "http://localhost:3000").replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${apiUrl}/api/:path*` }];
   },
   async redirects() {
-    return [{ source: "/", destination: "/leads", permanent: false }];
+    return [
+      { source: "/", destination: "/inicio", permanent: false },
+      { source: "/leads/:path*", destination: "/conversaciones", permanent: false },
+      { source: "/agente", destination: "/asistente", permanent: false },
+    ];
   },
 };
 

@@ -1,34 +1,61 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bot, ExternalLink, LogOut, Users } from "lucide-react";
 import { api, getAccountId, setAccountId } from "@/lib/api";
-import type { Account, User } from "@/lib/types";
-import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/native-select";
-import { cn } from "@/lib/utils";
+import { initials, ownerOf } from "@/lib/format";
+import type { Account, AppConfig, Lead, User } from "@/lib/types";
 
-const SessionContext = createContext<{ user: User; accountId: string } | null>(null);
+type Session = {
+  user: User;
+  account: Account;
+  leads: Lead[] | null;
+  reloadLeads: () => Promise<void>;
+  config: AppConfig | null;
+  reloadConfig: () => Promise<void>;
+};
+const SessionContext = createContext<Session | null>(null);
 
 export function useSession() {
   const session = useContext(SessionContext);
-  if (!session) throw new Error("useSession outside AppShell");
+  if (!session) throw new Error("useSession fuera de AppShell");
   return session;
 }
 
+const icon = (d: React.ReactNode) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    {d}
+  </svg>
+);
 const NAV = [
-  { href: "/leads", label: "Leads", icon: Users },
-  { href: "/agente", label: "Agente", icon: Bot },
+  { href: "/inicio", label: "Inicio", icon: icon(<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />) },
+  { href: "/conversaciones", label: "Conversaciones", icon: icon(<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />) },
+  { href: "/contactos", label: "Contactos", icon: icon(<><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 3.5a4 4 0 0 1 0 9M22 21a7 7 0 0 0-4-6.3" /></>) },
+  { href: "/asistente", label: "Mi asistente", icon: icon(<><path d="M12 3v3M5 9h14a2 2 0 0 1 2 2v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a2 2 0 0 1 2-2z" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /></>) },
+  { href: "/canales", label: "Canales", icon: icon(<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />) },
 ];
+
+// ponytail: el listado trae 200 leads con su último mensaje cada 20 s; con miles de leads hará falta paginar en servidor.
+const LEADS_PATH = "/crm/leads?limit=200";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [accountId, setAccount] = useState("");
+  const [account, setAccount] = useState<Account | null>(null);
+  const [leads, setLeads] = useState<Lead[] | null>(null);
+  const [config, setConfig] = useState<AppConfig | null>(null);
+
+  const reloadLeads = useCallback(async () => {
+    const data = await api<{ leads: Lead[] }>(LEADS_PATH).catch(() => null);
+    if (data) setLeads(data.leads);
+  }, []);
+  const reloadConfig = useCallback(async () => {
+    const data = await api<{ config: AppConfig }>("/crm/config").catch(() => null);
+    if (data) setConfig(data.config);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -36,17 +63,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if (!me) return router.replace("/login");
       const list = await api<{ accounts: Account[]; active_account: Account }>("/crm/accounts");
       const stored = getAccountId();
-      const current = list.accounts.some((a) => a.id === stored) ? stored : list.active_account.id;
-      setAccountId(current);
+      const current = list.accounts.find((a) => a.id === stored) || list.active_account;
+      setAccountId(current.id);
       setAccounts(list.accounts);
       setAccount(current);
       setUser(me.user);
+      reloadLeads();
+      reloadConfig();
     })();
-  }, [router]);
+  }, [router, reloadLeads, reloadConfig]);
 
-  if (!user) {
-    return <p className="p-8 text-sm text-muted-foreground">Cargando…</p>;
-  }
+  useEffect(() => {
+    if (!user) return;
+    const timer = setInterval(() => !document.hidden && reloadLeads(), 20000);
+    return () => clearInterval(timer);
+  }, [user, reloadLeads]);
+
+  if (!user || !account) return <p className="loading">Cargando…</p>;
+
+  const waiting = (leads || []).filter((lead) => ownerOf(lead) === "waiting").length;
+  const brand = config?.brand?.name || account.name || "Tu negocio";
 
   async function logout() {
     await api("/auth/logout", { method: "POST" }).catch(() => null);
@@ -54,15 +90,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SessionContext.Provider value={{ user, accountId }}>
-      <div className="flex min-h-screen flex-col md:flex-row">
-        <aside className="flex shrink-0 flex-col gap-4 border-b bg-background p-4 md:w-56 md:border-r md:border-b-0">
-          <div className="font-semibold">CRM Comercial</div>
+    <SessionContext.Provider value={{ user, account, leads, reloadLeads, config, reloadConfig }}>
+      <div className="app">
+        <nav className="side" aria-label="Secciones">
+          <div className="brand">
+            <div className="logo">{initials(brand).toUpperCase()}</div>
+            <div>
+              <b>{brand}</b>
+              <span>Tu asistente comercial</span>
+            </div>
+          </div>
+          {NAV.map((item) => (
+            <Link key={item.href} href={item.href} className="nav" aria-current={pathname.startsWith(item.href) ? "page" : undefined}>
+              {item.icon}
+              {item.label}
+              {item.href === "/conversaciones" && waiting > 0 && <span className="count" aria-label={`${waiting} te esperan`}>{waiting}</span>}
+            </Link>
+          ))}
+          <div className="spacer" />
           {user.role === "super_admin" && accounts.length > 1 && (
-            <label className="grid gap-1 text-xs text-muted-foreground">
-              Cuenta
-              <NativeSelect
-                value={accountId}
+            <label className="account-select">
+              Cuenta (solo agencia)
+              <select
+                className="i"
+                value={account.id}
                 onChange={(e) => {
                   setAccountId(e.target.value);
                   window.location.reload();
@@ -73,41 +124,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     {a.name || a.slug || a.id}
                   </option>
                 ))}
-              </NativeSelect>
+              </select>
             </label>
           )}
-          <nav className="flex gap-1 md:flex-col">
-            {NAV.map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted",
-                  pathname.startsWith(href) && "bg-muted font-medium"
-                )}
-              >
-                <Icon className="size-4" aria-hidden />
-                {label}
-              </Link>
-            ))}
-            {process.env.NEXT_PUBLIC_LEGACY_CRM_URL && (
-              <a
-                href={process.env.NEXT_PUBLIC_LEGACY_CRM_URL}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted"
-              >
-                <ExternalLink className="size-4" aria-hidden />
-                CRM actual
-              </a>
-            )}
-          </nav>
-          <div className="mt-auto hidden text-xs text-muted-foreground md:block">
-            {user.display_name || user.email}
+          <div className="me">
+            <div className="avatar">{initials(user.display_name || user.email)}</div>
+            <div>
+              {user.display_name || user.email.split("@")[0]}
+              <small>{user.email}</small>
+            </div>
+            <button className="logout" onClick={logout}>Salir</button>
           </div>
-          <Button variant="ghost" size="sm" className="justify-start" onClick={logout}>
-            <LogOut className="size-4" aria-hidden /> Salir
-          </Button>
-        </aside>
-        <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
+        </nav>
+        <main>{children}</main>
       </div>
     </SessionContext.Provider>
   );

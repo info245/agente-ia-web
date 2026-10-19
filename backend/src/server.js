@@ -45,6 +45,7 @@ import {
 } from "./lib/configVersionStore.js";
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
 import { runAgentTurn } from "./agent/engine.js";
+import { supabase } from "./lib/supabase.js";
 import { searchKnowledge } from "./lib/kbRetriever.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
 import {
@@ -3674,7 +3675,7 @@ app.post("/api/crm/integrations/calendar/google/connect-url", async (req, res) =
     const stateToken = createGoogleEmailOauthState({
       accountId: account.id,
       userId: req.crmUser?.id || "",
-      returnTo: req.body?.return_to === "app" && CRM_APP_URL ? `${CRM_APP_URL}/agente` : "",
+      returnTo: req.body?.return_to === "app" && CRM_APP_URL ? `${CRM_APP_URL}/canales` : "",
     });
     const authUrl = new URL(buildGoogleEmailAuthUrl({
       clientId,
@@ -6160,7 +6161,7 @@ app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
     }
     // En la web no hay envío: el widget recoge los mensajes nuevos con /messages/updates.
 
-    const author = req.crmUser?.email || req.crmUser?.name || "equipo";
+    const author = req.crmUser?.display_name || req.crmUser?.email || "equipo";
     const message = await saveMessage({
       conversation_id: conversation.id,
       role: "assistant",
@@ -6187,12 +6188,69 @@ app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
   }
 });
 
+// "Mi asistente": el cliente guarda y publica solo tono, saludo, preguntas frecuentes y servicios.
+// Los controles de agencia (perfil, cualificación, escenarios) siguen en /api/crm/config/publish-agent.
+app.post("/api/crm/assistant", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const current = await getAppConfig({ accountId: account.id });
+    const agent = req.body?.agent || {};
+    const offers = req.body?.offers && typeof req.body.offers === "object" ? req.body.offers : null;
+    if (!String(agent.tone || "").trim()) return res.status(400).json({ ok: false, error: "Indica el tono de tu asistente." });
+    if (!offers || !Object.keys(offers).length) return res.status(400).json({ ok: false, error: "Añade al menos un servicio con su precio." });
+
+    const candidate = sanitizeAppConfig({
+      ...current,
+      agent: { ...current.agent, tone: agent.tone, initial_message: agent.initial_message, faq: agent.faq },
+      offers,
+      services: offers,
+    });
+    const config = await saveAppConfig(candidate, { accountId: account.id });
+    const version = await publishConfigVersion({
+      accountId: account.id,
+      config,
+      createdBy: req.crmUser?.id || null,
+      changeSummary: "Mi asistente: tono, saludo, servicios y preguntas frecuentes",
+    });
+    return res.json({ ok: true, config: redactAppConfigForClient(config), version: version?.version });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Videollamadas que el agente ha reservado en el calendario de la cuenta (próximas primero).
+app.get("/api/crm/bookings", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const { data, error } = await supabase
+      .from("bookings")
+      .select("id, conversation_id, lead_id, starts_at, ends_at, timezone, attendee_name, attendee_email, status")
+      .eq("account_id", account.id)
+      .eq("status", "confirmed")
+      .gte("starts_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .order("starts_at", { ascending: true })
+      .limit(50);
+    if (error) throw error;
+    return res.json({ ok: true, bookings: data || [] });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 // Probar el asistente con la configuración que se está editando, sin guardar conversación ni lead.
 app.post("/api/crm/agent/try", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
     const current = await getAppConfig({ accountId: account.id });
     const appConfig = sanitizeAppConfig({ ...current, ...(req.body?.config || {}) });
+    if (req.body?.mode === "suggest") {
+      // Sugerencia para que la envíe una persona que ya ha tomado la conversación.
+      const person = req.crmUser?.display_name || "una persona del equipo";
+      appConfig.agent.prompt_additions = [
+        appConfig.agent.prompt_additions,
+        `Ahora redactas una respuesta para que la envíe ${person}, del equipo, que ya atiende personalmente esta conversación. Escribe en primera persona como esa persona: puede proponer llamar, quedar o enviar una propuesta. Si en la conversación ya se presentó alguien del equipo por su nombre, eres esa persona: nunca hables de ella en tercera persona. No digas que pasas la conversación al equipo ni que eres un asistente.`,
+      ].filter(Boolean).join("\n");
+    }
     const messages = (Array.isArray(req.body?.messages) ? req.body.messages : [])
       .filter((item) => ["user", "assistant"].includes(item?.role) && String(item?.content || "").trim())
       .slice(-20)
