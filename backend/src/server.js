@@ -18,6 +18,7 @@ import {
   listInboxConversations,
   updateConversationInboxState,
   getLeadByConversationId,
+  getConversationById,
   getLatestConversationEvent,
   listConversationEventsByType,
   listCrmLeads,
@@ -43,6 +44,9 @@ import {
   saveDraftConfigVersion,
 } from "./lib/configVersionStore.js";
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
+import { runAgentTurn } from "./agent/engine.js";
+import { supabase } from "./lib/supabase.js";
+import { searchKnowledge } from "./lib/kbRetriever.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
 import {
   getDefaultAccount,
@@ -268,6 +272,8 @@ const CRM_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const CRM_PUBLIC_BASE_URL = String(
   process.env.CRM_PUBLIC_BASE_URL || process.env.PUBLIC_APP_URL || "https://tmedia-global-ai.onrender.com"
 ).replace(/\/$/, "");
+// App CRM nueva (crm-app). Si está configurada, el OAuth de Calendar iniciado desde ella vuelve allí.
+const CRM_APP_URL = String(process.env.CRM_APP_URL || "").trim().replace(/\/$/, "");
 const GOOGLE_OAUTH_CLIENT_ID = String(process.env.GOOGLE_OAUTH_CLIENT_ID || "").trim();
 const GOOGLE_OAUTH_CLIENT_SECRET = String(process.env.GOOGLE_OAUTH_CLIENT_SECRET || "").trim();
 
@@ -397,6 +403,7 @@ function createGoogleEmailOauthState({
   accountId = "",
   userId = "",
   pendingEmailConfig = null,
+  returnTo = "",
 } = {}) {
   cleanupGoogleEmailOauthStates();
   const token = crypto.randomBytes(24).toString("hex");
@@ -404,6 +411,7 @@ function createGoogleEmailOauthState({
     accountId,
     userId,
     pendingEmailConfig,
+    returnTo,
     expiresAt: Date.now() + GOOGLE_EMAIL_OAUTH_TTL_MS,
   });
   return token;
@@ -3664,7 +3672,11 @@ app.post("/api/crm/integrations/calendar/google/connect-url", async (req, res) =
     if (!clientId || !clientSecret) {
       return res.status(400).json({ ok: false, error: "Google OAuth no esta configurado todavia." });
     }
-    const stateToken = createGoogleEmailOauthState({ accountId: account.id, userId: req.crmUser?.id || "" });
+    const stateToken = createGoogleEmailOauthState({
+      accountId: account.id,
+      userId: req.crmUser?.id || "",
+      returnTo: req.body?.return_to === "app" && CRM_APP_URL ? `${CRM_APP_URL}/canales` : "",
+    });
     const authUrl = new URL(buildGoogleEmailAuthUrl({
       clientId,
       redirectUri: buildGoogleCalendarRedirectUri(req),
@@ -3682,7 +3694,7 @@ app.post("/api/crm/integrations/calendar/google/connect-url", async (req, res) =
 
 app.get("/oauth/google/calendar/callback", async (req, res) => {
   const callbackState = consumeGoogleEmailOauthState(String(req.query?.state || "").trim());
-  const redirectUrl = new URL(`${buildPublicBaseUrl(req)}/crm`);
+  const redirectUrl = new URL(callbackState?.returnTo || `${buildPublicBaseUrl(req)}/crm`);
   try {
     const code = String(req.query?.code || "").trim();
     if (!code || !callbackState?.accountId) {
@@ -4228,10 +4240,21 @@ app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
     if (!lead) {
       return res.status(404).json({ ok: false, error: "Conversacion no encontrada" });
     }
-    const messages = await getConversationMessages(req.params.conversationId, 200, {
-      accountId: account.id,
+    const [messages, conversation] = await Promise.all([
+      getConversationMessages(req.params.conversationId, 200, { accountId: account.id }),
+      getConversationById(req.params.conversationId).catch(() => null),
+    ]);
+    res.json({
+      ok: true,
+      messages,
+      lead,
+      conversation: conversation && {
+        channel: conversation.channel,
+        ai_status: conversation.ai_status || "active",
+        inbox_status: conversation.inbox_status || "new",
+        assigned_to: conversation.assigned_to || null,
+      },
     });
-    res.json({ ok: true, messages, lead });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -6010,6 +6033,11 @@ function startInternalScheduler() {
 }
 
 function startChannelInboxWorker() {
+  // Local runs against the production database must not claim real inbox events.
+  if (process.env.CHANNEL_INBOX_WORKER === "off") {
+    console.log("[channel-inbox] worker disabled (CHANNEL_INBOX_WORKER=off)");
+    return;
+  }
   console.log("[channel-inbox] durable worker enabled", {
     interval_ms: CHANNEL_INBOX_INTERVAL_MS,
   });
@@ -6099,6 +6127,179 @@ app.patch("/api/crm/conversations/:conversationId/state", async (req, res) => {
     return res.json({ ok: true, conversation });
   } catch (error) {
     return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+// Respuesta escrita por una persona desde el CRM. Pausa la IA para que no conteste encima.
+app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const text = String(req.body?.text || "").trim();
+    if (!text) return res.status(400).json({ ok: false, error: "Escribe un mensaje antes de enviar." });
+    if (text.length > 4096) return res.status(400).json({ ok: false, error: "El mensaje es demasiado largo (máximo 4.096 caracteres)." });
+
+    const conversation = await getConversationById(req.params.conversationId);
+    if (!conversation || String(conversation.account_id || "") !== String(account.id)) {
+      return res.status(404).json({ ok: false, error: "Conversación no encontrada." });
+    }
+
+    if (conversation.channel === "whatsapp") {
+      if (!(await isWhatsAppCustomerWindowOpen(conversation.id))) {
+        return res.status(409).json({
+          ok: false,
+          code: "whatsapp_window_closed",
+          error: "Han pasado más de 24 horas desde su último mensaje. WhatsApp solo permite escribirle con una plantilla aprobada.",
+        });
+      }
+      await sendWhatsAppText(conversation.external_user_id, text, { accountId: account.id });
+    } else if (conversation.channel !== "web") {
+      return res.status(409).json({
+        ok: false,
+        code: "channel_not_supported",
+        error: "Este contacto no llegó por WhatsApp ni por el chat de la web. Escríbele por email o teléfono.",
+      });
+    }
+    // En la web no hay envío: el widget recoge los mensajes nuevos con /messages/updates.
+
+    const author = req.crmUser?.display_name || req.crmUser?.email || "equipo";
+    const message = await saveMessage({
+      conversation_id: conversation.id,
+      role: "assistant",
+      content: text,
+      metadata: { sender: "human", author },
+      account_id: account.id,
+    });
+    const updated = await updateConversationInboxState(
+      conversation.id,
+      { ai_status: "paused", inbox_status: "open", assigned_to: conversation.assigned_to || author },
+      { accountId: account.id }
+    );
+    await trackConversationEvent({
+      conversation_id: conversation.id,
+      event_type: "human_reply",
+      channel: conversation.channel,
+      external_user_id: conversation.external_user_id,
+      account_id: account.id,
+      payload: { author },
+    });
+    return res.json({ ok: true, message, conversation: updated });
+  } catch (error) {
+    return res.status(502).json({ ok: false, error: error.message });
+  }
+});
+
+// "Mi asistente": el cliente guarda y publica solo tono, saludo, preguntas frecuentes y servicios.
+// Los controles de agencia (perfil, cualificación, escenarios) siguen en /api/crm/config/publish-agent.
+app.post("/api/crm/assistant", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const current = await getAppConfig({ accountId: account.id });
+    const agent = req.body?.agent || {};
+    const offers = req.body?.offers && typeof req.body.offers === "object" ? req.body.offers : null;
+    if (!String(agent.tone || "").trim()) return res.status(400).json({ ok: false, error: "Indica el tono de tu asistente." });
+    if (!offers || !Object.keys(offers).length) return res.status(400).json({ ok: false, error: "Añade al menos un servicio con su precio." });
+
+    const candidate = sanitizeAppConfig({
+      ...current,
+      agent: { ...current.agent, tone: agent.tone, initial_message: agent.initial_message, faq: agent.faq },
+      offers,
+      services: offers,
+    });
+    const config = await saveAppConfig(candidate, { accountId: account.id });
+    const version = await publishConfigVersion({
+      accountId: account.id,
+      config,
+      createdBy: req.crmUser?.id || null,
+      changeSummary: "Mi asistente: tono, saludo, servicios y preguntas frecuentes",
+    });
+    return res.json({ ok: true, config: redactAppConfigForClient(config), version: version?.version });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Videollamadas que el agente ha reservado en el calendario de la cuenta (próximas primero).
+app.get("/api/crm/bookings", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const { data, error } = await supabase
+      .from("bookings")
+      .select("id, conversation_id, lead_id, starts_at, ends_at, timezone, attendee_name, attendee_email, status")
+      .eq("account_id", account.id)
+      .eq("status", "confirmed")
+      .gte("starts_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .order("starts_at", { ascending: true })
+      .limit(50);
+    if (error) throw error;
+    return res.json({ ok: true, bookings: data || [] });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Probar el asistente con la configuración que se está editando, sin guardar conversación ni lead.
+app.post("/api/crm/agent/try", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const current = await getAppConfig({ accountId: account.id });
+    const appConfig = sanitizeAppConfig({ ...current, ...(req.body?.config || {}) });
+    if (req.body?.mode === "suggest") {
+      // Sugerencia para que la envíe una persona que ya ha tomado la conversación.
+      const person = req.crmUser?.display_name || "una persona del equipo";
+      appConfig.agent.prompt_additions = [
+        appConfig.agent.prompt_additions,
+        `Ahora redactas una respuesta para que la envíe ${person}, del equipo, que ya atiende personalmente esta conversación. Escribe en primera persona como esa persona: puede proponer llamar, quedar o enviar una propuesta. Si en la conversación ya se presentó alguien del equipo por su nombre, eres esa persona: nunca hables de ella en tercera persona. No digas que pasas la conversación al equipo ni que eres un asistente.`,
+      ].filter(Boolean).join("\n");
+    }
+    const messages = (Array.isArray(req.body?.messages) ? req.body.messages : [])
+      .filter((item) => ["user", "assistant"].includes(item?.role) && String(item?.content || "").trim())
+      .slice(-20)
+      .map((item) => ({ role: item.role, content: String(item.content).slice(0, 2000) }));
+    if (!messages.length || messages.at(-1).role !== "user") {
+      return res.status(400).json({ ok: false, error: "Escribe un mensaje de prueba." });
+    }
+    const noop = async () => ({ ok: true, note: "Modo prueba: no se guarda ni se envía nada." });
+    const result = await runAgentTurn({
+      appConfig,
+      messages,
+      handlers: {
+        search_knowledge: async ({ query }) => ({
+          ok: true,
+          results: (await searchKnowledge(query, { accountId: account.id, topK: 5 })).map((doc) => ({
+            title: doc.title,
+            url: doc.url,
+            text: String(doc.chunk || "").slice(0, 1200),
+          })),
+        }),
+        save_lead_fields: noop,
+        handoff_to_human: noop,
+        send_quote: noop,
+      },
+    });
+    return res.json({ ok: true, reply: result.reply, intent: result.intent });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// El widget de la web recoge aquí lo que el equipo responde desde el CRM.
+app.get("/messages/updates", async (req, res) => {
+  try {
+    const conversationId = String(req.query?.conversation_id || "").trim();
+    const externalUserId = String(req.query?.external_user_id || "").trim();
+    const after = Date.parse(String(req.query?.after || "")) || 0;
+    if (!conversationId || !externalUserId) return res.status(400).json({ ok: false, error: "Faltan datos" });
+    const conversation = await getConversationById(conversationId).catch(() => null);
+    if (!conversation || conversation.external_user_id !== externalUserId) {
+      return res.status(404).json({ ok: false, error: "Conversación no encontrada" });
+    }
+    const messages = await getConversationMessages(conversation.id, 50, { accountId: conversation.account_id });
+    const fresh = messages
+      .filter((item) => item.metadata?.sender === "human" && Date.parse(item.created_at) > after)
+      .map((item) => ({ id: item.id, text: item.content, created_at: item.created_at }));
+    return res.json({ ok: true, messages: fresh, ai_status: conversation.ai_status || "active" });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
   }
 });
 

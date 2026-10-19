@@ -1365,6 +1365,18 @@ function sanitizeMeetingConfig(value = {}) {
   };
 }
 
+// Preguntas frecuentes que el cliente edita en "Mi asistente"; el agente v2 las usa como hechos de la cuenta.
+function sanitizeFaq(value = []) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => ({
+      question: cleanString(item?.question).slice(0, 300),
+      answer: cleanString(item?.answer).slice(0, 1500),
+    }))
+    .filter((item) => item.question && item.answer)
+    .slice(0, 50);
+}
+
 export function sanitizeAppConfig(input = {}, options = {}) {
   const services = sanitizeServices(input?.services);
   const offersInput = Object.prototype.hasOwnProperty.call(input || {}, "offers")
@@ -1457,6 +1469,7 @@ export function sanitizeAppConfig(input = {}, options = {}) {
         offer_meeting_when: resolveString(input?.agent?.offer_meeting_when),
         handoff_when: resolveString(input?.agent?.handoff_when),
         meeting: sanitizeMeetingConfig(input?.agent?.meeting),
+        faq: sanitizeFaq(input?.agent?.faq),
       },
       agent_engine: input?.agent_engine === "v2" ? "v2" : "legacy",
       lead_capture,

@@ -580,6 +580,30 @@
     }
   }
 
+  // Respuestas que el equipo escribe desde el CRM: se recogen mientras la pestaña está visible.
+  const teamSeenKey = storageKey("agente_ia_team_seen_at");
+  async function pollTeamReplies() {
+    const conversationId = getConversationId();
+    if (!conversationId || document.hidden) return;
+    let after = "";
+    try { after = localStorage.getItem(teamSeenKey) || ""; } catch {}
+    const params = new URLSearchParams({
+      conversation_id: conversationId,
+      external_user_id: getOrCreateExternalUserId(),
+      after: after || new Date(Date.now() - 60_000).toISOString(),
+    });
+    try {
+      const res = await fetch(`${CONFIG.backendBaseUrl}/messages/updates?${params}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      for (const item of data?.messages || []) {
+        appendMessage("assistant", item.text);
+        try { localStorage.setItem(teamSeenKey, item.created_at); } catch {}
+      }
+    } catch {}
+  }
+  setInterval(pollTeamReplies, 8000);
+
   openBtn.addEventListener("click", async () => {
     openPanel();
     if (mini) mini.textContent = getFooterMessage();

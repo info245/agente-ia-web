@@ -196,3 +196,22 @@ test("agent_engine es legacy salvo que la cuenta elija v2", () => {
   assert.equal(sanitizeAppConfig({ agent_engine: "v2" }).agent_engine, "v2");
   assert.equal(sanitizeAppConfig({ agent: { policy: " Regla " } }).agent.policy, "Regla");
 });
+
+test("las preguntas frecuentes de Mi asistente llegan al contexto del agente", async () => {
+  const { buildAccountContext } = await import("./instructions.js");
+  const { sanitizeAppConfig } = await import("../lib/appConfig.js");
+  const config = sanitizeAppConfig({
+    agent: {
+      faq: [
+        { question: "¿Hay permanencia?", answer: "No, ningún servicio tiene permanencia." },
+        { question: "Sin respuesta", answer: "" },
+        "basura",
+      ],
+    },
+  });
+  assert.deepEqual(config.agent.faq, [{ question: "¿Hay permanencia?", answer: "No, ningún servicio tiene permanencia." }]);
+  const context = buildAccountContext(config);
+  assert.match(context, /PREGUNTAS FRECUENTES/);
+  assert.match(context, /¿Hay permanencia\?\n  No, ningún servicio tiene permanencia\./);
+  assert.doesNotMatch(buildAccountContext(sanitizeAppConfig({})), /PREGUNTAS FRECUENTES/);
+});
