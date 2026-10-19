@@ -15,6 +15,7 @@ import { __tmediaChatOrchestratorTestables } from "../src/agents/orchestrators/t
 import { runAgentTurn } from "../src/agent/engine.js";
 import { cleanLeadPatch } from "../src/agent/orchestrator.js";
 import { searchKnowledge } from "../src/lib/kbRetriever.js";
+import { openai, AGENT_V2_MODEL } from "../src/lib/openaiClient.js";
 
 const ENGINE = process.argv.find((arg) => arg.startsWith("--engine="))?.split("=")[1] || "legacy";
 const ONLY = process.argv.find((arg) => arg.startsWith("--only="))?.split("=")[1]?.split(",") || null;
@@ -312,6 +313,21 @@ function assertTurn(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+// Suma el uso de tokens de cada llamada para comparar modelos.
+const usage = { calls: 0, input: 0, cached: 0, output: 0 };
+const countingClient = {
+  responses: {
+    create: async (params) => {
+      const response = await openai.responses.create(params);
+      usage.calls += 1;
+      usage.input += response.usage?.input_tokens || 0;
+      usage.cached += response.usage?.input_tokens_details?.cached_tokens || 0;
+      usage.output += response.usage?.output_tokens || 0;
+      return response;
+    },
+  },
+};
+
 // v2 sin efectos: conocimiento real (solo lectura), CRM en memoria, derivación simulada.
 async function respondV2(session, text, appConfig, accountId) {
   const userMessage = { role: "user", content: text };
@@ -321,6 +337,7 @@ async function respondV2(session, text, appConfig, accountId) {
     lead: session.lead,
     messages,
     channel: "web",
+    client: countingClient,
     handlers: {
       search_knowledge: async ({ query }) => ({
         ok: true,
@@ -444,7 +461,7 @@ async function main() {
     const policy = JSON.parse(fs.readFileSync(new URL(`../config/agent-policies/${ACCOUNT_SLUG}.json`, import.meta.url), "utf8"));
     appConfig.agent = { ...appConfig.agent, ...policy.agent };
   }
-  console.log(`Cuenta: ${ACCOUNT_SLUG} | Motor: ${ENGINE}`);
+  console.log(`Cuenta: ${ACCOUNT_SLUG} | Motor: ${ENGINE}${ENGINE === "v2" ? ` | Modelo: ${AGENT_V2_MODEL}` : ""}`);
 
   const results = [];
   const turnTimes = [];
@@ -484,6 +501,9 @@ async function main() {
     failed: failed.length,
     avg_turn_ms: Math.round(turnTimes.reduce((sum, ms) => sum + ms, 0) / (turnTimes.length || 1)),
     p95_turn_ms: turnTimes.sort((a, b) => a - b)[Math.floor(turnTimes.length * 0.95)] || 0,
+    ...(ENGINE === "v2" ? {
+      per_turn: Object.fromEntries(Object.entries(usage).map(([key, value]) => [key, Math.round(value / (turnTimes.length || 1))])),
+    } : {}),
   }, null, 2));
   if (failed.length) {
     console.log("\nFALLOS");
