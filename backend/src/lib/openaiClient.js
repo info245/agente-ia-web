@@ -14,8 +14,9 @@ console.log("✅ OPENAI_API_KEY cargada en openaiClient.js");
 
 // Único sitio del modelo: cambiarlo es cambiar OPENAI_AGENT_MODEL en Render.
 export const AGENT_MODEL = process.env.OPENAI_AGENT_MODEL || "gpt-4.1-mini";
-// El motor v2 (src/agent) solo se ha validado con gpt-5-mini (19-20/21); con gpt-4.1-mini baja a 12/21.
-export const AGENT_V2_MODEL = process.env.OPENAI_AGENT_V2_MODEL || "gpt-5-mini";
+// Motor v2 (src/agent): gpt-6-luna da 20/21 Sancho y 10/10 TMedia al menor coste (oct 2026).
+// gpt-5-mini se apaga el 11 dic 2026; con gpt-4.1-mini baja a 12/21. Comparativa en el PR del cambio.
+export const AGENT_V2_MODEL = process.env.OPENAI_AGENT_V2_MODEL || "gpt-6-luna";
 // Ligado a vector(1536) en kb_docs: cambiarlo exige migrar y re-indexar.
 export const EMBEDDING_MODEL = "text-embedding-3-small";
 
