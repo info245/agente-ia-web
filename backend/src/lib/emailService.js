@@ -345,6 +345,7 @@ export async function sendLeadEmail({
   emailConfig = null,
   recipients = null,
   conversationMessages = [],
+  subject: subjectOverride = "",
 }) {
   const targetRecipients = Array.isArray(recipients) && recipients.length ? recipients : internalTo;
   const hasAccountRecipients = Array.isArray(recipients) && recipients.length > 0;
@@ -355,7 +356,7 @@ export async function sendLeadEmail({
   if (!runtime.fromAddress) throw new Error("Falta el email de salida.");
 
   const typeLabel = type === "update" ? "Actualizacion" : "Nuevo";
-  const subject = `${typeLabel} lead - ${lead?.interest_service || "Sin servicio"} - ${lead?.name || "Sin nombre"} (${lead?.lead_score ?? "N/A"})`;
+  const subject = subjectOverride || `${typeLabel} lead - ${lead?.interest_service || "Sin servicio"} - ${lead?.name || "Sin nombre"} (${lead?.lead_score ?? "N/A"})`;
 
   const rows = [
     ["Nombre", lead?.name],

@@ -174,6 +174,8 @@ export const DEFAULT_APP_CONFIG = {
       business_account_id: "",
       intro_template_name: "",
       intro_template_language: "es",
+      quote_template_name: "",
+      quote_template_language: "es",
       // Texto aprobado en Meta con {{1}} nombre, {{2}} servicio y {{3}} resumen; se guarda tal cual se envía.
       intro_template_body: "",
       intro_template_variables: 0,
@@ -607,6 +609,8 @@ export const BLANK_APP_CONFIG = {
       business_account_id: "",
       intro_template_name: "",
       intro_template_language: "es",
+      quote_template_name: "",
+      quote_template_language: "es",
       // Texto aprobado en Meta con {{1}} nombre, {{2}} servicio y {{3}} resumen; se guarda tal cual se envía.
       intro_template_body: "",
       intro_template_variables: 0,
@@ -1486,6 +1490,9 @@ export function sanitizeAppConfig(input = {}, options = {}) {
         intro_template_name: cleanString(input?.integrations?.whatsapp?.intro_template_name),
         intro_template_language:
           cleanString(input?.integrations?.whatsapp?.intro_template_language) || "es",
+        quote_template_name: cleanString(input?.integrations?.whatsapp?.quote_template_name),
+        quote_template_language:
+          cleanString(input?.integrations?.whatsapp?.quote_template_language) || "es",
         intro_template_body: cleanString(input?.integrations?.whatsapp?.intro_template_body),
         intro_template_variables: Math.max(
           0,

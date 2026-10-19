@@ -171,7 +171,7 @@ export async function runAgentTurn({
       tool_choice: lastStep || !tools.length ? "none" : "auto",
       text: { format: REPLY_FORMAT },
       // Con modelos de razonamiento, "low" mantiene la latencia de un chat comercial.
-      ...(/^(gpt-5|o\d)/.test(model) ? { reasoning: { effort: process.env.OPENAI_AGENT_V2_REASONING_EFFORT || "low" } } : {}),
+      ...(/^(gpt-[5-9]|o\d)/.test(model) ? { reasoning: { effort: process.env.OPENAI_AGENT_V2_REASONING_EFFORT || "low" } } : {}),
     });
 
     const calls = (response.output || []).filter((item) => item.type === "function_call");
