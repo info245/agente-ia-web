@@ -125,6 +125,10 @@ export function buildAccountContext(appConfig = null) {
       ].filter(Boolean).join("\n")
     ),
     section("OFERTA", offers.length ? offers.map((offer) => `- ${offer}`).join("\n") : "- Sin catálogo configurado: no hables de ofertas ni precios concretos."),
+    section(
+      "PREGUNTAS FRECUENTES (respuestas aprobadas por el negocio)",
+      (agent.faq || []).map((item) => `- ${item.question}\n  ${item.answer}`).join("\n")
+    ),
     section("CONOCIMIENTO", buildKnowledgeContext(appConfig)),
     section(
       "CAMPOS A CAPTURAR",

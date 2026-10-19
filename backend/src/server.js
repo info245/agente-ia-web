@@ -44,6 +44,8 @@ import {
   saveDraftConfigVersion,
 } from "./lib/configVersionStore.js";
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
+import { runAgentTurn } from "./agent/engine.js";
+import { searchKnowledge } from "./lib/kbRetriever.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
 import {
   getDefaultAccount,
@@ -6124,6 +6126,122 @@ app.patch("/api/crm/conversations/:conversationId/state", async (req, res) => {
     return res.json({ ok: true, conversation });
   } catch (error) {
     return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+// Respuesta escrita por una persona desde el CRM. Pausa la IA para que no conteste encima.
+app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const text = String(req.body?.text || "").trim();
+    if (!text) return res.status(400).json({ ok: false, error: "Escribe un mensaje antes de enviar." });
+    if (text.length > 4096) return res.status(400).json({ ok: false, error: "El mensaje es demasiado largo (máximo 4.096 caracteres)." });
+
+    const conversation = await getConversationById(req.params.conversationId);
+    if (!conversation || String(conversation.account_id || "") !== String(account.id)) {
+      return res.status(404).json({ ok: false, error: "Conversación no encontrada." });
+    }
+
+    if (conversation.channel === "whatsapp") {
+      if (!(await isWhatsAppCustomerWindowOpen(conversation.id))) {
+        return res.status(409).json({
+          ok: false,
+          code: "whatsapp_window_closed",
+          error: "Han pasado más de 24 horas desde su último mensaje. WhatsApp solo permite escribirle con una plantilla aprobada.",
+        });
+      }
+      await sendWhatsAppText(conversation.external_user_id, text, { accountId: account.id });
+    } else if (conversation.channel !== "web") {
+      return res.status(409).json({
+        ok: false,
+        code: "channel_not_supported",
+        error: "Este contacto no llegó por WhatsApp ni por el chat de la web. Escríbele por email o teléfono.",
+      });
+    }
+    // En la web no hay envío: el widget recoge los mensajes nuevos con /messages/updates.
+
+    const author = req.crmUser?.email || req.crmUser?.name || "equipo";
+    const message = await saveMessage({
+      conversation_id: conversation.id,
+      role: "assistant",
+      content: text,
+      metadata: { sender: "human", author },
+      account_id: account.id,
+    });
+    const updated = await updateConversationInboxState(
+      conversation.id,
+      { ai_status: "paused", inbox_status: "open", assigned_to: conversation.assigned_to || author },
+      { accountId: account.id }
+    );
+    await trackConversationEvent({
+      conversation_id: conversation.id,
+      event_type: "human_reply",
+      channel: conversation.channel,
+      external_user_id: conversation.external_user_id,
+      account_id: account.id,
+      payload: { author },
+    });
+    return res.json({ ok: true, message, conversation: updated });
+  } catch (error) {
+    return res.status(502).json({ ok: false, error: error.message });
+  }
+});
+
+// Probar el asistente con la configuración que se está editando, sin guardar conversación ni lead.
+app.post("/api/crm/agent/try", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const current = await getAppConfig({ accountId: account.id });
+    const appConfig = sanitizeAppConfig({ ...current, ...(req.body?.config || {}) });
+    const messages = (Array.isArray(req.body?.messages) ? req.body.messages : [])
+      .filter((item) => ["user", "assistant"].includes(item?.role) && String(item?.content || "").trim())
+      .slice(-20)
+      .map((item) => ({ role: item.role, content: String(item.content).slice(0, 2000) }));
+    if (!messages.length || messages.at(-1).role !== "user") {
+      return res.status(400).json({ ok: false, error: "Escribe un mensaje de prueba." });
+    }
+    const noop = async () => ({ ok: true, note: "Modo prueba: no se guarda ni se envía nada." });
+    const result = await runAgentTurn({
+      appConfig,
+      messages,
+      handlers: {
+        search_knowledge: async ({ query }) => ({
+          ok: true,
+          results: (await searchKnowledge(query, { accountId: account.id, topK: 5 })).map((doc) => ({
+            title: doc.title,
+            url: doc.url,
+            text: String(doc.chunk || "").slice(0, 1200),
+          })),
+        }),
+        save_lead_fields: noop,
+        handoff_to_human: noop,
+        send_quote: noop,
+      },
+    });
+    return res.json({ ok: true, reply: result.reply, intent: result.intent });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// El widget de la web recoge aquí lo que el equipo responde desde el CRM.
+app.get("/messages/updates", async (req, res) => {
+  try {
+    const conversationId = String(req.query?.conversation_id || "").trim();
+    const externalUserId = String(req.query?.external_user_id || "").trim();
+    const after = Date.parse(String(req.query?.after || "")) || 0;
+    if (!conversationId || !externalUserId) return res.status(400).json({ ok: false, error: "Faltan datos" });
+    const conversation = await getConversationById(conversationId).catch(() => null);
+    if (!conversation || conversation.external_user_id !== externalUserId) {
+      return res.status(404).json({ ok: false, error: "Conversación no encontrada" });
+    }
+    const messages = await getConversationMessages(conversation.id, 50, { accountId: conversation.account_id });
+    const fresh = messages
+      .filter((item) => item.metadata?.sender === "human" && Date.parse(item.created_at) > after)
+      .map((item) => ({ id: item.id, text: item.content, created_at: item.created_at }));
+    return res.json({ ok: true, messages: fresh, ai_status: conversation.ai_status || "active" });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
   }
 });
 
