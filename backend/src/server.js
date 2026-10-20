@@ -6606,6 +6606,48 @@ app.get("/api/crm/whatsapp/templates", async (req, res) => {
   }
 });
 
+// Canales → Formularios: primer WhatsApp automático a cada lead de formulario (plantilla aprobada).
+app.post("/api/crm/channels/form-whatsapp", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const enabled = req.body?.enabled === true;
+    let template = null;
+    if (req.body?.template_name) {
+      const templates = await listApprovedWhatsAppTemplates(account.id);
+      template = templates.find((t) => t.name === req.body.template_name && t.language === (req.body.template_language || t.language));
+      if (!template || !template.sendable) return res.status(400).json({ ok: false, error: "Esa plantilla no está aprobada o no se puede usar." });
+      if (template.params > 3) return res.status(400).json({ ok: false, error: "La plantilla puede tener como máximo 3 datos (nombre, servicio y resumen de la consulta)." });
+    }
+    if (enabled && !template) return res.status(400).json({ ok: false, error: "Elige una plantilla aprobada para activar el primer WhatsApp." });
+    const current = await getAppConfig({ accountId: account.id });
+    const whatsapp = {
+      ...current.integrations?.whatsapp,
+      form_autocontact_enabled: enabled,
+      ...(template
+        ? {
+            intro_template_name: template.name,
+            intro_template_language: template.language,
+            intro_template_body: template.body,
+            intro_template_variables: template.params,
+          }
+        : {}),
+    };
+    const config = await saveAppConfig(
+      sanitizeAppConfig({ ...current, integrations: { ...current.integrations, whatsapp } }),
+      { accountId: account.id }
+    );
+    const version = await publishConfigVersion({
+      accountId: account.id,
+      config,
+      createdBy: req.crmUser?.id || null,
+      changeSummary: "Canales: primer WhatsApp a leads de formulario",
+    });
+    return res.json({ ok: true, version: version?.version, enabled, template_name: template?.name || current.integrations?.whatsapp?.intro_template_name || "" });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 // Probar el asistente con la configuración que se está editando, sin guardar conversación ni lead.
 app.post("/api/crm/agent/try", async (req, res) => {
   try {
