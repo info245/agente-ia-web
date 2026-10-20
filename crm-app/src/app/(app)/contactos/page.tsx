@@ -11,7 +11,9 @@ export default function ContactosPage() {
   const { leads, config, configError, reloadLeads } = useSession();
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"board" | "list">("board");
+  const [view, setView] = useState<"board" | "list">("list");
+  const [stageFilter, setStageFilter] = useState("");
+  const [serviceFilter, setServiceFilter] = useState("");
   const [over, setOver] = useState("");
   const [error, setError] = useState("");
   const [moved, setMoved] = useState<Record<string, string>>({});
@@ -25,7 +27,20 @@ export default function ContactosPage() {
     .map((lead) => (moved[lead.id] ? { ...lead, crm_status: moved[lead.id] } : lead))
     .filter((lead) => !q || [lead.name, lead.email, lead.phone, lead.company_name, lead.interest_service].some((v) => String(v || "").toLowerCase().includes(q)));
   const stageOf = (lead: Lead) => (stages.some((s) => s.key === lead.crm_status) ? lead.crm_status : stages[0]?.key);
+  const services = [...new Set(leads.map((l) => l.interest_service).filter(Boolean) as string[])].sort();
+  const rows = visible.filter((lead) => (!stageFilter || stageOf(lead) === stageFilter) && (!serviceFilter || lead.interest_service === serviceFilter));
   const open = (lead: Lead) => router.push(`/conversaciones?c=${lead.conversation_id}`);
+
+  async function remove(lead: Lead) {
+    if (!window.confirm(`¿Eliminar a ${leadName(lead)}? Desaparecerá de Contactos y de Conversaciones. No se puede deshacer.`)) return;
+    setError("");
+    try {
+      await api(`/crm/leads/${lead.id}`, { method: "DELETE" });
+      await reloadLeads();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   async function move(leadId: string, stage: string) {
     setMoved((m) => ({ ...m, [leadId]: stage }));
@@ -48,10 +63,22 @@ export default function ContactosPage() {
       <div className="head">
         <div>
           <h1>Contactos</h1>
-          <p className="sub">Tu asistente los mueve de etapa; tú solo corriges si hace falta. Arrastra una tarjeta para cambiarla.</p>
+          <p className="sub">Tu asistente los mueve de estado; tú solo corriges si hace falta.</p>
         </div>
         <div className="board-tools">
           <input className="search" type="search" placeholder="Buscar contacto" aria-label="Buscar contacto" value={query} onChange={(e) => setQuery(e.target.value)} />
+          {view === "list" && (
+            <>
+              <select className="search" aria-label="Filtrar por estado" value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}>
+                <option value="">Todos los estados</option>
+                {stages.map((s) => <option key={s.key} value={s.key}>{s.label || s.key}</option>)}
+              </select>
+              <select className="search" aria-label="Filtrar por servicio" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
+                <option value="">Todos los servicios</option>
+                {services.map((sv) => <option key={sv} value={sv}>{sv}</option>)}
+              </select>
+            </>
+          )}
           <button className="btn" onClick={() => setView(view === "board" ? "list" : "board")}>{view === "board" ? "Ver como lista" : "Ver por etapas"}</button>
         </div>
       </div>
@@ -92,26 +119,35 @@ export default function ContactosPage() {
         </div>
       ) : (
         <div className="card" style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+          <table className="table">
             <thead>
-              <tr style={{ textAlign: "left", color: "var(--muted)", fontSize: 13 }}>
-                {["Nombre", "Le interesa", "Contacto", "Canal", "Etapa", "Último movimiento"].map((h) => <th key={h} style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", fontWeight: 500 }}>{h}</th>)}
-              </tr>
+              <tr>{["Nombre", "Apellidos", "Email", "Teléfono", "Servicio", "Presupuesto", "Estado", ""].map((h) => <th key={h}>{h}</th>)}</tr>
             </thead>
             <tbody>
-              {visible.map((lead) => (
-                <tr key={lead.id} onClick={() => open(lead)} style={{ cursor: "pointer" }}>
-                  <td style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}><b>{leadName(lead)}</b></td>
-                  <td style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>{lead.interest_service || "—"}</td>
-                  <td style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>{lead.email || lead.phone || "—"}</td>
-                  <td style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>{channelOf(lead).label}</td>
-                  <td style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)" }}>{stages.find((s) => s.key === stageOf(lead))?.label || "—"}</td>
-                  <td style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", color: "var(--muted)" }}>{shortTime(lead.updated_at || lead.created_at)}</td>
-                </tr>
-              ))}
+              {rows.map((lead) => {
+                const [first, ...rest] = String(lead.name || "").trim().split(/s+/);
+                return (
+                  <tr key={lead.id} onClick={() => open(lead)}>
+                    <td><b>{first || leadName(lead)}</b></td>
+                    <td>{rest.join(" ") || "—"}</td>
+                    <td>{lead.email || "—"}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>{lead.phone || "—"}</td>
+                    <td>{lead.interest_service || "—"}</td>
+                    <td>{lead.budget_range || "—"}</td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <select className="search" aria-label={`Estado de ${leadName(lead)}`} value={stageOf(lead) || ""} onChange={(e) => move(lead.id, e.target.value)}>
+                        {stages.map((s) => <option key={s.key} value={s.key}>{s.label || s.key}</option>)}
+                      </select>
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button className="btn ghost small" aria-label={`Eliminar a ${leadName(lead)}`} onClick={() => remove(lead)}>Eliminar</button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
-          {visible.length === 0 && <p className="empty">No hay contactos con esa búsqueda.</p>}
+          {rows.length === 0 && <p className="empty">No hay contactos con estos filtros.</p>}
         </div>
       )}
     </section>
