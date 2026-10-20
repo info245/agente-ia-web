@@ -12,6 +12,23 @@ function clean(value) {
   return String(value).trim();
 }
 
+// Un token cifrado con otra SECRETS_ENCRYPTION_KEY (p. ej. guardado desde otro servicio) no puede
+// tumbar todo WhatsApp: si es el mismo número que el de las variables de entorno, se usa WHATSAPP_TOKEN.
+export function channelTokenFromRow(row = {}) {
+  try {
+    return decryptSecret(clean(row.access_token)) || "";
+  } catch (error) {
+    const sameAsEnv = clean(row.phone_number_id) && clean(row.phone_number_id) === clean(process.env.WHATSAPP_PHONE_NUMBER_ID);
+    console.error("[whatsapp] no se pudo descifrar el token del canal", {
+      account_id: row.account_id,
+      phone_number_id: row.phone_number_id,
+      using_env_token: Boolean(sameAsEnv && process.env.WHATSAPP_TOKEN),
+      error: error?.message,
+    });
+    return sameAsEnv ? clean(process.env.WHATSAPP_TOKEN) : "";
+  }
+}
+
 function normalizeChannel(row = {}) {
   const fallbackAccount = getDefaultAccount();
   return {
@@ -23,7 +40,7 @@ function normalizeChannel(row = {}) {
     phone_number_id: clean(row.phone_number_id) || "",
     display_phone_number: clean(row.display_phone_number) || "",
     verified_name: clean(row.verified_name) || "",
-    access_token: decryptSecret(clean(row.access_token)) || "",
+    access_token: channelTokenFromRow(row),
     token_label: clean(row.token_label) || "",
     metadata: row.metadata && typeof row.metadata === "object" ? row.metadata : {},
   };
