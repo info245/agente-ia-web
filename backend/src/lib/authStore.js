@@ -239,3 +239,30 @@ export async function verifyCrmUserCredentials(email, password) {
 
   return normalizeUser(data);
 }
+
+// Consola de agencia: usuarios de una cuenta (o todos) sin datos de contraseña.
+export async function listCrmUsers({ accountId = null } = {}) {
+  let query = supabase
+    .from("crm_users")
+    .select("id, email, role, account_id, display_name, status, created_at, updated_at")
+    .order("created_at", { ascending: true });
+  if (accountId) query = query.eq("account_id", clean(accountId));
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data || []).map(normalizeUser);
+}
+
+export async function updateCrmUserStatus(userId, status) {
+  const safeStatus = clean(status);
+  if (!["active", "disabled"].includes(safeStatus)) throw new Error("Estado no válido.");
+  const { data, error } = await supabase
+    .from("crm_users")
+    .update({ status: safeStatus })
+    .eq("id", clean(userId))
+    .neq("role", "super_admin")
+    .select("id, email, role, account_id, display_name, status")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Usuario no encontrado.");
+  return normalizeUser(data);
+}

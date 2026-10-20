@@ -46,6 +46,8 @@ const NAV = [
   { href: "/canales", label: "Canales", icon: icon(<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />) },
 ];
 
+const AGENCY_NAV = { href: "/agencia", label: "Agencia", icon: icon(<><path d="M3 21h18M5 21V7l7-4 7 4v14" /><path d="M9 21v-6h6v6M9 10h.01M15 10h.01" /></>) };
+
 // ponytail: el listado trae 200 leads con su último mensaje cada 20 s; con miles de leads hará falta paginar en servidor.
 const LEADS_PATH = "/crm/leads?limit=200";
 
@@ -116,7 +118,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span>Tu asistente comercial</span>
             </div>
           </div>
-          {NAV.map((item) => (
+          {[...NAV, ...(user.role === "super_admin" ? [AGENCY_NAV] : [])].map((item) => (
             <Link key={item.href} href={item.href} className="nav" aria-current={pathname.startsWith(item.href) ? "page" : undefined}>
               {item.icon}
               {item.label}

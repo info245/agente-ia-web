@@ -63,7 +63,9 @@ import {
   createCrmUser,
   createPasswordSetupToken,
   getCrmUserById,
+  listCrmUsers,
   setCrmUserPasswordFromToken,
+  updateCrmUserStatus,
   verifyCrmUserCredentials,
 } from "./lib/authStore.js";
 import { uploadBrandLogo } from "./lib/storageStore.js";
@@ -3098,6 +3100,111 @@ app.delete("/api/admin/accounts/:accountId", requireCrmAuth("super_admin"), asyn
   }
 });
 
+// Consola de agencia: usuarios de cada cuenta.
+app.get("/api/admin/users", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const users = await listCrmUsers({ accountId: req.query?.account_id || null });
+    res.json({ ok: true, users });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/admin/users", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const account = await resolveAccount(String(req.body?.account_id || "").trim() || null);
+    if (!account?.id || String(account.id) !== String(req.body?.account_id || "")) {
+      return res.status(400).json({ ok: false, error: "Elige una cuenta válida." });
+    }
+    const user = await createCrmUser({
+      email: req.body?.email,
+      display_name: req.body?.display_name,
+      role: "client_admin",
+      account_id: account.id,
+      status: "invited",
+      require_password: false,
+    });
+    const invite = await sendPasswordSetupInvite({ req, user, accountName: account.name });
+    res.json({ ok: true, user, invite_sent: invite?.email?.ok !== false, setup_url: invite?.setup_url });
+  } catch (error) {
+    const duplicate = /duplicate|unique/i.test(String(error?.message || ""));
+    res.status(duplicate ? 409 : 500).json({ ok: false, error: duplicate ? "Ya existe un usuario con ese email." : error.message });
+  }
+});
+
+app.post("/api/admin/users/:userId/invite", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const user = await getCrmUserById(req.params.userId);
+    if (!user || user.role === "super_admin") return res.status(404).json({ ok: false, error: "Usuario no encontrado." });
+    const account = user.account_id ? await resolveAccount(user.account_id).catch(() => null) : null;
+    const invite = await sendPasswordSetupInvite({ req, user, accountName: account?.name || "" });
+    res.json({ ok: true, invite_sent: invite?.email?.ok !== false, setup_url: invite?.setup_url });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.patch("/api/admin/users/:userId", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const user = await updateCrmUserStatus(req.params.userId, req.body?.status);
+    res.json({ ok: true, user });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+// Consola de agencia: ajustes del agente que el cliente no ve (motor, política, instrucciones, dominios del chat).
+app.get("/api/admin/accounts/:accountId/agent", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const config = await getAppConfig({ accountId: req.params.accountId });
+    res.json({
+      ok: true,
+      agent_engine: config?.agent_engine || "legacy",
+      policy: config?.agent?.policy || "",
+      prompt_additions: config?.agent?.prompt_additions || "",
+      allowed_domains: config?.widget?.allowed_domains || [],
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/admin/accounts/:accountId/agent", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const account = await resolveAccount(req.params.accountId);
+    if (!account?.id || String(account.id) !== String(req.params.accountId)) {
+      return res.status(404).json({ ok: false, error: "Cuenta no encontrada." });
+    }
+    const current = await getAppConfig({ accountId: account.id });
+    const body = req.body || {};
+    const domains = Array.isArray(body.allowed_domains)
+      ? body.allowed_domains
+      : String(body.allowed_domains || "").split(/[,\s]+/);
+    const config = await saveAppConfig(
+      sanitizeAppConfig({
+        ...current,
+        agent_engine: body.agent_engine === "v2" ? "v2" : body.agent_engine === "legacy" ? "legacy" : current.agent_engine,
+        agent: {
+          ...current.agent,
+          ...("policy" in body ? { policy: body.policy } : {}),
+          ...("prompt_additions" in body ? { prompt_additions: body.prompt_additions } : {}),
+        },
+        widget: { ...current.widget, allowed_domains: domains.map((d) => String(d).trim()).filter(Boolean) },
+      }),
+      { accountId: account.id }
+    );
+    const version = await publishConfigVersion({
+      accountId: account.id,
+      config,
+      createdBy: req.crmUser?.id || null,
+      changeSummary: "Consola de agencia: motor, política y dominios",
+    });
+    res.json({ ok: true, version: version?.version, agent_engine: config.agent_engine });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.get("/api/admin/overview", requireCrmAuth("super_admin"), async (req, res) => {
   try {
     const accounts = await listAccounts();
@@ -3189,6 +3296,10 @@ app.get("/api/admin/overview", requireCrmAuth("super_admin"), async (req, res) =
           brand_logo_url: config?.brand?.logo_url || "",
           primary_color: config?.brand?.primary_color || "#6d41f3",
           product_mode: config?.product?.mode || "full_crm",
+          agent_engine: config ? config.agent_engine || "legacy" : null,
+          calendar_connected: isCalendarConnected(config?.integrations?.calendar),
+          whatsapp: await getWhatsAppChannelSummary(account.id).catch(() => null),
+          leads_30d: (leads || []).filter((lead) => Date.parse(lead?.created_at || "") >= Date.now() - 30 * 24 * 60 * 60 * 1000).length,
           totals: {
             leads: leads.length,
             quotes_sent: quotesSent,
