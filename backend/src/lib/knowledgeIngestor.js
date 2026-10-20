@@ -143,3 +143,65 @@ export async function syncConfiguredKnowledge(urls = [], { accountId } = {}) {
   }
   return results;
 }
+
+// Tabla de referencias (Excel/CSV) subida desde "Mi asistente": cada fila pasa a ser conocimiento
+// que el agente encuentra con search_knowledge. Se agrupan filas hasta ~1.200 caracteres por fragmento.
+export function chunkSpreadsheetRows({ name = "Tabla", headers = [], rows = [] } = {}, size = 1200) {
+  const cleanHeaders = headers.map((h, i) => String(h ?? "").trim() || `Columna ${i + 1}`);
+  const lines = rows
+    .map((row) =>
+      cleanHeaders
+        .map((header, i) => {
+          const value = String(row?.[i] ?? "").replace(/\s+/g, " ").trim();
+          return value ? `${header}: ${value}` : "";
+        })
+        .filter(Boolean)
+        .join(" · ")
+    )
+    .filter(Boolean);
+  const chunks = [];
+  let buffer = "";
+  for (const line of lines) {
+    if (buffer && buffer.length + line.length + 1 > size) {
+      chunks.push(`${name}\n${buffer}`);
+      buffer = "";
+    }
+    buffer = buffer ? `${buffer}\n${line}` : line.slice(0, size);
+  }
+  if (buffer) chunks.push(`${name}\n${buffer}`);
+  return chunks.slice(0, 400);
+}
+
+export function spreadsheetSourceUrl(name = "") {
+  const slug = String(name).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `tabla://${slug || "referencias"}`;
+}
+
+export async function syncSpreadsheetKnowledge({ accountId, name, headers, rows }) {
+  const safeAccountId = String(accountId || "").trim();
+  if (!safeAccountId) throw new Error("accountId es obligatorio.");
+  const title = String(name || "Referencias").trim().slice(0, 120);
+  const chunks = chunkSpreadsheetRows({ name: title, headers, rows });
+  if (!chunks.length) throw new Error("La tabla no tiene filas con datos.");
+  const embeddings = [];
+  for (let i = 0; i < chunks.length; i += 100) {
+    const batch = await openai.embeddings.create({ model: EMBEDDING_MODEL, input: chunks.slice(i, i + 100) });
+    embeddings.push(...(batch.data || []).map((item) => item.embedding));
+  }
+  if (embeddings.length !== chunks.length || embeddings.some((e) => !e)) throw new Error("No se pudieron generar todos los embeddings.");
+  const url = spreadsheetSourceUrl(title);
+  const syncedAt = new Date().toISOString();
+  const { error } = await supabase.rpc("replace_kb_docs_for_url", {
+    p_account_id: safeAccountId,
+    p_url: url,
+    p_title: title,
+    p_rows: chunks.map((chunk, index) => ({ chunk, embedding: embeddings[index], metadata: { chunk_index: index, synced_at: syncedAt, source: "spreadsheet" } })),
+  });
+  if (error) throw error;
+  return { url, title, rows: rows.length, chunks: chunks.length, synced_at: syncedAt };
+}
+
+export async function deleteKnowledgeSource({ accountId, url }) {
+  const { error } = await supabase.from("kb_docs").delete().eq("account_id", String(accountId)).eq("url", String(url));
+  if (error) throw error;
+}

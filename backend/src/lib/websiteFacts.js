@@ -328,7 +328,7 @@ export function buildKnowledgeContext(appConfig = null) {
   }
 
   if (knowledge.spreadsheet_mapping) {
-    sections.push(`MAPEO DE TABLA\n${knowledge.spreadsheet_mapping}`);
+    sections.push(`TABLAS DE REFERENCIA (consulta sus filas con search_knowledge)\n${knowledge.spreadsheet_mapping}`);
   }
 
   if (knowledge.spreadsheet_url) {

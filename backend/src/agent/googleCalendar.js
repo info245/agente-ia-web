@@ -81,15 +81,18 @@ async function getAccessToken(refreshToken) {
   return payload.access_token;
 }
 
-async function googleFetch(accessToken, path, body) {
+async function googleFetch(accessToken, path, body, method = "POST") {
   const response = await fetch(`${API}${path}`, {
-    method: "POST",
+    method,
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(10_000),
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(payload?.error?.message || `Google Calendar ${response.status}`);
+  // Borrar un evento que ya no existe (410) no es un error.
+  if (!response.ok && !(method === "DELETE" && response.status === 410)) {
+    throw new Error(payload?.error?.message || `Google Calendar ${response.status}`);
+  }
   return payload;
 }
 
@@ -143,6 +146,37 @@ export function createGoogleCalendar(calendarConfig = {}, meeting = {}) {
         attendees: [{ email, displayName: name }],
       });
       return { ok: true, event_id: event?.id || null, start: startIso, end, timezone: timeZone };
+    },
+
+    // Mueve la reunión a otra hora; Google envía la invitación actualizada al cliente.
+    async rescheduleMeeting({ eventId, start }) {
+      const startMs = Date.parse(start);
+      if (!Number.isFinite(startMs)) throw new Error("Hora de inicio no válida");
+      if (!eventId) throw new Error("Esta cita no tiene evento en Google Calendar");
+      const startIso = new Date(startMs).toISOString();
+      const end = new Date(startMs + (meeting.duration_minutes || 30) * 60_000).toISOString();
+      const accessToken = await getAccessToken(calendarConfig.google_refresh_token);
+      const busy = await busyBetween(accessToken, startIso, end);
+      if (busy.length) return { ok: false, error: "slot_taken" };
+      await googleFetch(
+        accessToken,
+        `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=all`,
+        { start: { dateTime: startIso, timeZone }, end: { dateTime: end, timeZone } },
+        "PATCH"
+      );
+      return { ok: true, start: startIso, end };
+    },
+
+    async cancelMeeting({ eventId }) {
+      if (!eventId) return { ok: true };
+      const accessToken = await getAccessToken(calendarConfig.google_refresh_token);
+      await googleFetch(
+        accessToken,
+        `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=all`,
+        undefined,
+        "DELETE"
+      );
+      return { ok: true };
     },
   };
 }
