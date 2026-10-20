@@ -7,7 +7,10 @@ import { api, ApiError } from "@/lib/api";
 import { channelOf, isHumanMessage, leadName, OWNER_PILL, ownerOf, shortTime, type Owner } from "@/lib/format";
 import type { Conversation, Lead, Message } from "@/lib/types";
 
-type Thread = { messages: Message[]; lead: Lead; conversation: Conversation | null };
+type Thread = { messages: Message[]; lead: Lead; conversation: Conversation | null; fetchedAt: number };
+type Template = { name: string; language: string; category: string; header: string; body: string; footer: string; params: number; sendable: boolean };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 type Filter = "all" | Owner;
 
 export default function ConversacionesPage() {
@@ -83,13 +86,14 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
   const [notice, setNotice] = useState<{ kind: "error" | "warn"; text: string } | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<"" | "send" | "mode" | "suggest">("");
+  const [forceTemplate, setForceTemplate] = useState(false);
   const msgsRef = useRef<HTMLDivElement>(null);
   const lastCount = useRef(0);
 
   const load = useCallback(async () => {
     try {
-      const data = await api<Thread>(`/crm/conversations/${conversationId}/messages`);
-      setThread(data);
+      const data = await api<Omit<Thread, "fetchedAt">>(`/crm/conversations/${conversationId}/messages`);
+      setThread({ ...data, fetchedAt: Date.now() });
       setError("");
     } catch (err) {
       setError((err as Error).message);
@@ -118,6 +122,9 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
   const paused = conversation.ai_status === "paused";
   const canReply = channel === "whatsapp" || channel === "web";
   const lastMessage = messages.at(-1);
+  // WhatsApp solo deja escribir libremente 24 h después del último mensaje del cliente; luego, plantilla.
+  const lastUserAt = Math.max(0, ...messages.filter((m) => m.role === "user").map((m) => Date.parse(m.created_at || "") || 0));
+  const windowClosed = channel === "whatsapp" && (forceTemplate || !lastUserAt || thread.fetchedAt - lastUserAt >= DAY_MS);
 
   async function setMode(ai: boolean) {
     setBusy("mode");
@@ -140,8 +147,8 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
       setText("");
       await Promise.all([load(), onChanged()]);
     } catch (err) {
-      const closed = err instanceof ApiError && err.data?.code === "whatsapp_window_closed";
-      setNotice({ kind: closed ? "warn" : "error", text: (err as Error).message });
+      if (err instanceof ApiError && err.data?.code === "whatsapp_window_closed") setForceTemplate(true);
+      else setNotice({ kind: "error", text: (err as Error).message });
     }
     setBusy("");
   }
@@ -200,7 +207,13 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
               <button className="me" aria-pressed={paused} disabled={busy !== ""} onClick={() => !paused && setMode(false)}>Yo</button>
             </div>
           </div>
-          {canReply ? (
+          {windowClosed ? (
+            <TemplateComposer
+              conversationId={conversationId}
+              defaults={[leadName(lead).split(" ")[0], lead.interest_service || ""]}
+              onSent={async () => { setForceTemplate(false); await Promise.all([load(), onChanged()]); }}
+            />
+          ) : canReply ? (
             <>
               {lastMessage?.role === "user" && (
                 <div>
@@ -236,6 +249,85 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
       </div>
       <LeadPanel lead={lead} stages={config?.pipeline?.stages || []} onSaved={async () => { await load(); await onChanged(); }} />
     </>
+  );
+}
+
+function TemplateComposer({ conversationId, defaults, onSent }: { conversationId: string; defaults: string[]; onSent: () => Promise<void> }) {
+  const [templates, setTemplates] = useState<Template[] | null>(null);
+  const [error, setError] = useState("");
+  const [selected, setSelected] = useState("");
+  const [params, setParams] = useState<string[]>([]);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    api<{ templates: Template[] }>("/crm/whatsapp/templates")
+      .then((data) => setTemplates(data.templates.filter((t) => t.sendable)))
+      .catch((err) => { setTemplates([]); setError((err as Error).message); });
+  }, []);
+
+  const template = templates?.find((t) => `${t.name}|${t.language}` === selected) || null;
+  const fill = (text: string) => text.replace(/\{\{\s*(\d+)\s*\}\}/g, (_, n) => params[Number(n) - 1]?.trim() || `{{${n}}}`);
+  const preview = template ? [template.header, template.body, template.footer].filter(Boolean).map(fill).join("\n\n") : "";
+
+  function choose(value: string) {
+    setSelected(value);
+    const t = templates?.find((x) => `${x.name}|${x.language}` === value);
+    setParams(Array.from({ length: t?.params || 0 }, (_, i) => defaults[i] || ""));
+  }
+
+  async function send() {
+    if (!template) return;
+    setSending(true);
+    setError("");
+    try {
+      await api(`/crm/conversations/${conversationId}/reply`, {
+        method: "POST",
+        body: { template: { name: template.name, language: template.language, params } },
+      });
+      setSelected("");
+      await onSent();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    setSending(false);
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      <p className="alert warn" style={{ margin: 0 }}>
+        Han pasado más de 24 horas desde su último mensaje. WhatsApp solo deja escribirle con una plantilla aprobada
+        (Meta la cobra, unos céntimos). Cuando conteste, podrás escribirle libremente.
+      </p>
+      {templates === null && <p className="loading" style={{ padding: 8 }}>Cargando plantillas…</p>}
+      {templates?.length === 0 && !error && (
+        <p className="alert error" style={{ margin: 0 }}>No hay plantillas aprobadas que se puedan enviar desde aquí. Pide a tu agencia que cree una en Meta.</p>
+      )}
+      {templates && templates.length > 0 && (
+        <>
+          <select className="i" aria-label="Plantilla de WhatsApp" value={selected} onChange={(e) => choose(e.target.value)}>
+            <option value="">Elige una plantilla…</option>
+            {templates.map((t) => (
+              <option key={`${t.name}|${t.language}`} value={`${t.name}|${t.language}`}>
+                {t.name.replace(/_/g, " ")} · {t.language}{t.category === "MARKETING" ? " · marketing" : ""}
+              </option>
+            ))}
+          </select>
+          {template && (
+            <>
+              {params.map((value, i) => (
+                <input key={i} className="i" aria-label={`Dato {{${i + 1}}}`} placeholder={`Dato {{${i + 1}}}`} value={value}
+                  onChange={(e) => setParams(params.map((p, j) => (j === i ? e.target.value : p)))} />
+              ))}
+              <div className="m me" style={{ maxWidth: "100%", alignSelf: "stretch" }}>{preview}</div>
+              <button className="btn primary" onClick={send} disabled={sending || params.some((p) => !p.trim())}>
+                {sending ? "Enviando…" : "Enviar plantilla"}
+              </button>
+            </>
+          )}
+        </>
+      )}
+      {error && <p className="alert error" role="alert" style={{ margin: 0 }}>{error}</p>}
+    </div>
   );
 }
 

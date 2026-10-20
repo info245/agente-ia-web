@@ -2859,6 +2859,11 @@ async function loginCrm(event) {
     });
 
     state.currentUser = result.user || null;
+    // Los clientes usan el CRM nuevo; el servidor los redirige al recargar /crm.
+    if (state.currentUser && state.currentUser.role !== "super_admin") {
+      window.location.replace("/crm");
+      return;
+    }
     setAuthenticatedUi(true);
     await bootstrapCrm();
     setMainView(getDefaultViewForRole());
@@ -2930,6 +2935,11 @@ async function bootstrapAdmin(event) {
     });
 
     state.currentUser = result.user || null;
+    // Los clientes usan el CRM nuevo; el servidor los redirige al recargar /crm.
+    if (state.currentUser && state.currentUser.role !== "super_admin") {
+      window.location.replace("/crm");
+      return;
+    }
     setAuthenticatedUi(true);
     await bootstrapCrm();
     setMainView("admin");

@@ -45,6 +45,7 @@ import {
 } from "./lib/configVersionStore.js";
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
 import { runAgentTurn } from "./agent/engine.js";
+import { describeTemplate, renderTemplate, validateTemplateParams } from "./lib/whatsappTemplates.js";
 import { supabase } from "./lib/supabase.js";
 import { searchKnowledge } from "./lib/kbRetriever.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
@@ -233,6 +234,19 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(attachCrmUser);
+// El CRM antiguo queda como consola de la agencia: los clientes y las invitaciones van al CRM nuevo.
+app.get(["/crm", "/crm/", "/crm/index.html"], (req, res, next) => {
+  if (!CRM_APP_URL) return next();
+  const setupToken = String(req.query?.setup_token || "").trim();
+  if (setupToken) {
+    const url = new URL(`${CRM_APP_URL}/activar`);
+    url.searchParams.set("token", setupToken);
+    if (req.query?.email) url.searchParams.set("email", String(req.query.email));
+    return res.redirect(302, url.toString());
+  }
+  if (req.crmUser && req.crmUser.role !== "super_admin") return res.redirect(302, `${CRM_APP_URL}/inicio`);
+  return next();
+});
 app.use("/crm", express.static(crmPublicDir));
 app.get("/widget.js", (_req, res) => {
   res.setHeader("Content-Type", "application/javascript; charset=utf-8");
@@ -280,6 +294,7 @@ const GOOGLE_OAUTH_CLIENT_SECRET = String(process.env.GOOGLE_OAUTH_CLIENT_SECRET
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const WHATSAPP_BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
 const WHATSAPP_PUBLIC_NUMBER = process.env.WHATSAPP_PUBLIC_NUMBER || "";
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v25.0";
 const WHATSAPP_APP_SECRET =
@@ -338,8 +353,8 @@ function buildPublicBaseUrl(req) {
 }
 
 function buildPasswordSetupUrl(req, token, email = "") {
-  const url = new URL(`${buildPublicBaseUrl(req)}/crm`);
-  url.searchParams.set("setup_token", token);
+  const url = CRM_APP_URL ? new URL(`${CRM_APP_URL}/activar`) : new URL(`${buildPublicBaseUrl(req)}/crm`);
+  url.searchParams.set(CRM_APP_URL ? "token" : "setup_token", token);
   if (email) url.searchParams.set("email", email);
   return url.toString();
 }
@@ -1666,7 +1681,7 @@ async function sendWhatsAppTemplate(to, templateName, languageCode = "es", optio
       },
       body: JSON.stringify({
         messaging_product: "whatsapp",
-        to,
+        ...(isWhatsAppBsuid(to) ? { recipient: to } : { to }),
         type: "template",
         template: {
           name: String(templateName).trim(),
@@ -1691,6 +1706,23 @@ async function sendWhatsAppTemplate(to, templateName, languageCode = "es", optio
     throw new Error(data?.error?.message || "Error enviando plantilla por WhatsApp");
   }
   return data;
+}
+
+// Plantillas aprobadas en Meta para el número de la cuenta (las que el CRM puede enviar fuera de las 24 h).
+async function listApprovedWhatsAppTemplates(accountId) {
+  const channel = await getWhatsAppChannelForAccount(accountId);
+  const accessToken = channel?.access_token || WHATSAPP_TOKEN;
+  const wabaId = channel?.waba_id || WHATSAPP_BUSINESS_ACCOUNT_ID;
+  const apiVersion = channel?.api_version || WHATSAPP_API_VERSION;
+  if (!accessToken || !wabaId) throw new Error("Esta cuenta no tiene WhatsApp conectado.");
+  const url = new URL(`https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`);
+  url.searchParams.set("status", "APPROVED");
+  url.searchParams.set("fields", "name,language,category,components");
+  url.searchParams.set("limit", "100");
+  const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${accessToken}` } }, 10_000);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || "No se pudieron leer las plantillas de WhatsApp.");
+  return (data.data || []).map(describeTemplate);
 }
 
 async function isWhatsAppCustomerWindowOpen(conversationId) {
@@ -6134,8 +6166,9 @@ app.patch("/api/crm/conversations/:conversationId/state", async (req, res) => {
 app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-    const text = String(req.body?.text || "").trim();
-    if (!text) return res.status(400).json({ ok: false, error: "Escribe un mensaje antes de enviar." });
+    const templateInput = req.body?.template && typeof req.body.template === "object" ? req.body.template : null;
+    let text = String(req.body?.text || "").trim();
+    if (!templateInput && !text) return res.status(400).json({ ok: false, error: "Escribe un mensaje antes de enviar." });
     if (text.length > 4096) return res.status(400).json({ ok: false, error: "El mensaje es demasiado largo (máximo 4.096 caracteres)." });
 
     const conversation = await getConversationById(req.params.conversationId);
@@ -6143,7 +6176,29 @@ app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
       return res.status(404).json({ ok: false, error: "Conversación no encontrada." });
     }
 
-    if (conversation.channel === "whatsapp") {
+    let templateName = "";
+    if (templateInput) {
+      // Plantilla aprobada: WhatsApp la permite aunque hayan pasado más de 24 h. Meta la cobra.
+      if (conversation.channel !== "whatsapp") {
+        return res.status(400).json({ ok: false, error: "Las plantillas solo se envían por WhatsApp." });
+      }
+      const templates = await listApprovedWhatsAppTemplates(account.id);
+      const template = templates.find(
+        (t) => t.name === templateInput.name && t.language === (templateInput.language || t.language)
+      );
+      if (!template || !template.sendable) {
+        return res.status(400).json({ ok: false, error: "Esa plantilla no está aprobada o no se puede enviar desde el CRM." });
+      }
+      const params = (Array.isArray(templateInput.params) ? templateInput.params : []).map((v) => String(v ?? "").trim());
+      const invalid = validateTemplateParams(template, params);
+      if (invalid) return res.status(400).json({ ok: false, error: invalid });
+      await sendWhatsAppTemplate(conversation.external_user_id, template.name, template.language, {
+        accountId: account.id,
+        bodyParams: params.slice(0, template.params),
+      });
+      text = renderTemplate(template, params);
+      templateName = template.name;
+    } else if (conversation.channel === "whatsapp") {
       if (!(await isWhatsAppCustomerWindowOpen(conversation.id))) {
         return res.status(409).json({
           ok: false,
@@ -6166,7 +6221,7 @@ app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
       conversation_id: conversation.id,
       role: "assistant",
       content: text,
-      metadata: { sender: "human", author },
+      metadata: { sender: "human", author, ...(templateName ? { template: templateName } : {}) },
       account_id: account.id,
     });
     const updated = await updateConversationInboxState(
@@ -6234,6 +6289,16 @@ app.get("/api/crm/bookings", async (req, res) => {
     return res.json({ ok: true, bookings: data || [] });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/crm/whatsapp/templates", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const templates = await listApprovedWhatsAppTemplates(account.id);
+    return res.json({ ok: true, templates });
+  } catch (error) {
+    return res.status(502).json({ ok: false, error: error.message });
   }
 });
 
