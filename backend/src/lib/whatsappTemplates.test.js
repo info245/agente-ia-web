@@ -41,3 +41,23 @@ test("cada variable del cuerpo es obligatoria y sin saltos de línea", () => {
   assert.match(validateTemplateParams(t, ["Laura", "SEO\nlocal"]), /saltos de línea/);
   assert.equal(validateTemplateParams(t, ["Laura", "SEO"]), "");
 });
+
+test("las plantillas con variables con nombre se rellenan y se envían con parameter_name", async () => {
+  const { bodyParameters } = await import("./whatsappTemplates.js");
+  const t = describeTemplate({
+    name: "seguimiento",
+    language: "es",
+    parameter_format: "NAMED",
+    components: [{ type: "BODY", text: "Hola {{nombre}}, sobre {{servicio}}. Gracias {{nombre}}." }],
+  });
+  assert.equal(t.named, true);
+  assert.deepEqual(t.param_names, ["nombre", "servicio"]);
+  assert.equal(t.params, 2);
+  assert.equal(renderTemplate(t, ["Laura", "SEO"]), "Hola Laura, sobre SEO. Gracias Laura.");
+  assert.deepEqual(bodyParameters(t, ["Laura", "SEO"]), [
+    { type: "text", parameter_name: "nombre", text: "Laura" },
+    { type: "text", parameter_name: "servicio", text: "SEO" },
+  ]);
+  const numbered = describeTemplate(followUp);
+  assert.deepEqual(bodyParameters(numbered, ["Laura", "SEO"]), [{ type: "text", text: "Laura" }, { type: "text", text: "SEO" }]);
+});

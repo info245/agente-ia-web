@@ -46,7 +46,7 @@ import {
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
 import { runAgentTurn } from "./agent/engine.js";
 import { createGoogleCalendar, isCalendarConnected } from "./agent/googleCalendar.js";
-import { describeTemplate, renderTemplate, validateTemplateParams } from "./lib/whatsappTemplates.js";
+import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParams } from "./lib/whatsappTemplates.js";
 import { supabase } from "./lib/supabase.js";
 import { searchKnowledge } from "./lib/kbRetriever.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
@@ -1674,6 +1674,14 @@ async function sendWhatsAppTemplate(to, templateName, languageCode = "es", optio
   const apiVersion = channel?.api_version || WHATSAPP_API_VERSION;
   if (!accessToken || !phoneNumberId) throw new Error("Falta configuración WhatsApp para enviar.");
   if (!String(templateName || "").trim()) throw new Error("Falta una plantilla aprobada de WhatsApp.");
+  // Si solo llegan valores (flujos automáticos) y la plantilla usa variables con nombre, se mapean por orden.
+  let parameters = options?.parameters || null;
+  if (!parameters?.length && options?.bodyParams?.length) {
+    const definition = await listApprovedWhatsAppTemplates(options?.accountId || options?.account_id || channel?.account_id)
+      .then((list) => list.find((t) => t.name === String(templateName).trim() && t.language === (String(languageCode || "es").trim() || "es")))
+      .catch(() => null);
+    if (definition?.named) parameters = bodyParameters(definition, options.bodyParams);
+  }
 
   const response = await fetchWithTimeout(
     `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
@@ -1690,12 +1698,15 @@ async function sendWhatsAppTemplate(to, templateName, languageCode = "es", optio
         template: {
           name: String(templateName).trim(),
           language: { code: String(languageCode || "es").trim() || "es" },
-          ...(options?.bodyParams?.length
+          ...(parameters?.length || options?.bodyParams?.length
             ? {
                 components: [
                   {
                     type: "body",
-                    parameters: options.bodyParams.map((text) => ({ type: "text", text })),
+                    // parameters admite variables con nombre (parameter_name); bodyParams, solo numeradas.
+                    parameters: parameters?.length
+                      ? parameters
+                      : options.bodyParams.map((text) => ({ type: "text", text })),
                   },
                 ],
               }
@@ -1722,7 +1733,7 @@ async function listApprovedWhatsAppTemplates(accountId) {
   if (!accessToken || !wabaId) throw new Error("Esta cuenta no tiene WhatsApp conectado.");
   const url = new URL(`https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`);
   url.searchParams.set("status", "APPROVED");
-  url.searchParams.set("fields", "name,language,category,components");
+  url.searchParams.set("fields", "name,language,category,components,parameter_format");
   url.searchParams.set("limit", "100");
   const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${accessToken}` } }, 10_000);
   const data = await response.json().catch(() => ({}));
@@ -6308,7 +6319,7 @@ app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
       if (invalid) return res.status(400).json({ ok: false, error: invalid });
       await sendWhatsAppTemplate(conversation.external_user_id, template.name, template.language, {
         accountId: account.id,
-        bodyParams: params.slice(0, template.params),
+        parameters: bodyParameters(template, params),
       });
       text = renderTemplate(template, params);
       templateName = template.name;
