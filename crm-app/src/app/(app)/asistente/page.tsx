@@ -447,6 +447,16 @@ function FollowUpsTab({ draft, update }: TabProps) {
   const setTemplate = (key: string, part: Partial<MessageTemplate>) =>
     update({ templates: { ...draft.templates, [key]: { ...draft.templates[key], ...part } } });
 
+  // Cada paso nuevo lleva su propio texto (plantilla) para no pisar el de otro paso.
+  const addStep = (key: string) => {
+    const templateKey = `${key}_${Date.now().toString(36)}`;
+    update({
+      flows: { ...draft.flows, [key]: { ...draft.flows[key], steps: [...(draft.flows[key].steps || []), { channel: "email", delay_value: "48", delay_unit: "hours", template_key: templateKey, active: true }] } },
+      templates: { ...draft.templates, [templateKey]: { channel: "email", label: "Seguimiento", subject: "¿Seguimos con lo que hablamos?", body: "Hola {nombre}, te escribo por si quieres retomar lo de {servicio}. Si te encaja, responde a este mensaje y lo vemos." } },
+    });
+  };
+  const removeStep = (key: string, index: number) => setFlow(key, { steps: (draft.flows[key].steps || []).filter((_, i) => i !== index) });
+
   const entries = Object.entries(draft.flows);
   if (!entries.length) return <div className="card block"><p className="empty">Esta cuenta no tiene seguimientos configurados.</p></div>;
 
@@ -500,6 +510,7 @@ function FollowUpsTab({ draft, update }: TabProps) {
                     <option value="days">días</option>
                   </select>
                   <span style={{ color: "var(--muted)", fontSize: 13 }}>sin respuesta</span>
+                  <button className="btn ghost small" style={{ marginLeft: "auto" }} aria-label={`Quitar paso ${i + 1}`} onClick={() => removeStep(key, i)}>Quitar</button>
                 </div>
                 {!isWa && <input className="i" aria-label="Asunto del email" placeholder="Asunto del email" value={tpl.subject || ""} onChange={(e) => setTemplate(step.template_key || "", { subject: e.target.value })} />}
                 <textarea className="i" rows={3} aria-label="Mensaje" value={tpl.body || ""} onChange={(e) => setTemplate(step.template_key || "", { body: e.target.value })} />
@@ -519,6 +530,12 @@ function FollowUpsTab({ draft, update }: TabProps) {
               </div>
             );
           })}
+          {flow.enabled !== false && (
+            <div style={{ marginTop: 12 }}>
+              {!(flow.steps || []).length && <p className="hint" style={{ marginTop: 0 }}>No tiene pasos: no se enviará nada hasta que añadas uno.</p>}
+              <button className="btn small" onClick={() => addStep(key)}>+ Añadir paso</button>
+            </div>
+          )}
         </div>
       ))}
     </>
