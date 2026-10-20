@@ -237,7 +237,8 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(attachCrmUser);
-// El CRM antiguo queda como consola de la agencia: los clientes y las invitaciones van al CRM nuevo.
+// El CRM antiguo está retirado: todo el mundo va al CRM nuevo (la agencia tiene allí su consola).
+// Salida de emergencia solo para superadmin: /crm?antiguo=1
 app.get(["/crm", "/crm/", "/crm/index.html"], (req, res, next) => {
   if (!CRM_APP_URL) return next();
   const setupToken = String(req.query?.setup_token || "").trim();
@@ -247,7 +248,8 @@ app.get(["/crm", "/crm/", "/crm/index.html"], (req, res, next) => {
     if (req.query?.email) url.searchParams.set("email", String(req.query.email));
     return res.redirect(302, url.toString());
   }
-  if (req.crmUser && req.crmUser.role !== "super_admin") return res.redirect(302, `${CRM_APP_URL}/inicio`);
+  const legacyAllowed = req.query?.antiguo === "1" && (!req.crmUser || req.crmUser.role === "super_admin");
+  if (!legacyAllowed) return res.redirect(302, `${CRM_APP_URL}/inicio`);
   return next();
 });
 app.use("/crm", express.static(crmPublicDir));
