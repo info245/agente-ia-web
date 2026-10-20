@@ -1913,12 +1913,13 @@ async function sendAutomationStep({
   accountId,
   conversationId,
   flowKey,
+  allowVolunteeredContact = false,
 }) {
   const channel = String(step?.channel || template?.channel || "").trim().toLowerCase();
   const subject = renderTemplateString(template?.subject || "", vars).trim();
   const body = renderTemplateString(template?.body || "", vars).trim();
 
-  if (!canUseAutomationChannel({ lead, channel, flowKey })) {
+  if (!canUseAutomationChannel({ lead, channel, flowKey, allowVolunteeredContact })) {
     return { skipped: true, reason: "contact-not-authorized" };
   }
 
@@ -5680,6 +5681,10 @@ async function runAutomationFlowsForAccount({
         const step = steps[index];
         if (!step || step.active === false) continue;
         if (wasAutomationStepAlreadySent(automationEvents, flowKey, index)) continue;
+        // Un paso que este lead no puede recibir (sin teléfono, sin email o sin permiso) no bloquea los siguientes.
+        const stepChannel = String(step.channel || "").trim().toLowerCase();
+        const reachable = stepChannel === "whatsapp" ? Boolean(normalizeLeadPhoneForWhatsApp(lead)) : Boolean(lead.email);
+        if (!reachable || !canUseAutomationChannel({ lead, channel: stepChannel, flowKey, allowVolunteeredContact: flow?.contact_chat_leads === true })) continue;
 
         const dueAt = getSafeAutomationDueAt({
           baseTimestamp,
@@ -5824,6 +5829,7 @@ async function runAutomationJobsTask({ limit = 20 } = {}) {
             accountId: job.account_id,
             conversationId: payload.conversation_id,
             flowKey: payload.flow_key,
+            allowVolunteeredContact: appConfig?.automation_flows?.[payload.flow_key]?.contact_chat_leads === true,
           })
         : { skipped: true, reason: "missing-template" };
       const skipped = Boolean(sendResult?.skipped);

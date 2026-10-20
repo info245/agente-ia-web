@@ -50,6 +50,15 @@ test("recovery contact requires consent or an inbound conversation on that chann
   );
 });
 
+test("si la cuenta lo permite, se escribe a quien dejó su email en el chat salvo que lo rechazara", () => {
+  const base = { channel: "email", flowKey: "lead_recovery" };
+  const chatLead = { consent: null, email: "ana@example.com", conversations: { channel: "web" } };
+  assert.equal(canUseAutomationChannel({ ...base, lead: chatLead }), false);
+  assert.equal(canUseAutomationChannel({ ...base, lead: chatLead, allowVolunteeredContact: true }), true);
+  assert.equal(canUseAutomationChannel({ ...base, lead: { ...chatLead, consent: false }, allowVolunteeredContact: true }), false);
+  assert.equal(canUseAutomationChannel({ ...base, lead: { ...chatLead, email: "" }, allowVolunteeredContact: true }), false);
+});
+
 test("a reply after a quote cancels its automatic follow-up", () => {
   const messages = [{ role: "user", created_at: "2026-08-02T12:00:00Z" }];
   assert.equal(userRepliedAfter(messages, "2026-08-02T11:00:00Z"), true);

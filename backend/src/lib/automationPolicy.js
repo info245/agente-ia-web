@@ -67,11 +67,13 @@ export function userRepliedAfter(messages = [], timestampValue = null) {
   return reference > 0 && getLastUserMessageTime(messages) > reference;
 }
 
-export function canUseAutomationChannel({ lead = {}, channel = "", flowKey = "" } = {}) {
+// allowVolunteeredContact: la cuenta permite escribir a quien dejó ese dato en el chat aunque no aceptara expresamente.
+export function canUseAutomationChannel({ lead = {}, channel = "", flowKey = "", allowVolunteeredContact = false } = {}) {
   const normalizedChannel = normalize(channel);
   if (!["whatsapp", "email"].includes(normalizedChannel)) return false;
   if (flowKey === "quote_followup") return true;
   if (lead?.consent === true) return true;
+  if (allowVolunteeredContact && lead?.consent !== false && (normalizedChannel === "email" ? lead?.email : lead?.phone)) return true;
   return normalize(lead?.conversations?.channel) === normalizedChannel;
 }
 

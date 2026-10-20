@@ -70,7 +70,7 @@ export type FlowStep = {
   whatsapp_template_name?: string;
   whatsapp_template_language?: string;
 };
-export type Flow = { label?: string; description?: string; enabled?: boolean; steps?: FlowStep[] };
+export type Flow = { label?: string; description?: string; enabled?: boolean; contact_chat_leads?: boolean; steps?: FlowStep[] };
 export type MessageTemplate = { channel?: string; label?: string; subject?: string; body?: string };
 
 export type AppConfig = {

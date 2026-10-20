@@ -1341,6 +1341,7 @@ function sanitizeAutomationFlows(value = {}) {
         typeof incoming?.enabled === "boolean"
           ? incoming.enabled
           : flowDefaults?.enabled !== false,
+      contact_chat_leads: incoming?.contact_chat_leads === true,
       steps: sanitizeAutomationSteps(
         Array.isArray(incoming?.steps)
           ? incoming.steps

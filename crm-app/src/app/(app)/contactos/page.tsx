@@ -32,7 +32,7 @@ export default function ContactosPage() {
   const open = (lead: Lead) => router.push(`/conversaciones?c=${lead.conversation_id}`);
 
   async function remove(lead: Lead) {
-    if (!window.confirm(`¿Eliminar a ${leadName(lead)}? Desaparecerá de Contactos y de Conversaciones. No se puede deshacer.`)) return;
+    if (!window.confirm(`¿Eliminar a ${leadName(lead)}? Se borran también su conversación y sus mensajes. No se puede deshacer.`)) return;
     setError("");
     try {
       await api(`/crm/leads/${lead.id}`, { method: "DELETE" });
