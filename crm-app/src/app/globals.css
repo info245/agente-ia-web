@@ -50,8 +50,7 @@ a { color: var(--accent); }
 .logout:hover { color: var(--fg); }
 
 main { overflow: auto; min-width: 0; }
-.page { padding: 28px 32px 48px; max-width: 1240px; margin: 0 auto; }
-.page.full { max-width: none; }
+.page { padding: 28px 32px 48px; }
 h1 { font-family: var(--display); font-size: 26px; font-weight: 700; margin: 0; text-wrap: balance; }
 h2 { font-family: var(--display); font-size: 17px; font-weight: 700; margin: 0; }
 .sub { color: var(--muted); margin: 4px 0 0; }
