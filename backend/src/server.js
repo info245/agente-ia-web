@@ -295,7 +295,6 @@ const GOOGLE_OAUTH_CLIENT_SECRET = String(process.env.GOOGLE_OAUTH_CLIENT_SECRET
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
-const WHATSAPP_BUSINESS_ACCOUNT_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || "";
 const WHATSAPP_PUBLIC_NUMBER = process.env.WHATSAPP_PUBLIC_NUMBER || "";
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v25.0";
 const WHATSAPP_APP_SECRET =
@@ -1712,8 +1711,9 @@ async function sendWhatsAppTemplate(to, templateName, languageCode = "es", optio
 // Plantillas aprobadas en Meta para el número de la cuenta (las que el CRM puede enviar fuera de las 24 h).
 async function listApprovedWhatsAppTemplates(accountId) {
   const channel = await getWhatsAppChannelForAccount(accountId);
-  const accessToken = channel?.access_token || WHATSAPP_TOKEN;
-  const wabaId = channel?.waba_id || WHATSAPP_BUSINESS_ACCOUNT_ID;
+  // Sin variables globales de respaldo: cada cuenta ve solo las plantillas de su propio número.
+  const accessToken = channel?.access_token;
+  const wabaId = channel?.waba_id;
   const apiVersion = channel?.api_version || WHATSAPP_API_VERSION;
   if (!accessToken || !wabaId) throw new Error("Esta cuenta no tiene WhatsApp conectado.");
   const url = new URL(`https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`);
@@ -6273,7 +6273,16 @@ app.post("/api/crm/assistant", async (req, res) => {
         ...current.knowledge_sources,
         ...pick(body.knowledge_sources, ["website_urls", "internal_notes", "spreadsheet_mapping"]),
       },
-      ...(body.automation_flows ? { automation_flows: { ...current.automation_flows, ...body.automation_flows } } : {}),
+      ...(body.automation_flows
+        ? {
+            automation_flows: Object.fromEntries(
+              Object.entries({ ...current.automation_flows, ...body.automation_flows }).map(([key, flow]) => [
+                key,
+                { ...(current.automation_flows?.[key] || {}), ...(body.automation_flows?.[key] || {}), ...(body.automation_flows?.[key] ? {} : flow) },
+              ])
+            ),
+          }
+        : {}),
       ...(body.message_templates ? { message_templates: { ...current.message_templates, ...body.message_templates } } : {}),
     });
     const config = await saveAppConfig(candidate, { accountId: account.id });
@@ -6458,6 +6467,16 @@ app.post("/api/crm/bookings/:bookingId/cancel", async (req, res) => {
     const author = req.crmUser?.display_name || req.crmUser?.email || "equipo";
     const notified = await notifyBookingChange({ accountId: account.id, booking, text: req.body?.message, author });
     return res.json({ ok: true, notified });
+  } catch (error) {
+    return res.status(502).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/crm/whatsapp/templates", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const templates = await listApprovedWhatsAppTemplates(account.id);
+    return res.json({ ok: true, templates });
   } catch (error) {
     return res.status(502).json({ ok: false, error: error.message });
   }
