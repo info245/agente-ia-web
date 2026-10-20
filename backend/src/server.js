@@ -636,7 +636,7 @@ async function resolveExternalLeadAccount(req, payload = {}, { allowDefault = fa
 
   if (explicitInput) {
     // "tmedia_global", "TMedia-Global" y "tmedia-global" son la misma cuenta.
-    const key = (value) => String(value || "").trim().toLowerCase().replace(/[s_]+/g, "-");
+    const key = (value) => String(value || "").trim().toLowerCase().replace(/[\s_]+/g, "-");
     const account =
       accounts.find((item) => key(item.id) === key(explicitInput) || key(item.slug) === key(explicitInput)) || null;
     if (!account) {
