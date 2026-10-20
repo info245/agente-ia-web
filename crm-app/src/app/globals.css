@@ -230,3 +230,11 @@ textarea.i { resize: vertical; }
 .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .tabs .chip { padding: 6px 14px; font-weight: 500; }
 .tabs .chip[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+/* Consola de agencia */
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 13px; padding: 10px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.table td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.table tbody tr { cursor: pointer; }
+.table tbody tr:hover, .table tbody tr[aria-selected="true"] { background: var(--accent-soft); }
+code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }

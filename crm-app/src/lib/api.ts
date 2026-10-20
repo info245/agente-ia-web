@@ -33,7 +33,8 @@ export async function api<T = Record<string, unknown>>(
 ): Promise<T> {
   const url = new URL(`/api${path}`, window.location.origin);
   const accountId = getAccountId();
-  if (accountId && path.startsWith("/crm/")) url.searchParams.set("account_id", accountId);
+  // La consola de agencia puede indicar otra cuenta explícitamente en la ruta.
+  if (accountId && path.startsWith("/crm/") && !url.searchParams.has("account_id")) url.searchParams.set("account_id", accountId);
 
   const res = await fetch(url, {
     method,
