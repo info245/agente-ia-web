@@ -28,6 +28,8 @@ export type Lead = {
   interest_service?: string | null;
   budget_range?: string | null;
   main_goal?: string | null;
+  current_situation?: string | null;
+  pain_points?: string | null;
   summary?: string | null;
   crm_status?: string | null;
   next_action?: string | null;

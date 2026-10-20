@@ -370,6 +370,9 @@ function LeadPanel({ lead, stages, onSaved }: { lead: Lead; stages: { key: strin
         {!lead.email && !lead.phone && "Aún no lo ha dado"}
       </div>
       {lead.main_goal && <div className="field"><span>Qué busca</span>{lead.main_goal}</div>}
+      {lead.budget_range && <div className="field"><span>Presupuesto</span>{lead.budget_range}</div>}
+      {lead.current_situation && <div className="field"><span>Situación</span>{lead.current_situation}</div>}
+      {lead.pain_points && <div className="field"><span>Problema</span>{lead.pain_points}</div>}
       <div className="field">
         <span>Etapa</span>
         <select aria-label="Etapa del contacto" value={lead.crm_status || ""} onChange={(e) => save({ crm_status: e.target.value })}>
@@ -381,10 +384,11 @@ function LeadPanel({ lead, stages, onSaved }: { lead: Lead; stages: { key: strin
         <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} onBlur={() => note !== (lead.internal_notes || "") && save({ internal_notes: note })} placeholder="Solo la ves tú" />
       </div>
       {status && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }} aria-live="polite">{status}</p>}
-      {(lead.next_action || lead.summary) && (
+      {/* El resumen automático es un volcado interno para el agente; aquí se ven sus datos ya ordenados arriba. */}
+      {lead.next_action && (
         <div className="next">
-          <b>{lead.next_action ? "Siguiente paso sugerido" : "Resumen de la conversación"}</b>
-          <p>{lead.next_action || lead.summary}</p>
+          <b>Siguiente paso sugerido</b>
+          <p>{lead.next_action}</p>
         </div>
       )}
     </aside>
