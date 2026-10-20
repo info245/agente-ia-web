@@ -8,7 +8,7 @@ import { channelOf, isHumanMessage, leadName, OWNER_PILL, ownerOf, shortTime, ty
 import type { Conversation, Lead, Message } from "@/lib/types";
 
 type Thread = { messages: Message[]; lead: Lead; conversation: Conversation | null; fetchedAt: number };
-type Template = { name: string; language: string; category: string; header: string; body: string; footer: string; params: number; sendable: boolean };
+type Template = { name: string; language: string; category: string; header: string; body: string; footer: string; params: number; param_names?: string[]; sendable: boolean };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 type Filter = "all" | Owner;
@@ -210,7 +210,7 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
           {windowClosed ? (
             <TemplateComposer
               conversationId={conversationId}
-              defaults={[leadName(lead).split(" ")[0], lead.interest_service || ""]}
+              defaults={{ name: leadName(lead).split(" ")[0], service: lead.interest_service || "", company: lead.company_name || lead.business_type || "" }}
               onSent={async () => { setForceTemplate(false); await Promise.all([load(), onChanged()]); }}
             />
           ) : canReply ? (
@@ -252,7 +252,17 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
   );
 }
 
-function TemplateComposer({ conversationId, defaults, onSent }: { conversationId: string; defaults: string[]; onSent: () => Promise<void> }) {
+type Defaults = { name: string; service: string; company: string };
+
+// Rellena cada variable con lo que ya sabemos del lead: por nombre ({{nombre}}) o por orden ({{1}}, {{2}}).
+function guess(name: string, index: number, d: Defaults) {
+  if (/nombre|name|cliente|customer/.test(name)) return d.name;
+  if (/servicio|service|producto|product|consulta/.test(name)) return d.service;
+  if (/empresa|company|negocio|business/.test(name)) return d.company;
+  return /^\d+$/.test(name) ? [d.name, d.service][index] || "" : "";
+}
+
+function TemplateComposer({ conversationId, defaults, onSent }: { conversationId: string; defaults: Defaults; onSent: () => Promise<void> }) {
   const [templates, setTemplates] = useState<Template[] | null>(null);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState("");
@@ -266,13 +276,14 @@ function TemplateComposer({ conversationId, defaults, onSent }: { conversationId
   }, []);
 
   const template = templates?.find((t) => `${t.name}|${t.language}` === selected) || null;
-  const fill = (text: string) => text.replace(/\{\{\s*(\d+)\s*\}\}/g, (_, n) => params[Number(n) - 1]?.trim() || `{{${n}}}`);
+  const names = template?.param_names || [];
+  const fill = (text: string) => text.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/g, (_, key) => params[names.indexOf(key)]?.trim() || `{{${key}}}`);
   const preview = template ? [template.header, template.body, template.footer].filter(Boolean).map(fill).join("\n\n") : "";
 
   function choose(value: string) {
     setSelected(value);
     const t = templates?.find((x) => `${x.name}|${x.language}` === value);
-    setParams(Array.from({ length: t?.params || 0 }, (_, i) => defaults[i] || ""));
+    setParams((t?.param_names || []).map((name, i) => guess(name, i, defaults)));
   }
 
   async function send() {
@@ -315,7 +326,7 @@ function TemplateComposer({ conversationId, defaults, onSent }: { conversationId
           {template && (
             <>
               {params.map((value, i) => (
-                <input key={i} className="i" aria-label={`Dato {{${i + 1}}}`} placeholder={`Dato {{${i + 1}}}`} value={value}
+                <input key={i} className="i" aria-label={`Dato ${names[i] || i + 1}`} placeholder={(names[i] || String(i + 1)).replace(/_/g, " ")} value={value}
                   onChange={(e) => setParams(params.map((p, j) => (j === i ? e.target.value : p)))} />
               ))}
               <div className="m me" style={{ maxWidth: "100%", alignSelf: "stretch" }}>{preview}</div>
