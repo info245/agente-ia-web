@@ -1106,6 +1106,24 @@ export async function deleteCrmLeadById(leadId, { accountId = null } = {}) {
   const { error: deleteLeadError } = await deleteLeadQuery;
   if (deleteLeadError) throw deleteLeadError;
 
+  // Borrado completo: la conversación (y en cascada sus mensajes y eventos) si ningún otro lead la usa.
+  const conversationId = clean(lead.conversation_id);
+  if (conversationId) {
+    const { count, error: countError } = await supabase
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("conversation_id", conversationId);
+    if (countError) throw countError;
+    if (!count) {
+      let deleteConversation = supabase.from("conversations").delete().eq("id", conversationId);
+      if (safeAccountId && (await tableHasAccountColumn("conversations"))) {
+        deleteConversation = deleteConversation.eq("account_id", safeAccountId);
+      }
+      const { error: conversationError } = await deleteConversation;
+      if (conversationError) throw conversationError;
+    }
+  }
+
   return {
     ok: true,
     id: safeLeadId,

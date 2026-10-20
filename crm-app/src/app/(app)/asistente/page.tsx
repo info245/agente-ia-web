@@ -454,6 +454,7 @@ function FollowUpsTab({ draft, update }: TabProps) {
     <>
       <p className="hint" style={{ margin: "0 0 12px" }}>
         Mensajes que tu asistente envía solo cuando un cliente deja de responder. Usa <b>{"{nombre}"}</b> y <b>{"{servicio}"}</b> para personalizarlos.
+        Si el cliente no tiene el dato de un paso (por ejemplo, no dejó teléfono), ese paso se salta y se pasa al siguiente.
       </p>
       {entries.map(([key, flow]) => (
         <div className="card block" key={key}>
@@ -467,6 +468,17 @@ function FollowUpsTab({ draft, update }: TabProps) {
               {flow.enabled !== false ? "Activado" : "Desactivado"}
             </label>
           </div>
+          {flow.enabled !== false && key === "lead_recovery" && (
+            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12 }}>
+              <input type="checkbox" style={{ marginTop: 3 }} checked={flow.contact_chat_leads === true} onChange={(e) => setFlow(key, { contact_chat_leads: e.target.checked })} />
+              <span>
+                <b>Escribir también a quien dejó su email o teléfono en el chat de la web</b>
+                <span className="hint" style={{ display: "block", margin: 0 }}>
+                  Sin esto, solo se escribe a quien aceptó expresamente que le contactéis (formularios) o a quien te escribió por ese canal. Nunca a quien dijo que no. Asegúrate de que el aviso de privacidad de tu web lo cubre.
+                </span>
+              </span>
+            </label>
+          )}
           {flow.enabled !== false && (flow.steps || []).map((step, i) => {
             const tpl = draft.templates[step.template_key || ""] || {};
             const isWa = step.channel === "whatsapp";
@@ -475,8 +487,12 @@ function FollowUpsTab({ draft, update }: TabProps) {
                 <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                   <label style={{ display: "flex", gap: 6, alignItems: "center", fontWeight: 600 }}>
                     <input type="checkbox" checked={step.active !== false} onChange={(e) => setStep(key, i, { active: e.target.checked })} />
-                    Paso {i + 1} · {isWa ? "WhatsApp" : "Email"}
+                    Paso {i + 1}
                   </label>
+                  <select className="i" style={{ width: 130 }} aria-label={`Canal del paso ${i + 1}`} value={isWa ? "whatsapp" : "email"} onChange={(e) => setStep(key, i, { channel: e.target.value })}>
+                    <option value="whatsapp">por WhatsApp</option>
+                    <option value="email">por email</option>
+                  </select>
                   <span style={{ color: "var(--muted)", fontSize: 13 }}>a los</span>
                   <input className="i" type="number" min={1} style={{ width: 80 }} aria-label="Espera" value={step.delay_value || "24"} onChange={(e) => setStep(key, i, { delay_value: e.target.value })} />
                   <select className="i" style={{ width: 110 }} aria-label="Unidad" value={step.delay_unit || "hours"} onChange={(e) => setStep(key, i, { delay_unit: e.target.value })}>
