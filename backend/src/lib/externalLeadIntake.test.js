@@ -183,3 +183,10 @@ test("template params fit Meta limits and render the sent text", () => {
     "Hola Ana, gracias por escribirnos sobre SEO. Hemos visto tu consulta: quieres salir en Google."
   );
 });
+
+test("el primer WhatsApp guardado sustituye también variables con nombre, por orden", () => {
+  assert.equal(
+    renderWhatsAppTemplateBody("Hola {{nombre}}, sobre {{servicio}}. ¡Gracias {{nombre}}!", ["Laura", "SEO"]),
+    "Hola Laura, sobre SEO. ¡Gracias Laura!"
+  );
+});

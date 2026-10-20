@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ConfigPending, useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
+import type { AppConfig, WhatsAppTemplate } from "@/lib/types";
 
 type WhatsAppChannel = { configured?: boolean; status?: string; display_phone_number?: string; verified_name?: string };
 
@@ -110,6 +111,7 @@ export default function CanalesPage() {
             ) : (
               <span className="pill p-muted">Todavía no ha llegado ninguno · tu agencia los conecta</span>
             )}
+            {whatsapp?.configured && <FormFirstWhatsApp config={config} />}
           </div>
         </div>
 
@@ -139,5 +141,57 @@ export default function CanalesPage() {
         <a className="btn" href="mailto:info@t-mediaglobal.com?subject=Ayuda%20con%20mis%20canales">Escribir a T-Media</a>
       </div>
     </section>
+  );
+}
+
+// Primer WhatsApp a cada lead de formulario: como nunca te ha escrito, WhatsApp exige una plantilla aprobada.
+function FormFirstWhatsApp({ config }: { config: AppConfig }) {
+  const { reloadConfig } = useSession();
+  const current = config.integrations?.whatsapp || {};
+  const [enabled, setEnabled] = useState(Boolean(current.form_autocontact_enabled));
+  const [selected, setSelected] = useState(current.intro_template_name ? `${current.intro_template_name}|${current.intro_template_language || "es"}` : "");
+  const [templates, setTemplates] = useState<WhatsAppTemplate[] | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const key = (t: WhatsAppTemplate) => `${t.name}|${t.language}`;
+  const preview = templates?.find((t) => key(t) === selected);
+
+  useEffect(() => {
+    api<{ templates: WhatsAppTemplate[] }>("/crm/whatsapp/templates")
+      .then((d) => setTemplates(d.templates.filter((t) => t.sendable && t.params <= 3)))
+      .catch(() => setTemplates([]));
+  }, []);
+
+  async function save() {
+    setBusy(true);
+    setMsg(null);
+    const [name, language] = selected.split("|");
+    try {
+      await api("/crm/channels/form-whatsapp", { method: "POST", body: { enabled, template_name: name || "", template_language: language || "es" } });
+      await reloadConfig();
+      setMsg({ kind: "ok", text: enabled ? "Activado: cada lead nuevo de formulario recibirá esta plantilla por WhatsApp." : "Guardado. No se enviará WhatsApp automático a los leads de formulario." });
+    } catch (err) {
+      setMsg({ kind: "error", text: (err as Error).message });
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 8, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+      <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 600 }}>
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        Escribirle por WhatsApp al momento
+      </label>
+      <span style={{ color: "var(--muted)", fontSize: 13 }}>
+        Solo si dejó teléfono y aceptó que le contactéis. Como nunca te ha escrito, WhatsApp exige una plantilla aprobada; cuando conteste, tu asistente sigue la conversación.
+      </span>
+      <select className="i" aria-label="Plantilla del primer WhatsApp" value={selected} onChange={(e) => setSelected(e.target.value)}>
+        <option value="">{templates === null ? "Cargando plantillas…" : templates.length ? "Elige una plantilla" : "No hay plantillas aprobadas"}</option>
+        {(templates || []).map((t) => <option key={key(t)} value={key(t)}>{t.name.replace(/_/g, " ")} · {t.language}</option>)}
+      </select>
+      {preview && <div className="m" style={{ maxWidth: "100%", background: "var(--surface-2)", border: "1px solid var(--line)" }}>{preview.body}</div>}
+      <div><button className="btn primary small" disabled={busy || (enabled && !selected)} onClick={save}>{busy ? "Guardando…" : "Guardar"}</button></div>
+      {msg && <p className={`alert ${msg.kind}`} role="status" style={{ margin: 0 }}>{msg.text}</p>}
+    </div>
   );
 }

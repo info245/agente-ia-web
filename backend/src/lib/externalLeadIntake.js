@@ -440,6 +440,12 @@ export function buildFormLeadTemplateParams({ name, service, requestSummary, cou
   return values.slice(0, safeCount);
 }
 
+// Variables numeradas ({{1}}) por posición; con nombre ({{nombre}}) por orden de aparición.
 export function renderWhatsAppTemplateBody(body, params = []) {
-  return String(body || "").replace(/\{\{(\d+)\}\}/g, (match, index) => params[Number(index) - 1] ?? match);
+  const text = String(body || "");
+  const named = [...new Set([...text.matchAll(/\{\{\s*([a-z_][a-z0-9_]*)\s*\}\}/g)].map((m) => m[1]))];
+  return text.replace(/\{\{\s*([a-z0-9_]+)\s*\}\}/g, (match, key) => {
+    const index = /^\d+$/.test(key) ? Number(key) - 1 : named.indexOf(key);
+    return params[index] ?? match;
+  });
 }
