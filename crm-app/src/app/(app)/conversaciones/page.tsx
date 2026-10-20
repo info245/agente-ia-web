@@ -35,7 +35,7 @@ export default function ConversacionesPage() {
   const waitingCount = (leads || []).filter((lead) => ownerOf(lead) === "waiting").length;
 
   return (
-    <section className="page">
+    <section className="page full">
       <div className="head">
         <div>
           <h1>Conversaciones</h1>
