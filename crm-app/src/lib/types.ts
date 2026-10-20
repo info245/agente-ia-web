@@ -57,6 +57,20 @@ export type Offer = {
 
 export type Faq = { question: string; answer: string };
 
+export type Meeting = { days?: number[]; start_hour?: number; end_hour?: number; timezone?: string; duration_minutes?: number };
+
+export type FlowStep = {
+  active?: boolean;
+  channel?: string;
+  delay_value?: string;
+  delay_unit?: string;
+  template_key?: string;
+  whatsapp_template_name?: string;
+  whatsapp_template_language?: string;
+};
+export type Flow = { label?: string; description?: string; enabled?: boolean; steps?: FlowStep[] };
+export type MessageTemplate = { channel?: string; label?: string; subject?: string; body?: string };
+
 export type AppConfig = {
   agent_engine?: "legacy" | "v2";
   brand?: { name?: string; website_url?: string; primary_color?: string };
@@ -64,8 +78,15 @@ export type AppConfig = {
     tone?: string;
     initial_message?: string;
     faq?: Faq[];
-    meeting?: { days?: number[]; start_hour?: number; end_hour?: number; timezone?: string; duration_minutes?: number };
+    handoff_when?: string;
+    offer_meeting_when?: string;
+    meeting?: Meeting;
   };
+  business_profile?: { value_proposition?: string; audience?: string; human_team_label?: string };
+  notifications?: { email_to?: string; notify_new_lead?: boolean };
+  knowledge_sources?: { website_urls?: string[]; internal_notes?: string; spreadsheet_mapping?: string };
+  automation_flows?: Record<string, Flow>;
+  message_templates?: Record<string, MessageTemplate>;
   offers?: Record<string, Offer>;
   services?: Record<string, Offer>;
   contact?: { public_whatsapp_number?: string; support_email?: string };
@@ -75,4 +96,15 @@ export type AppConfig = {
   };
 };
 
-export type Booking = { id: string; conversation_id?: string | null; starts_at: string; attendee_name?: string | null };
+export type Booking = {
+  id: string;
+  conversation_id?: string | null;
+  lead_id?: string | null;
+  starts_at: string;
+  ends_at?: string;
+  timezone?: string;
+  attendee_name?: string | null;
+  attendee_email?: string | null;
+};
+
+export type WhatsAppTemplate = { name: string; language: string; category: string; header: string; body: string; footer: string; params: number; sendable: boolean };

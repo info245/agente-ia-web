@@ -45,6 +45,8 @@ import {
 } from "./lib/configVersionStore.js";
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
 import { runAgentTurn } from "./agent/engine.js";
+import { createGoogleCalendar, isCalendarConnected } from "./agent/googleCalendar.js";
+import { describeTemplate, renderTemplate, validateTemplateParams } from "./lib/whatsappTemplates.js";
 import { supabase } from "./lib/supabase.js";
 import { searchKnowledge } from "./lib/kbRetriever.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
@@ -100,7 +102,7 @@ import {
   isWhatsAppBsuid,
   transcribeWhatsAppAudio,
 } from "./lib/whatsappMessage.js";
-import { syncConfiguredKnowledge } from "./lib/knowledgeIngestor.js";
+import { deleteKnowledgeSource, syncConfiguredKnowledge, syncSpreadsheetKnowledge } from "./lib/knowledgeIngestor.js";
 import { createTokenBucketRateLimiter } from "./lib/rateLimiter.js";
 import {
   claimAutomationJobs,
@@ -233,6 +235,19 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(attachCrmUser);
+// El CRM antiguo queda como consola de la agencia: los clientes y las invitaciones van al CRM nuevo.
+app.get(["/crm", "/crm/", "/crm/index.html"], (req, res, next) => {
+  if (!CRM_APP_URL) return next();
+  const setupToken = String(req.query?.setup_token || "").trim();
+  if (setupToken) {
+    const url = new URL(`${CRM_APP_URL}/activar`);
+    url.searchParams.set("token", setupToken);
+    if (req.query?.email) url.searchParams.set("email", String(req.query.email));
+    return res.redirect(302, url.toString());
+  }
+  if (req.crmUser && req.crmUser.role !== "super_admin") return res.redirect(302, `${CRM_APP_URL}/inicio`);
+  return next();
+});
 app.use("/crm", express.static(crmPublicDir));
 app.get("/widget.js", (_req, res) => {
   res.setHeader("Content-Type", "application/javascript; charset=utf-8");
@@ -338,8 +353,8 @@ function buildPublicBaseUrl(req) {
 }
 
 function buildPasswordSetupUrl(req, token, email = "") {
-  const url = new URL(`${buildPublicBaseUrl(req)}/crm`);
-  url.searchParams.set("setup_token", token);
+  const url = CRM_APP_URL ? new URL(`${CRM_APP_URL}/activar`) : new URL(`${buildPublicBaseUrl(req)}/crm`);
+  url.searchParams.set(CRM_APP_URL ? "token" : "setup_token", token);
   if (email) url.searchParams.set("email", email);
   return url.toString();
 }
@@ -1666,7 +1681,7 @@ async function sendWhatsAppTemplate(to, templateName, languageCode = "es", optio
       },
       body: JSON.stringify({
         messaging_product: "whatsapp",
-        to,
+        ...(isWhatsAppBsuid(to) ? { recipient: to } : { to }),
         type: "template",
         template: {
           name: String(templateName).trim(),
@@ -1691,6 +1706,24 @@ async function sendWhatsAppTemplate(to, templateName, languageCode = "es", optio
     throw new Error(data?.error?.message || "Error enviando plantilla por WhatsApp");
   }
   return data;
+}
+
+// Plantillas aprobadas en Meta para el número de la cuenta (las que el CRM puede enviar fuera de las 24 h).
+async function listApprovedWhatsAppTemplates(accountId) {
+  const channel = await getWhatsAppChannelForAccount(accountId);
+  // Sin variables globales de respaldo: cada cuenta ve solo las plantillas de su propio número.
+  const accessToken = channel?.access_token;
+  const wabaId = channel?.waba_id;
+  const apiVersion = channel?.api_version || WHATSAPP_API_VERSION;
+  if (!accessToken || !wabaId) throw new Error("Esta cuenta no tiene WhatsApp conectado.");
+  const url = new URL(`https://graph.facebook.com/${apiVersion}/${wabaId}/message_templates`);
+  url.searchParams.set("status", "APPROVED");
+  url.searchParams.set("fields", "name,language,category,components");
+  url.searchParams.set("limit", "100");
+  const response = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${accessToken}` } }, 10_000);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error?.message || "No se pudieron leer las plantillas de WhatsApp.");
+  return (data.data || []).map(describeTemplate);
 }
 
 async function isWhatsAppCustomerWindowOpen(conversationId) {
@@ -6134,8 +6167,9 @@ app.patch("/api/crm/conversations/:conversationId/state", async (req, res) => {
 app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-    const text = String(req.body?.text || "").trim();
-    if (!text) return res.status(400).json({ ok: false, error: "Escribe un mensaje antes de enviar." });
+    const templateInput = req.body?.template && typeof req.body.template === "object" ? req.body.template : null;
+    let text = String(req.body?.text || "").trim();
+    if (!templateInput && !text) return res.status(400).json({ ok: false, error: "Escribe un mensaje antes de enviar." });
     if (text.length > 4096) return res.status(400).json({ ok: false, error: "El mensaje es demasiado largo (máximo 4.096 caracteres)." });
 
     const conversation = await getConversationById(req.params.conversationId);
@@ -6143,7 +6177,29 @@ app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
       return res.status(404).json({ ok: false, error: "Conversación no encontrada." });
     }
 
-    if (conversation.channel === "whatsapp") {
+    let templateName = "";
+    if (templateInput) {
+      // Plantilla aprobada: WhatsApp la permite aunque hayan pasado más de 24 h. Meta la cobra.
+      if (conversation.channel !== "whatsapp") {
+        return res.status(400).json({ ok: false, error: "Las plantillas solo se envían por WhatsApp." });
+      }
+      const templates = await listApprovedWhatsAppTemplates(account.id);
+      const template = templates.find(
+        (t) => t.name === templateInput.name && t.language === (templateInput.language || t.language)
+      );
+      if (!template || !template.sendable) {
+        return res.status(400).json({ ok: false, error: "Esa plantilla no está aprobada o no se puede enviar desde el CRM." });
+      }
+      const params = (Array.isArray(templateInput.params) ? templateInput.params : []).map((v) => String(v ?? "").trim());
+      const invalid = validateTemplateParams(template, params);
+      if (invalid) return res.status(400).json({ ok: false, error: invalid });
+      await sendWhatsAppTemplate(conversation.external_user_id, template.name, template.language, {
+        accountId: account.id,
+        bodyParams: params.slice(0, template.params),
+      });
+      text = renderTemplate(template, params);
+      templateName = template.name;
+    } else if (conversation.channel === "whatsapp") {
       if (!(await isWhatsAppCustomerWindowOpen(conversation.id))) {
         return res.status(409).json({
           ok: false,
@@ -6166,7 +6222,7 @@ app.post("/api/crm/conversations/:conversationId/reply", async (req, res) => {
       conversation_id: conversation.id,
       role: "assistant",
       content: text,
-      metadata: { sender: "human", author },
+      metadata: { sender: "human", author, ...(templateName ? { template: templateName } : {}) },
       account_id: account.id,
     });
     const updated = await updateConversationInboxState(
@@ -6199,18 +6255,42 @@ app.post("/api/crm/assistant", async (req, res) => {
     if (!String(agent.tone || "").trim()) return res.status(400).json({ ok: false, error: "Indica el tono de tu asistente." });
     if (!offers || !Object.keys(offers).length) return res.status(400).json({ ok: false, error: "Añade al menos un servicio con su precio." });
 
+    const pick = (source, keys) => Object.fromEntries(keys.filter((k) => source && k in source).map((k) => [k, source[k]]));
+    const body = req.body || {};
     const candidate = sanitizeAppConfig({
       ...current,
-      agent: { ...current.agent, tone: agent.tone, initial_message: agent.initial_message, faq: agent.faq },
+      agent: {
+        ...current.agent,
+        ...pick(agent, ["tone", "initial_message", "faq", "handoff_when", "offer_meeting_when", "meeting"]),
+      },
       offers,
       services: offers,
+      brand: { ...current.brand, ...pick(body.brand, ["website_url"]) },
+      business_profile: { ...current.business_profile, ...pick(body.business_profile, ["value_proposition", "audience", "human_team_label"]) },
+      contact: { ...current.contact, ...pick(body.contact, ["support_email"]) },
+      notifications: { ...current.notifications, ...pick(body.notifications, ["email_to", "notify_new_lead"]) },
+      knowledge_sources: {
+        ...current.knowledge_sources,
+        ...pick(body.knowledge_sources, ["website_urls", "internal_notes", "spreadsheet_mapping"]),
+      },
+      ...(body.automation_flows
+        ? {
+            automation_flows: Object.fromEntries(
+              Object.entries({ ...current.automation_flows, ...body.automation_flows }).map(([key, flow]) => [
+                key,
+                { ...(current.automation_flows?.[key] || {}), ...(body.automation_flows?.[key] || {}), ...(body.automation_flows?.[key] ? {} : flow) },
+              ])
+            ),
+          }
+        : {}),
+      ...(body.message_templates ? { message_templates: { ...current.message_templates, ...body.message_templates } } : {}),
     });
     const config = await saveAppConfig(candidate, { accountId: account.id });
     const version = await publishConfigVersion({
       accountId: account.id,
       config,
       createdBy: req.crmUser?.id || null,
-      changeSummary: "Mi asistente: tono, saludo, servicios y preguntas frecuentes",
+      changeSummary: "Mi asistente",
     });
     return res.json({ ok: true, config: redactAppConfigForClient(config), version: version?.version });
   } catch (error) {
@@ -6218,22 +6298,187 @@ app.post("/api/crm/assistant", async (req, res) => {
   }
 });
 
-// Videollamadas que el agente ha reservado en el calendario de la cuenta (próximas primero).
+// Qué sabe el asistente: páginas web y tablas indexadas para search_knowledge.
+app.get("/api/crm/knowledge/sources", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const { data, error } = await supabase
+      .from("kb_docs")
+      .select("url, title, metadata")
+      .eq("account_id", account.id)
+      .limit(10000);
+    if (error) throw error;
+    const sources = new Map();
+    for (const row of data || []) {
+      const item = sources.get(row.url) || { url: row.url, title: row.title, chunks: 0, synced_at: "" };
+      item.chunks += 1;
+      const synced = row.metadata?.synced_at || "";
+      if (synced > item.synced_at) item.synced_at = synced;
+      sources.set(row.url, item);
+    }
+    return res.json({ ok: true, sources: [...sources.values()] });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/knowledge/spreadsheet", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const headers = Array.isArray(req.body?.headers) ? req.body.headers.slice(0, 50).map((h) => String(h ?? "").slice(0, 100)) : [];
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 5000) : [];
+    if (!headers.length || !rows.length) return res.status(400).json({ ok: false, error: "El archivo no tiene filas con datos." });
+    const result = await syncSpreadsheetKnowledge({
+      accountId: account.id,
+      name: req.body?.name,
+      headers,
+      rows: rows.map((row) => (Array.isArray(row) ? row.slice(0, 50).map((v) => String(v ?? "").slice(0, 500)) : [])),
+    });
+    return res.json({ ok: true, source: result });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.delete("/api/crm/knowledge/source", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const url = String(req.query?.url || "").trim();
+    if (!url) return res.status(400).json({ ok: false, error: "Falta la fuente." });
+    await deleteKnowledgeSource({ accountId: account.id, url });
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Videollamadas reservadas en el calendario de la cuenta (desde hace 30 días, próximas primero).
 app.get("/api/crm/bookings", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
     const { data, error } = await supabase
       .from("bookings")
-      .select("id, conversation_id, lead_id, starts_at, ends_at, timezone, attendee_name, attendee_email, status")
+      .select("id, conversation_id, lead_id, starts_at, ends_at, timezone, attendee_name, attendee_email, status, provider_event_id")
       .eq("account_id", account.id)
       .eq("status", "confirmed")
-      .gte("starts_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+      .gte("starts_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
       .order("starts_at", { ascending: true })
-      .limit(50);
+      .limit(200);
     if (error) throw error;
-    return res.json({ ok: true, bookings: data || [] });
+    const config = await getAppConfig({ accountId: account.id }).catch(() => null);
+    return res.json({
+      ok: true,
+      bookings: data || [],
+      calendar_connected: isCalendarConnected(config?.integrations?.calendar),
+      meeting: config?.agent?.meeting || null,
+    });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+async function getAccountCalendar(accountId) {
+  const config = await getAppConfig({ accountId });
+  const calendarConfig = config?.integrations?.calendar;
+  if (!isCalendarConnected(calendarConfig)) throw new Error("Conecta Google Calendar en Canales para gestionar citas.");
+  return createGoogleCalendar(calendarConfig, config?.agent?.meeting || {});
+}
+
+async function getAccountBooking(accountId, bookingId) {
+  const { data, error } = await supabase.from("bookings").select("*").eq("id", bookingId).eq("account_id", accountId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// Avisa al cliente del cambio por su canal. El email lo envía Google con la invitación actualizada.
+async function notifyBookingChange({ accountId, booking, text, author }) {
+  const message = String(text || "").trim();
+  if (!message || !booking?.conversation_id) return { sent: false };
+  const conversation = await getConversationById(booking.conversation_id).catch(() => null);
+  if (!conversation || String(conversation.account_id) !== String(accountId)) return { sent: false };
+  if (conversation.channel === "whatsapp") {
+    if (!(await isWhatsAppCustomerWindowOpen(conversation.id))) return { sent: false, reason: "whatsapp_window_closed" };
+    await sendWhatsAppText(conversation.external_user_id, message, { accountId });
+  } else if (conversation.channel !== "web") {
+    return { sent: false };
+  }
+  await saveMessage({
+    conversation_id: conversation.id,
+    role: "assistant",
+    content: message,
+    metadata: { sender: "human", author },
+    account_id: accountId,
+  });
+  return { sent: true, channel: conversation.channel };
+}
+
+app.get("/api/crm/calendar/slots", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const calendar = await getAccountCalendar(account.id);
+    const fromDate = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query?.from || "")) ? String(req.query.from) : null;
+    const slots = await calendar.getAvailableSlots({ from_date: fromDate, days: Number(req.query?.days) || 7 });
+    return res.json({ ok: true, slots });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/bookings/:bookingId/reschedule", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const booking = await getAccountBooking(account.id, req.params.bookingId);
+    if (!booking || booking.status !== "confirmed") return res.status(404).json({ ok: false, error: "Cita no encontrada." });
+    const calendar = await getAccountCalendar(account.id);
+    const result = await calendar.rescheduleMeeting({ eventId: booking.provider_event_id, start: req.body?.start });
+    if (!result.ok) return res.status(409).json({ ok: false, error: "Ese hueco ya está ocupado. Elige otro." });
+    const { data: updated, error } = await supabase
+      .from("bookings")
+      .update({ starts_at: result.start, ends_at: result.end })
+      .eq("id", booking.id)
+      .eq("account_id", account.id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    const author = req.crmUser?.display_name || req.crmUser?.email || "equipo";
+    const notified = await notifyBookingChange({ accountId: account.id, booking, text: req.body?.message, author });
+    await trackConversationEvent({
+      conversation_id: booking.conversation_id,
+      event_type: "booking_rescheduled",
+      channel: "crm",
+      account_id: account.id,
+      payload: { booking_id: booking.id, from: booking.starts_at, to: result.start, author },
+    }).catch(() => null);
+    return res.json({ ok: true, booking: updated, notified });
+  } catch (error) {
+    return res.status(502).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/bookings/:bookingId/cancel", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const booking = await getAccountBooking(account.id, req.params.bookingId);
+    if (!booking || booking.status !== "confirmed") return res.status(404).json({ ok: false, error: "Cita no encontrada." });
+    const calendar = await getAccountCalendar(account.id);
+    await calendar.cancelMeeting({ eventId: booking.provider_event_id });
+    const { error } = await supabase.from("bookings").update({ status: "cancelled" }).eq("id", booking.id).eq("account_id", account.id);
+    if (error) throw error;
+    const author = req.crmUser?.display_name || req.crmUser?.email || "equipo";
+    const notified = await notifyBookingChange({ accountId: account.id, booking, text: req.body?.message, author });
+    return res.json({ ok: true, notified });
+  } catch (error) {
+    return res.status(502).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/crm/whatsapp/templates", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const templates = await listApprovedWhatsAppTemplates(account.id);
+    return res.json({ ok: true, templates });
+  } catch (error) {
+    return res.status(502).json({ ok: false, error: error.message });
   }
 });
 

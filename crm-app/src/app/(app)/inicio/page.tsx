@@ -75,7 +75,7 @@ export default function InicioPage() {
           <div className="n">{waiting.length}</div>
           <div className="d">{waiting.length ? "Pidieron hablar con una persona" : "Nadie pendiente. ¡Bien!"}</div>
         </Link>
-        <div className="card kpi">
+        <Link href="/agenda" className="card kpi" style={{ textDecoration: "none", color: "inherit" }}>
           <div className="l">Videollamadas reservadas</div>
           <div className="n">{bookings ? upcoming.length : "…"}</div>
           <div className="d">
@@ -83,7 +83,7 @@ export default function InicioPage() {
               ? `Próxima: ${new Date(upcoming[0].starts_at).toLocaleString("es-ES", { weekday: "short", hour: "2-digit", minute: "2-digit" })}`
               : "Ninguna próxima"}
           </div>
-        </div>
+        </Link>
       </div>
 
       <div className="home-grid">

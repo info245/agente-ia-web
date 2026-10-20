@@ -225,3 +225,8 @@ textarea.i { resize: vertical; }
   .board-tools .search { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Pestañas de Mi asistente */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.tabs .chip { padding: 6px 14px; font-weight: 500; }
+.tabs .chip[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }

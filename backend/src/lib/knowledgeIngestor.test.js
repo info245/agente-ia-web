@@ -23,3 +23,17 @@ test("un párrafo enorme se trocea con solape sin perder el prefijo", () => {
   assert.equal(chunks.length, 3);
   assert.ok(chunks.every((chunk) => chunk.startsWith("A\n")));
 });
+
+test("una tabla de referencias se trocea por filas con el nombre de cada columna", async () => {
+  const { chunkSpreadsheetRows, spreadsheetSourceUrl } = await import("./knowledgeIngestor.js");
+  const chunks = chunkSpreadsheetRows({
+    name: "Casos de éxito",
+    headers: ["Cliente", "Sector", "", "Resultado"],
+    rows: [["Clínica Sol", "Dental", "x", "-40 % CPL"], ["", "", "", ""], ["Óptica Mar", "Óptica", "", "+30 citas"]],
+  });
+  assert.equal(chunks.length, 1);
+  assert.equal(chunks[0], "Casos de éxito\nCliente: Clínica Sol · Sector: Dental · Columna 3: x · Resultado: -40 % CPL\nCliente: Óptica Mar · Sector: Óptica · Resultado: +30 citas");
+  const many = chunkSpreadsheetRows({ name: "T", headers: ["A"], rows: Array.from({ length: 300 }, (_, i) => [`fila ${i} ${"x".repeat(40)}`]) });
+  assert.ok(many.length > 1 && many.every((c) => c.length <= 1200 + 2));
+  assert.equal(spreadsheetSourceUrl("Casos de éxito 2026"), "tabla://casos-de-exito-2026");
+});
