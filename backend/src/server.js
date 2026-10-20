@@ -635,12 +635,10 @@ async function resolveExternalLeadAccount(req, payload = {}, { allowDefault = fa
   const accounts = await listAccounts();
 
   if (explicitInput) {
+    // "tmedia_global", "TMedia-Global" y "tmedia-global" son la misma cuenta.
+    const key = (value) => String(value || "").trim().toLowerCase().replace(/[s_]+/g, "-");
     const account =
-      accounts.find(
-        (item) =>
-          String(item.id || "").trim() === explicitInput ||
-          String(item.slug || "").trim() === explicitInput
-      ) || null;
+      accounts.find((item) => key(item.id) === key(explicitInput) || key(item.slug) === key(explicitInput)) || null;
     if (!account) {
       throw new Error(`No se encontro la cuenta indicada (${explicitInput}) para esta integracion.`);
     }
