@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "@/components/app-shell";
 import { api, ApiError } from "@/lib/api";
@@ -342,6 +343,8 @@ function TemplateComposer({ conversationId, defaults, onSent }: { conversationId
   );
 }
 
+const QUOTE_STATUS: Record<string, string> = { borrador: "borrador", draft: "borrador", sent: "enviada", enviado: "enviada", accepted: "aceptada", rejected: "rechazada" };
+
 function LeadPanel({ lead, stages, onSaved }: { lead: Lead; stages: { key: string; label?: string; is_active?: boolean }[]; onSaved: () => Promise<void> }) {
   const [note, setNote] = useState(lead.internal_notes || "");
   const [status, setStatus] = useState("");
@@ -384,6 +387,10 @@ function LeadPanel({ lead, stages, onSaved }: { lead: Lead; stages: { key: strin
         <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} onBlur={() => note !== (lead.internal_notes || "") && save({ internal_notes: note })} placeholder="Solo la ves tú" />
       </div>
       {status && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }} aria-live="polite">{status}</p>}
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <Link className="btn small" href={`/propuesta?lead=${lead.id}`}>Propuesta{lead.quote_status && lead.quote_status !== "sin_presupuesto" ? ` · ${QUOTE_STATUS[lead.quote_status] || lead.quote_status}` : ""}</Link>
+        <Link className="btn small" href={`/analisis?lead=${lead.id}`}>Análisis</Link>
+      </div>
       {/* El resumen automático es un volcado interno para el agente; aquí se ven sus datos ya ordenados arriba. */}
       {lead.next_action && (
         <div className="next">

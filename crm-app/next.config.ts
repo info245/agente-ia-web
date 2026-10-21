@@ -6,7 +6,12 @@ const apiUrl = (process.env.CRM_API_URL || "http://localhost:3000").replace(/\/$
 
 const nextConfig: NextConfig = {
   async rewrites() {
-    return [{ source: "/api/:path*", destination: `${apiUrl}/api/:path*` }];
+    return [
+      { source: "/api/:path*", destination: `${apiUrl}/api/:path*` },
+      // Vista de propuestas y análisis tal como la recibe el cliente.
+      { source: "/crm/quotes/:path*", destination: `${apiUrl}/crm/quotes/:path*` },
+      { source: "/crm/analysis/:path*", destination: `${apiUrl}/crm/analysis/:path*` },
+    ];
   },
   async redirects() {
     return [

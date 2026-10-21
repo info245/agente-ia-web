@@ -32,6 +32,7 @@ export type Lead = {
   pain_points?: string | null;
   summary?: string | null;
   crm_status?: string | null;
+  quote_status?: string | null;
   next_action?: string | null;
   internal_notes?: string | null;
   source_platform?: string | null;
