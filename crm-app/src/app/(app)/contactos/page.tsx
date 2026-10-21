@@ -7,6 +7,10 @@ import { api } from "@/lib/api";
 import { channelOf, leadName, OWNER_PILL, ownerOf, shortTime } from "@/lib/format";
 import type { Lead } from "@/lib/types";
 
+const day = (value?: string | null) => (value ? new Date(value).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "2-digit" }) : "—");
+// Último contacto: el último mensaje de la conversación, o la última actualización si no hay mensajes.
+const lastContact = (lead: Lead) => lead.last_message?.created_at || lead.updated_at || lead.created_at;
+
 export default function ContactosPage() {
   const { leads, config, configError, reloadLeads } = useSession();
   const router = useRouter();
@@ -160,7 +164,7 @@ export default function ContactosPage() {
                   <input type="checkbox" aria-label="Seleccionar todos" checked={rows.length > 0 && rows.every((l) => selected.has(l.id))}
                     onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((l) => l.id)) : new Set())} />
                 </th>
-                {["Nombre", "Email", "Teléfono", "Servicio", "Presupuesto", "Estado", ""].map((h) => <th key={h}>{h}</th>)}
+                {["Nombre", "Email", "Teléfono", "Servicio", "Presupuesto", "Entrada", "Último contacto", "Estado", ""].map((h) => <th key={h}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -175,6 +179,8 @@ export default function ContactosPage() {
                     <td style={{ whiteSpace: "nowrap" }}>{lead.phone || "—"}</td>
                     <td>{lead.interest_service || "—"}</td>
                     <td>{lead.budget_range || "—"}</td>
+                    <td style={{ whiteSpace: "nowrap", color: "var(--muted)" }}>{day(lead.created_at)}</td>
+                    <td style={{ whiteSpace: "nowrap", color: "var(--muted)" }}>{day(lastContact(lead))}</td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <select className="search" aria-label={`Estado de ${leadName(lead)}`} value={stageOf(lead) || ""} onChange={(e) => move(lead.id, e.target.value)}>
                         {stages.map((s) => <option key={s.key} value={s.key}>{s.label || s.key}</option>)}
