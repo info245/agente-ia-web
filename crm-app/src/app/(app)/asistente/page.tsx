@@ -471,6 +471,7 @@ function FollowUpsTab({ draft, update }: TabProps) {
         <li><b>Email si no contesta al WhatsApp:</b> WhatsApp a las 24 h y email a las 48 h.</li>
         <li><b>Email y WhatsApp a la vez:</b> pon las mismas horas en los dos pasos (el segundo sale una hora después).</li>
         <li>Si el cliente no tiene el dato de un paso (por ejemplo, no dejó teléfono), ese paso se salta.</li>
+        <li><b>Enlaces en el email:</b> escribe <code>[Quiero la beta](https://tuweb.com/beta)</code> y el cliente verá «Quiero la beta» como enlace. Las direcciones sueltas (https://…) también se pueden pulsar.</li>
       </ul>
       {entries.map(([key, flow]) => (
         <div className="card block" key={key}>

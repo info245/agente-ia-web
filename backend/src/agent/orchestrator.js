@@ -16,6 +16,7 @@ import { getNextBestAction } from "../lib/nextBestAction.js";
 import { searchKnowledge } from "../lib/kbRetriever.js";
 import { decideEmailSend } from "../lib/leadEmailPolicy.js";
 import { supabase } from "../lib/supabase.js";
+import { notifyAccount } from "../lib/pushNotifications.js";
 import { runAgentTurn } from "./engine.js";
 import { getCaptureFields, getMissingFields } from "./instructions.js";
 import { createGoogleCalendar, isCalendarConnected } from "./googleCalendar.js";
@@ -310,6 +311,20 @@ export async function processAgentV2Message({
     });
     state.lead = { ...state.lead, ...saved };
     state.leadChanged = true;
+  }
+  // Aviso al móvil: cuando un contacto deja por primera vez cómo contactarle, o pide una persona.
+  const reachable = (lead) => Boolean(lead?.email || lead?.phone);
+  const pushTitle = state.handoff
+    ? "Quiere hablar con una persona"
+    : state.leadChanged && !reachable(leadBefore) && reachable(state.lead)
+    ? "Nuevo contacto"
+    : "";
+  if (pushTitle) {
+    void notifyAccount(accountId, {
+      title: `${pushTitle}: ${state.lead?.name || state.lead?.email || state.lead?.phone || "sin nombre"}`,
+      body: [state.lead?.interest_service, sourceChannel === "whatsapp" ? "WhatsApp" : "Chat de la web"].filter(Boolean).join(" · "),
+      url: `/conversaciones?c=${context.conversationId}`,
+    });
   }
   if ((state.leadChanged || chatCompleted) && !state.notified) {
     const notification = await notifyLeadChanges(context, leadBefore, state.lead, { chatCompleted });

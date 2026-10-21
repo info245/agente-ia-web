@@ -73,6 +73,7 @@ export default function CanalesPage() {
       {oauthResult === "error" && <p className="alert error" role="alert" style={{ marginBottom: 14 }}>No se pudo conectar el calendario: {params.get("calendar_oauth_message")}</p>}
 
       <div className="channels">
+        <PushCard />
         <div className="card chan">
           <div className="ico" style={{ background: "var(--good-soft)", color: "var(--wa)" }}>WA</div>
           <div className="body">
@@ -192,6 +193,110 @@ function FormFirstWhatsApp({ config }: { config: AppConfig }) {
       {preview && <div className="m" style={{ maxWidth: "100%", background: "var(--surface-2)", border: "1px solid var(--line)" }}>{preview.body}</div>}
       <div><button className="btn primary small" disabled={busy || (enabled && !selected)} onClick={save}>{busy ? "Guardando…" : "Guardar"}</button></div>
       {msg && <p className={`alert ${msg.kind}`} role="status" style={{ margin: 0 }}>{msg.text}</p>}
+    </div>
+  );
+}
+
+// Avisos en el móvil: suscribe este dispositivo para recibir un aviso por cada lead nuevo.
+function urlKey(base64: string) {
+  const padded = (base64 + "=".repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/");
+  return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+}
+
+function PushCard() {
+  const [state, setState] = useState<"checking" | "unsupported" | "install" | "off" | "on" | "blocked">("checking");
+  const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+      const iphone = /iPhone|iPad/.test(navigator.userAgent);
+      const installed = window.matchMedia("(display-mode: standalone)").matches;
+      if (!supported) return setState(iphone && !installed ? "install" : "unsupported");
+      if (Notification.permission === "denied") return setState("blocked");
+      const reg = await navigator.serviceWorker.getRegistration("/sw.js").catch(() => undefined);
+      const sub = await reg?.pushManager.getSubscription().catch(() => null);
+      setState(sub ? "on" : "off");
+    })();
+  }, []);
+
+  async function enable() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      if ((await Notification.requestPermission()) !== "granted") {
+        setState("blocked");
+        throw new Error("No has dado permiso para mostrar avisos.");
+      }
+      const reg = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+      const { public_key } = await api<{ public_key: string }>("/crm/push/key");
+      if (!public_key) throw new Error("Los avisos aún no están configurados en el servidor.");
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlKey(public_key) });
+      await api("/crm/push/subscribe", { method: "POST", body: { subscription: sub.toJSON(), label: navigator.userAgent.slice(0, 120) } });
+      await api("/crm/push/test", { method: "POST", body: {} });
+      setState("on");
+      setMsg({ kind: "ok", text: "Activado. Te acabamos de mandar un aviso de prueba." });
+    } catch (err) {
+      setMsg({ kind: "error", text: (err as Error).message });
+    }
+    setBusy(false);
+  }
+
+  async function disable() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const sub = await (await navigator.serviceWorker.getRegistration("/sw.js"))?.pushManager.getSubscription();
+      if (sub) {
+        await api("/crm/push/unsubscribe", { method: "POST", body: { endpoint: sub.endpoint } });
+        await sub.unsubscribe();
+      }
+      setState("off");
+      setMsg({ kind: "ok", text: "Avisos desactivados en este dispositivo." });
+    } catch (err) {
+      setMsg({ kind: "error", text: (err as Error).message });
+    }
+    setBusy(false);
+  }
+
+  async function test() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api<{ sent: number }>("/crm/push/test", { method: "POST", body: {} });
+      setMsg({ kind: "ok", text: `Aviso de prueba enviado a ${r.sent} dispositivo${r.sent === 1 ? "" : "s"}.` });
+    } catch (err) {
+      setMsg({ kind: "error", text: (err as Error).message });
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="card chan">
+      <div className="ico" style={{ background: "var(--accent-soft)", color: "var(--accent)" }}>🔔</div>
+      <div className="body">
+        <h2>Avisos en este móvil</h2>
+        <p>Te avisamos al momento cuando entra un lead de formulario, cuando alguien deja su contacto en el chat o cuando pide hablar con una persona.</p>
+        {state === "checking" && <p>Comprobando…</p>}
+        {state === "install" && (
+          <p className="alert warn" style={{ margin: 0 }}>
+            En iPhone, primero instala el CRM: pulsa <b>Compartir</b> → <b>Añadir a pantalla de inicio</b>, ábrelo desde ese icono y vuelve aquí.
+          </p>
+        )}
+        {state === "unsupported" && <p className="alert warn" style={{ margin: 0 }}>Este navegador no admite avisos. Prueba con Chrome, Edge o Safari.</p>}
+        {state === "blocked" && <p className="alert warn" style={{ margin: 0 }}>Los avisos están bloqueados para esta web. Actívalos en los ajustes del navegador y recarga.</p>}
+        {state === "off" && <button className="btn primary" disabled={busy} onClick={enable}>{busy ? "Activando…" : "Activar avisos aquí"}</button>}
+        {state === "on" && (
+          <>
+            <span className="pill p-good"><span className="dot" />Activados en este dispositivo</span>{" "}
+            <button className="btn ghost small" disabled={busy} onClick={test}>Enviar prueba</button>
+            <button className="btn ghost small" disabled={busy} onClick={disable}>Desactivar</button>
+          </>
+        )}
+        {msg && <p className={`alert ${msg.kind}`} role="status" style={{ margin: "8px 0 0" }}>{msg.text}</p>}
+      </div>
     </div>
   );
 }

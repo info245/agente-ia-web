@@ -57,6 +57,7 @@ export default function PropuestaPage() {
 
   if (!leadId) return <section className="page"><p className="empty">Abre la propuesta desde la ficha de un contacto en Conversaciones.</p></section>;
   if (quote === undefined || !leads) return <p className="loading">Cargando…</p>;
+  if (!lead) return <section className="page"><p className="empty">Este contacto no está en la cuenta seleccionada. Cambia de cuenta abajo a la izquierda o vuelve a <Link href="/contactos">Contactos</Link>.</p></section>;
 
   const set = (part: Partial<Draft>) => setD((prev) => ({ ...prev, ...part }));
   const setItem = (i: number, part: Partial<Item>) => set({ items: d.items.map((it, j) => (j === i ? { ...it, ...part } : it)) });
