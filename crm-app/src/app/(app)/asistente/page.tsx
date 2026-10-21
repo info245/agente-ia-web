@@ -464,8 +464,14 @@ function FollowUpsTab({ draft, update }: TabProps) {
     <>
       <p className="hint" style={{ margin: "0 0 12px" }}>
         Mensajes que tu asistente envía solo cuando un cliente deja de responder. Usa <b>{"{nombre}"}</b> y <b>{"{servicio}"}</b> para personalizarlos.
-        Si el cliente no tiene el dato de un paso (por ejemplo, no dejó teléfono), ese paso se salta y se pasa al siguiente.
       </p>
+      <ul className="hint" style={{ margin: "0 0 12px", paddingLeft: 18 }}>
+        <li>Las horas de cada paso cuentan desde el <b>último mensaje</b> de la conversación.</li>
+        <li>En cuanto el cliente <b>contesta</b>, la secuencia se para y no se envía nada más.</li>
+        <li><b>Email si no contesta al WhatsApp:</b> WhatsApp a las 24 h y email a las 48 h.</li>
+        <li><b>Email y WhatsApp a la vez:</b> pon las mismas horas en los dos pasos (el segundo sale una hora después).</li>
+        <li>Si el cliente no tiene el dato de un paso (por ejemplo, no dejó teléfono), ese paso se salta.</li>
+      </ul>
       {entries.map(([key, flow]) => (
         <div className="card block" key={key}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
@@ -499,17 +505,17 @@ function FollowUpsTab({ draft, update }: TabProps) {
                     <input type="checkbox" checked={step.active !== false} onChange={(e) => setStep(key, i, { active: e.target.checked })} />
                     Paso {i + 1}
                   </label>
-                  <select className="i" style={{ width: 130 }} aria-label={`Canal del paso ${i + 1}`} value={isWa ? "whatsapp" : "email"} onChange={(e) => setStep(key, i, { channel: e.target.value })}>
-                    <option value="whatsapp">por WhatsApp</option>
-                    <option value="email">por email</option>
-                  </select>
-                  <span style={{ color: "var(--muted)", fontSize: 13 }}>a los</span>
+                  <span style={{ color: "var(--muted)", fontSize: 13 }}>{i === 0 ? "Si no ha contestado a las" : "Si sigue sin contestar a las"}</span>
                   <input className="i" type="number" min={1} style={{ width: 80 }} aria-label="Espera" value={step.delay_value || "24"} onChange={(e) => setStep(key, i, { delay_value: e.target.value })} />
                   <select className="i" style={{ width: 110 }} aria-label="Unidad" value={step.delay_unit || "hours"} onChange={(e) => setStep(key, i, { delay_unit: e.target.value })}>
                     <option value="hours">horas</option>
                     <option value="days">días</option>
                   </select>
-                  <span style={{ color: "var(--muted)", fontSize: 13 }}>sin respuesta</span>
+                  <span style={{ color: "var(--muted)", fontSize: 13 }}>, enviar</span>
+                  <select className="i" style={{ width: 140 }} aria-label={`Canal del paso ${i + 1}`} value={isWa ? "whatsapp" : "email"} onChange={(e) => setStep(key, i, { channel: e.target.value })}>
+                    <option value="whatsapp">un WhatsApp</option>
+                    <option value="email">un email</option>
+                  </select>
                   <button className="btn ghost small" style={{ marginLeft: "auto" }} aria-label={`Quitar paso ${i + 1}`} onClick={() => removeStep(key, i)}>Quitar</button>
                 </div>
                 {!isWa && <input className="i" aria-label="Asunto del email" placeholder="Asunto del email" value={tpl.subject || ""} onChange={(e) => setTemplate(step.template_key || "", { subject: e.target.value })} />}
