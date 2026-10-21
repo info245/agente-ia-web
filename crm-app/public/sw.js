@@ -5,7 +5,8 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(data.title || "Nuevo aviso", {
       body: data.body || "",
       icon: "/icon",
-      badge: "/icon",
+      // Android pinta el icono pequeño de la barra en blanco: el logo sin fondo es justo eso.
+      badge: "/brand-logo.png",
       data: { url: data.url || "/conversaciones" },
     })
   );
