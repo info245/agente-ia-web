@@ -39,10 +39,10 @@ const icon = (d: React.ReactNode) => (
 );
 const NAV = [
   { href: "/inicio", label: "Inicio", icon: icon(<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />) },
-  { href: "/conversaciones", label: "Conversaciones", icon: icon(<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />) },
+  { href: "/conversaciones", label: "Conversaciones", short: "Mensajes", icon: icon(<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />) },
   { href: "/contactos", label: "Contactos", icon: icon(<><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 3.5a4 4 0 0 1 0 9M22 21a7 7 0 0 0-4-6.3" /></>) },
   { href: "/agenda", label: "Agenda", icon: icon(<><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></>) },
-  { href: "/asistente", label: "Mi asistente", icon: icon(<><path d="M12 3v3M5 9h14a2 2 0 0 1 2 2v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a2 2 0 0 1 2-2z" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /></>) },
+  { href: "/asistente", label: "Mi asistente", short: "Asistente", icon: icon(<><path d="M12 3v3M5 9h14a2 2 0 0 1 2 2v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a2 2 0 0 1 2-2z" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /></>) },
   { href: "/canales", label: "Canales", icon: icon(<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />) },
 ];
 
@@ -121,7 +121,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {[...NAV, ...(user.role === "super_admin" ? [AGENCY_NAV] : [])].map((item) => (
             <Link key={item.href} href={item.href} className="nav" aria-current={pathname.startsWith(item.href) ? "page" : undefined}>
               {item.icon}
-              {item.label}
+              <span className="lbl">{item.label}</span>
+              <span className="lbl-short">{(item as { short?: string }).short || item.label}</span>
               {item.href === "/conversaciones" && waiting > 0 && <span className="count" aria-label={`${waiting} te esperan`}>{waiting}</span>}
             </Link>
           ))}
