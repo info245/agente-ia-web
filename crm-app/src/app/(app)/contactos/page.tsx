@@ -17,6 +17,8 @@ export default function ContactosPage() {
   const [over, setOver] = useState("");
   const [error, setError] = useState("");
   const [moved, setMoved] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const stages = (config?.pipeline?.stages || []).filter((s) => s.is_active !== false);
   if (!config) return <ConfigPending error={configError} />;
@@ -41,6 +43,26 @@ export default function ContactosPage() {
       setError((err as Error).message);
     }
   }
+
+  // Acciones sobre varios contactos a la vez: una petición por contacto, en orden.
+  async function bulk(action: "delete" | string) {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (action === "delete" && !window.confirm(`¿Eliminar ${ids.length} contacto${ids.length === 1 ? "" : "s"}? Se borran también sus conversaciones y mensajes. No se puede deshacer.`)) return;
+    setBulkBusy(true);
+    setError("");
+    try {
+      for (const id of ids) {
+        await api(`/crm/leads/${id}`, action === "delete" ? { method: "DELETE" } : { method: "PATCH", body: { crm_status: action } });
+      }
+      setSelected(new Set());
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    await reloadLeads();
+    setBulkBusy(false);
+  }
+  const toggle = (id: string) => setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   async function move(leadId: string, stage: string) {
     setMoved((m) => ({ ...m, [leadId]: stage }));
@@ -83,6 +105,18 @@ export default function ContactosPage() {
         </div>
       </div>
       {error && <p className="alert error" role="alert">{error}</p>}
+      {view === "list" && selected.size > 0 && (
+        <div className="card" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 14px", marginBottom: 12 }}>
+          <b>{selected.size} seleccionado{selected.size === 1 ? "" : "s"}</b>
+          <select className="search" style={{ width: "auto" }} aria-label="Cambiar estado de los seleccionados" value="" disabled={bulkBusy} onChange={(e) => e.target.value && bulk(e.target.value)}>
+            <option value="">Cambiar estado a…</option>
+            {stages.map((s) => <option key={s.key} value={s.key}>{s.label || s.key}</option>)}
+          </select>
+          <button className="btn small" disabled={bulkBusy} onClick={() => bulk("delete")}>Eliminar</button>
+          <button className="btn ghost small" disabled={bulkBusy} onClick={() => setSelected(new Set())}>Quitar selección</button>
+          {bulkBusy && <span className="hint" style={{ margin: 0 }}>Aplicando…</span>}
+        </div>
+      )}
 
       {view === "board" ? (
         <div className="board">
@@ -121,15 +155,22 @@ export default function ContactosPage() {
         <div className="card" style={{ overflowX: "auto" }}>
           <table className="table">
             <thead>
-              <tr>{["Nombre", "Apellidos", "Email", "Teléfono", "Servicio", "Presupuesto", "Estado", ""].map((h) => <th key={h}>{h}</th>)}</tr>
+              <tr>
+                <th style={{ width: 36 }}>
+                  <input type="checkbox" aria-label="Seleccionar todos" checked={rows.length > 0 && rows.every((l) => selected.has(l.id))}
+                    onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((l) => l.id)) : new Set())} />
+                </th>
+                {["Nombre", "Email", "Teléfono", "Servicio", "Presupuesto", "Estado", ""].map((h) => <th key={h}>{h}</th>)}
+              </tr>
             </thead>
             <tbody>
               {rows.map((lead) => {
-                const [first, ...rest] = String(lead.name || "").trim().split(/s+/);
                 return (
-                  <tr key={lead.id} onClick={() => open(lead)}>
-                    <td><b>{first || leadName(lead)}</b></td>
-                    <td>{rest.join(" ") || "—"}</td>
+                  <tr key={lead.id} onClick={() => open(lead)} aria-selected={selected.has(lead.id)}>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" aria-label={`Seleccionar a ${leadName(lead)}`} checked={selected.has(lead.id)} onChange={() => toggle(lead.id)} />
+                    </td>
+                    <td><b>{leadName(lead)}</b></td>
                     <td>{lead.email || "—"}</td>
                     <td style={{ whiteSpace: "nowrap" }}>{lead.phone || "—"}</td>
                     <td>{lead.interest_service || "—"}</td>
