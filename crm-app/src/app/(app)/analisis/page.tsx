@@ -49,6 +49,7 @@ export default function AnalisisPage() {
 
   if (!leadId) return <section className="page"><p className="empty">Abre el análisis desde la ficha de un contacto en Conversaciones.</p></section>;
   if (analysis === undefined || !leads) return <p className="loading">Cargando…</p>;
+  if (!lead) return <section className="page"><p className="empty">Este contacto no está en la cuenta seleccionada. Cambia de cuenta abajo a la izquierda o vuelve a <Link href="/contactos">Contactos</Link>.</p></section>;
 
   const set = (part: Partial<Draft>) => setD((prev) => ({ ...prev, ...part }));
   const sent = analysis?.status === "sent";

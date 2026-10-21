@@ -47,6 +47,8 @@ import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appC
 import { runAgentTurn } from "./agent/engine.js";
 import { createGoogleCalendar, isCalendarConnected } from "./agent/googleCalendar.js";
 import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParams } from "./lib/whatsappTemplates.js";
+import { emailBodyToHtml, emailBodyToText } from "./lib/emailLinks.js";
+import { addSubscription, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
 import { supabase } from "./lib/supabase.js";
 import { searchKnowledge } from "./lib/kbRetriever.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
@@ -1840,7 +1842,7 @@ function buildAutomationEmailHtml({ subject, body }) {
     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111;">
       <h2 style="margin-bottom: 12px;">${escapeHtml(subject || "Seguimos en contacto")}</h2>
       <div style="font-size: 14px; background: #f7f7f7; border: 1px solid #ddd; padding: 14px; border-radius: 8px;">
-        ${nl2brHtml(body || "")}
+        ${emailBodyToHtml(body || "")}
       </div>
     </div>
   `;
@@ -1973,7 +1975,7 @@ async function sendAutomationStep({
     const sendResult = await sendTransactionalEmail({
       to: lead.email,
       subject: subject || "Seguimos en contacto",
-      text: body,
+      text: emailBodyToText(body),
       html: buildAutomationEmailHtml({
         subject: subject || "Seguimos en contacto",
         body,
@@ -5586,6 +5588,12 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       leadId: lead.id,
     });
 
+    void notifyAccount(account.id, {
+      title: `Nuevo lead: ${leadName || lead.email || "sin nombre"}`,
+      body: [leadInterestService, sourceFormName || sourcePlatform].filter(Boolean).join(" · "),
+      url: `/conversaciones?c=${conversation.id}`,
+    });
+
     // Si el formulario trae web, se deja el análisis preparado como borrador.
     if (findLeadWebsite({ ...leadPayload, internal_notes: internalNotes }, { formData: customFields })) {
       draftAnalysisInBackground({ leadId: lead.id, accountId: account.id, trigger: "external_lead" });
@@ -6597,6 +6605,44 @@ app.post("/api/crm/bookings/:bookingId/cancel", async (req, res) => {
     return res.json({ ok: true, notified });
   } catch (error) {
     return res.status(502).json({ ok: false, error: error.message });
+  }
+});
+
+// Avisos en el móvil: cada dispositivo se suscribe desde Canales y recibe un aviso por lead nuevo.
+app.get("/api/crm/push/key", (req, res) => {
+  res.json({ ok: true, public_key: pushPublicKey() });
+});
+
+app.post("/api/crm/push/subscribe", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const subscription = req.body?.subscription;
+    if (!pushPublicKey()) return res.status(503).json({ ok: false, error: "Los avisos en el móvil aún no están configurados en el servidor." });
+    if (!isValidSubscription(subscription)) return res.status(400).json({ ok: false, error: "Suscripción no válida." });
+    await addSubscription(account.id, subscription, { userId: req.crmUser?.id || null, label: req.body?.label });
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/push/unsubscribe", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    await removeSubscription(account.id, String(req.body?.endpoint || ""));
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/push/test", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const result = await notifyAccount(account.id, { title: "Avisos activados", body: "Así te llegará cada lead nuevo.", url: "/inicio" });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 
