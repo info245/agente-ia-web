@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import type { Booking } from "@/lib/types";
 
@@ -14,6 +15,7 @@ const when = (iso: string) => `${dayKey(iso)} a las ${time(iso)}`;
 const firstName = (b: Booking) => (b.attendee_name || "").split(" ")[0] || "";
 
 export default function AgendaPage() {
+  const { can } = useSession();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<{ booking: Booking; mode: "move" | "cancel" } | null>(null);
@@ -64,8 +66,10 @@ export default function AgendaPage() {
                   <span>{b.attendee_email}{b.ends_at ? ` · hasta las ${time(b.ends_at)}` : ""}</span>
                 </div>
                 {b.conversation_id && <Link className="btn small" href={`/conversaciones?c=${b.conversation_id}`}>Conversación</Link>}
+                {can("write") && <>
                 <button className="btn small" disabled={!data.calendar_connected} onClick={() => { setNotice(null); setEditing({ booking: b, mode: "move" }); }}>Cambiar hora</button>
                 <button className="btn small" disabled={!data.calendar_connected} onClick={() => { setNotice(null); setEditing({ booking: b, mode: "cancel" }); }}>Cancelar</button>
+                </>}
               </div>
               {editing?.booking.id === b.id && (
                 <ChangeBooking

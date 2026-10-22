@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ConfigPending, useSession } from "@/components/app-shell";
+import { ConfigPending, useSession, useTeamMembers } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import { channelOf, leadName, OWNER_PILL, ownerOf, shortTime } from "@/lib/format";
 import type { Lead } from "@/lib/types";
@@ -12,7 +12,9 @@ const day = (value?: string | null) => (value ? new Date(value).toLocaleDateStri
 const lastContact = (lead: Lead) => lead.last_message?.created_at || lead.updated_at || lead.created_at;
 
 export default function ContactosPage() {
-  const { leads, config, configError, reloadLeads } = useSession();
+  const { leads, config, configError, reloadLeads, user, can } = useSession();
+  const members = useTeamMembers();
+  const [mine, setMine] = useState(false);
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"board" | "list">("list");
@@ -31,6 +33,7 @@ export default function ContactosPage() {
   const q = query.trim().toLowerCase();
   const visible = leads
     .map((lead) => (moved[lead.id] ? { ...lead, crm_status: moved[lead.id] } : lead))
+    .filter((lead) => !mine || lead.assigned_to === user.id)
     .filter((lead) => !q || [lead.name, lead.email, lead.phone, lead.company_name, lead.interest_service].some((v) => String(v || "").toLowerCase().includes(q)));
   const stageOf = (lead: Lead) => (stages.some((s) => s.key === lead.crm_status) ? lead.crm_status : stages[0]?.key);
   const services = [...new Set(leads.map((l) => l.interest_service).filter(Boolean) as string[])].sort();
@@ -68,6 +71,16 @@ export default function ContactosPage() {
   }
   const toggle = (id: string) => setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
+  async function assign(leadId: string, userId: string) {
+    setError("");
+    try {
+      await api(`/crm/leads/${leadId}`, { method: "PATCH", body: { assigned_to: userId } });
+      await reloadLeads();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   async function move(leadId: string, stage: string) {
     setMoved((m) => ({ ...m, [leadId]: stage }));
     setError("");
@@ -92,6 +105,7 @@ export default function ContactosPage() {
           <p className="sub">Tu asistente los mueve de estado; tú solo corriges si hace falta.</p>
         </div>
         <div className="board-tools">
+          <button className="chip" aria-pressed={mine} onClick={() => setMine(!mine)}>Mis contactos</button>
           <input className="search" type="search" placeholder="Buscar contacto" aria-label="Buscar contacto" value={query} onChange={(e) => setQuery(e.target.value)} />
           {view === "list" && (
             <>
@@ -109,14 +123,14 @@ export default function ContactosPage() {
         </div>
       </div>
       {error && <p className="alert error" role="alert">{error}</p>}
-      {view === "list" && selected.size > 0 && (
+      {view === "list" && selected.size > 0 && can("write") && (
         <div className="card" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", padding: "10px 14px", marginBottom: 12 }}>
           <b>{selected.size} seleccionado{selected.size === 1 ? "" : "s"}</b>
           <select className="search" style={{ width: "auto" }} aria-label="Cambiar estado de los seleccionados" value="" disabled={bulkBusy} onChange={(e) => e.target.value && bulk(e.target.value)}>
             <option value="">Cambiar estado a…</option>
             {stages.map((s) => <option key={s.key} value={s.key}>{s.label || s.key}</option>)}
           </select>
-          <button className="btn small" disabled={bulkBusy} onClick={() => bulk("delete")}>Eliminar</button>
+          {can("delete") && <button className="btn small" disabled={bulkBusy} onClick={() => bulk("delete")}>Eliminar</button>}
           <button className="btn ghost small" disabled={bulkBusy} onClick={() => setSelected(new Set())}>Quitar selección</button>
           {bulkBusy && <span className="hint" style={{ margin: 0 }}>Aplicando…</span>}
         </div>
@@ -144,7 +158,7 @@ export default function ContactosPage() {
                 {items.map((lead) => {
                   const owner = OWNER_PILL[ownerOf(lead)];
                   return (
-                    <button key={lead.id} className="tile" draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", lead.id)} onClick={() => open(lead)}>
+                    <button key={lead.id} className="tile" draggable={can("write")} onDragStart={(e) => e.dataTransfer.setData("text/plain", lead.id)} onClick={() => open(lead)}>
                       <b>{leadName(lead)}</b>
                       <div className="svc">{[lead.interest_service, lead.business_type].filter(Boolean).join(" · ") || channelOf(lead).label}</div>
                       <div className="row"><span className={`pill ${owner.css}`}>{owner.label}</span><span>{shortTime(lead.updated_at || lead.created_at)}</span></div>
@@ -164,7 +178,7 @@ export default function ContactosPage() {
                   <input type="checkbox" aria-label="Seleccionar todos" checked={rows.length > 0 && rows.every((l) => selected.has(l.id))}
                     onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((l) => l.id)) : new Set())} />
                 </th>
-                {["Nombre", "Email", "Teléfono", "Servicio", "Presupuesto", "Entrada", "Último contacto", "Notas internas", "Estado", ""].map((h) => <th key={h}>{h}</th>)}
+                {["Nombre", "Email", "Teléfono", "Servicio", "Presupuesto", "Entrada", "Último contacto", "Asignado a", "Notas internas", "Estado", ""].map((h) => <th key={h}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -181,14 +195,20 @@ export default function ContactosPage() {
                     <td>{lead.budget_range || "—"}</td>
                     <td style={{ whiteSpace: "nowrap", color: "var(--muted)" }}>{day(lead.created_at)}</td>
                     <td style={{ whiteSpace: "nowrap", color: "var(--muted)" }}>{day(lastContact(lead))}</td>
-                    <td onClick={(e) => e.stopPropagation()}><NoteCell lead={lead} /></td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      <select className="search" aria-label={`Estado de ${leadName(lead)}`} value={stageOf(lead) || ""} onChange={(e) => move(lead.id, e.target.value)}>
+                      <select className="search" aria-label={`Asignado a: ${leadName(lead)}`} disabled={!can("write")} value={lead.assigned_to || ""} onChange={(e) => assign(lead.id, e.target.value)}>
+                        <option value="">Sin asignar</option>
+                        {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+                      </select>
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}><NoteCell lead={lead} readOnly={!can("write")} /></td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <select className="search" disabled={!can("write")} aria-label={`Estado de ${leadName(lead)}`} value={stageOf(lead) || ""} onChange={(e) => move(lead.id, e.target.value)}>
                         {stages.map((s) => <option key={s.key} value={s.key}>{s.label || s.key}</option>)}
                       </select>
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      <button className="btn ghost small" aria-label={`Eliminar a ${leadName(lead)}`} onClick={() => remove(lead)}>Eliminar</button>
+                      {can("delete") && <button className="btn ghost small" aria-label={`Eliminar a ${leadName(lead)}`} onClick={() => remove(lead)}>Eliminar</button>}
                     </td>
                   </tr>
                 );
@@ -203,7 +223,7 @@ export default function ContactosPage() {
 }
 
 // Nota interna editable en la propia fila: se guarda al salir del campo.
-function NoteCell({ lead }: { lead: Lead }) {
+function NoteCell({ lead, readOnly }: { lead: Lead; readOnly: boolean }) {
   const [note, setNote] = useState(lead.internal_notes || "");
   const [savedNote, setSavedNote] = useState(lead.internal_notes || "");
   const [state, setState] = useState<"" | "saving" | "saved" | "error">("");
@@ -225,7 +245,8 @@ function NoteCell({ lead }: { lead: Lead }) {
       className="search"
       rows={1}
       aria-label={`Notas internas de ${leadName(lead)}`}
-      placeholder="Añadir nota…"
+      placeholder={readOnly ? "" : "Añadir nota…"}
+      readOnly={readOnly}
       title={state === "error" ? "No se pudo guardar" : state === "saved" ? "Guardada" : note}
       value={note}
       onChange={(e) => { setNote(e.target.value); setState(""); }}

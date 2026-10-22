@@ -65,11 +65,16 @@ import {
   createCrmUser,
   createPasswordSetupToken,
   getCrmUserById,
+  getCrmUserInAccount,
+  getTeamSettings,
   listCrmUsers,
+  saveTeamSettings,
+  updateCrmUserInAccount,
   setCrmUserPasswordFromToken,
   updateCrmUserStatus,
   verifyCrmUserCredentials,
 } from "./lib/authStore.js";
+import { ACCOUNT_ROLES, can, createCrmPermissionMiddleware, permissionsFor, requestAccountInput } from "./lib/permissions.js";
 import { uploadBrandLogo } from "./lib/storageStore.js";
 import {
   getWhatsAppChannelForAccount,
@@ -262,7 +267,25 @@ app.get("/widget.js", (_req, res) => {
 app.get("/crm", (_req, res) => {
   res.sendFile(path.join(crmPublicDir, "index.html"));
 });
-app.use("/api/crm", requireCrmAuth());
+// Contacto al que pertenece un recurso, para el comercial que solo ve lo suyo. undefined = no existe en la cuenta.
+async function getLeadOwner(accountId, { type, id }) {
+  if (type === "bookings") {
+    const { data, error } = await supabase.from("bookings").select("lead_id").eq("id", id).eq("account_id", accountId).maybeSingle();
+    if (error && error.code !== "22P02") throw error;
+    return data?.lead_id ? getLeadOwner(accountId, { type: "leads", id: data.lead_id }) : undefined;
+  }
+  const { data, error } = await supabase
+    .from("leads")
+    .select("assigned_to")
+    .eq(type === "leads" ? "id" : "conversation_id", id)
+    .eq("account_id", accountId)
+    .limit(1)
+    .maybeSingle();
+  if (error && error.code !== "22P02") throw error;
+  return data ? data.assigned_to : undefined;
+}
+// Permisos por rol para todo /api/crm/*: un único punto de control (ver lib/permissions.js).
+app.use("/api/crm", requireCrmAuth(), createCrmPermissionMiddleware({ getTeamSettings, getLeadOwner }));
 
 const PORT = process.env.PORT || 3000;
 const BUILD_TAG = "conversation-audit-v6-beta-crm";
@@ -523,9 +546,16 @@ async function fetchGoogleConnectedEmail(accessToken) {
   return String(payload.email || "").trim();
 }
 
+// Usuario cliente: siempre su cuenta. Si ya no existe, error (resolveAccount caería en la cuenta por defecto).
+async function resolveUserAccount(user) {
+  const account = await resolveAccount(requestAccountInput(user));
+  if (String(account?.id || "") !== String(user.account_id)) throw new Error("La cuenta de tu usuario no existe.");
+  return account;
+}
+
 async function resolveRequestAccount(req) {
   if (req.crmUser?.role && req.crmUser.role !== "super_admin") {
-    return resolveAccount(req.crmUser.account_id);
+    return resolveUserAccount(req.crmUser);
   }
 
   const accountInput =
@@ -550,7 +580,7 @@ function getExplicitRequestAccountInput(req) {
 
 async function resolveExplicitRequestAccount(req) {
   if (req.crmUser?.role && req.crmUser.role !== "super_admin") {
-    return resolveAccount(req.crmUser.account_id);
+    return resolveUserAccount(req.crmUser);
   }
 
   const accountInput = String(getExplicitRequestAccountInput(req) || "").trim();
@@ -623,7 +653,7 @@ function isRequestFromAllowedDomain(req, appConfig = {}) {
 
 async function resolveExternalLeadAccount(req, payload = {}, { allowDefault = false } = {}) {
   if (req.crmUser?.role && req.crmUser.role !== "super_admin") {
-    const account = await resolveAccount(req.crmUser.account_id);
+    const account = await resolveUserAccount(req.crmUser);
     const accountConfig = await getPublishedAppConfig({ accountId: account.id }).catch(() => null);
     return { account, accountConfig, matchedBy: "crm_user" };
   }
@@ -2807,7 +2837,7 @@ app.get("/api/crm/leads", async (req, res) => {
     const account = await resolveRequestAccount(req);
     const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 200));
     const offset = Math.max(0, Number(req.query.offset) || 0);
-    const leads = await listCrmLeads({ limit: limit + 1, offset, accountId: account.id });
+    const leads = await listCrmLeads({ limit: limit + 1, offset, accountId: account.id, assignedTo: req.crmLeadOwner });
     const hasMore = leads.length > limit;
     const page = hasMore ? leads.slice(0, limit) : leads;
 
@@ -2876,6 +2906,94 @@ app.get("/api/crm/accounts", async (req, res) => {
         : allAccounts.filter((account) => String(account.id) === String(activeAccount.id));
 
     res.json({ ok: true, accounts, active_account: activeAccount });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Equipo de la cuenta. El middleware de /api/crm ya exige el permiso "team" (Propietario o agencia).
+app.get("/api/crm/team", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const [users, settings] = await Promise.all([listCrmUsers({ accountId: account.id }), getTeamSettings(account.id)]);
+    res.json({ ok: true, users, settings });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Nombres del equipo para asignar contactos (lo ve cualquiera con acceso a Contactos).
+app.get("/api/crm/team/members", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const users = await listCrmUsers({ accountId: account.id });
+    res.json({
+      ok: true,
+      members: users.filter((u) => u.status === "active").map((u) => ({ id: u.id, display_name: u.display_name || u.email })),
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/team", async (req, res) => {
+  try {
+    // Solo roles de cuenta: desde aquí nunca se crea un usuario de agencia.
+    if (!ACCOUNT_ROLES.includes(String(req.body?.role || ""))) return res.status(400).json({ ok: false, error: "Elige un rol válido." });
+    const account = await resolveRequestAccount(req);
+    const user = await createCrmUser({
+      email: req.body?.email,
+      display_name: req.body?.display_name,
+      role: req.body?.role,
+      account_id: account.id,
+      status: "invited",
+      require_password: false,
+    });
+    const invite = await sendPasswordSetupInvite({ req, user, accountName: account.name });
+    res.json({ ok: true, user, invite_sent: invite?.email?.ok !== false, setup_url: invite?.setup_url });
+  } catch (error) {
+    const message = String(error?.message || "");
+    if (/duplicate|unique/i.test(message)) return res.status(409).json({ ok: false, error: "Ya existe un usuario con ese email." });
+    if (/crm_users_role_check/.test(message)) {
+      return res.status(500).json({ ok: false, error: "Falta ejecutar sql/017_crm_roles.sql en Supabase para usar los nuevos roles." });
+    }
+    res.status(400).json({ ok: false, error: message });
+  }
+});
+
+app.put("/api/crm/team/settings", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const settings = await saveTeamSettings(account.id, req.body || {});
+    res.json({ ok: true, settings });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.patch("/api/crm/team/:userId", async (req, res) => {
+  try {
+    if (req.params.userId === req.crmUser.id) {
+      return res.status(400).json({ ok: false, error: "No puedes cambiar tu propio rol ni desactivarte." });
+    }
+    const account = await resolveRequestAccount(req);
+    const user = await updateCrmUserInAccount(req.params.userId, account.id, {
+      role: req.body?.role,
+      status: req.body?.status,
+    });
+    res.json({ ok: true, user });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/team/:userId/invite", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const user = await getCrmUserInAccount(req.params.userId, account.id);
+    if (!user) return res.status(404).json({ ok: false, error: "Usuario no encontrado." });
+    const invite = await sendPasswordSetupInvite({ req, user, accountName: account.name });
+    res.json({ ok: true, invite_sent: invite?.email?.ok !== false, setup_url: invite?.setup_url });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -3003,6 +3121,7 @@ app.get("/api/auth/me", async (req, res) => {
       user: {
         ...req.crmUser,
         account,
+        permissions: permissionsFor(req.crmUser.role),
       },
     });
   } catch (error) {
@@ -3729,7 +3848,9 @@ app.post("/api/crm/config/publish-agent", async (req, res) => {
   }
 });
 
-app.post("/crm/email/google/connect", requireCrmAuth(), async (req, res) => {
+// Fuera de /api/crm: aplica a mano el mismo permiso que el resto de la configuración.
+app.post("/crm/email/google/connect", requireCrmAuth(), (req, res, next) =>
+  can(req.crmUser, "settings") ? next() : res.status(403).json({ ok: false, error: "Tu rol no tiene acceso a esta sección." }), async (req, res) => {
   const baseUrl = buildPublicBaseUrl(req);
   const redirectUrl = new URL(`${baseUrl}/crm`);
 
@@ -6501,10 +6622,17 @@ app.get("/api/crm/bookings", async (req, res) => {
       .order("starts_at", { ascending: true })
       .limit(200);
     if (error) throw error;
+    let bookings = data || [];
+    if (req.crmLeadOwner) {
+      const { data: own, error: ownError } = await supabase.from("leads").select("id").eq("account_id", account.id).eq("assigned_to", req.crmLeadOwner);
+      if (ownError) throw ownError;
+      const ownIds = new Set((own || []).map((lead) => lead.id));
+      bookings = bookings.filter((booking) => ownIds.has(booking.lead_id));
+    }
     const config = await getAppConfig({ accountId: account.id }).catch(() => null);
     return res.json({
       ok: true,
-      bookings: data || [],
+      bookings,
       calendar_connected: isCalendarConnected(config?.integrations?.calendar),
       meeting: config?.agent?.meeting || null,
     });
