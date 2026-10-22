@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/app-shell";
 import { api, setAccountId } from "@/lib/api";
+import type { Billing } from "@/lib/types";
 
 type AccountRow = {
   id: string;
@@ -16,6 +17,15 @@ type AccountRow = {
   whatsapp?: { configured?: boolean; display_phone_number?: string } | null;
   leads_30d?: number;
   setup_health?: { progress?: string; next_step?: string };
+  billing?: Billing | null;
+};
+
+const BILLING_LABEL: Record<string, [string, string]> = {
+  managed: ["Agencia", "p-muted"],
+  trial: ["Prueba", "p-new"],
+  active: ["Pagando", "p-good"],
+  past_due: ["Impago", "p-bad"],
+  paused: ["Pausada", "p-bad"],
 };
 type User = { id: string; email: string; display_name?: string; role: string; status: string };
 type WaChannel = { configured?: boolean; status?: string; phone_number_id?: string; waba_id?: string; display_phone_number?: string; verified_name?: string; access_token_masked?: string };
@@ -65,7 +75,7 @@ export default function AgenciaPage() {
       <div className="card" style={{ overflowX: "auto" }}>
         <table className="table">
           <thead>
-            <tr>{["Cliente", "Estado", "Motor", "WhatsApp", "Calendario", "Leads 30 días", "Configuración"].map((h) => <th key={h}>{h}</th>)}</tr>
+            <tr>{["Cliente", "Estado", "Cobro", "Motor", "WhatsApp", "Calendario", "Leads 30 días", "Configuración"].map((h) => <th key={h}>{h}</th>)}</tr>
           </thead>
           <tbody>
             {accounts.map((a) => (
@@ -73,6 +83,7 @@ export default function AgenciaPage() {
                 onKeyDown={(e) => e.key === "Enter" && setSelected(a.id)}>
                 <td><b>{a.name}</b><br /><small style={{ color: "var(--muted)" }}>{a.slug}</small></td>
                 <td><span className={`pill ${a.status === "active" ? "p-good" : "p-muted"}`}>{({ active: "Activa", trial: "Prueba", paused: "Pausada" } as Record<string, string>)[a.status || ""] || a.status || "—"}</span></td>
+                <td>{a.billing ? <span className={`pill ${BILLING_LABEL[a.billing.status]?.[1] || "p-muted"}`}>{BILLING_LABEL[a.billing.status]?.[0] || a.billing.status}{a.billing.status === "trial" && a.billing.days_left != null ? ` · ${a.billing.days_left} d` : ""}</span> : "—"}</td>
                 <td>{a.agent_engine ? <span className={`pill ${a.agent_engine === "v2" ? "p-ai" : "p-muted"}`}>{a.agent_engine === "v2" ? "v2" : "antiguo"}</span> : "—"}</td>
                 <td>{a.whatsapp?.configured ? <span className="pill p-good">{a.whatsapp.display_phone_number || "Conectado"}</span> : <span className="pill p-muted">No</span>}</td>
                 <td>{a.calendar_connected ? <span className="pill p-good">Sí</span> : <span className="pill p-muted">No</span>}</td>
@@ -90,7 +101,7 @@ export default function AgenciaPage() {
 }
 
 function NewAccount({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => Promise<void> }) {
-  const [form, setForm] = useState({ name: "", slug: "", admin_email: "", admin_display_name: "" });
+  const [form, setForm] = useState({ name: "", slug: "", admin_email: "", admin_display_name: "", managed_by_agency: true });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const slugify = (v: string) => v.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -121,6 +132,10 @@ function NewAccount({ onClose, onCreated }: { onClose: () => void; onCreated: (i
         <label className="f">Email del cliente<input className="i" type="email" value={form.admin_email} onChange={(e) => setForm({ ...form, admin_email: e.target.value })} /></label>
         <label className="f">Nombre del cliente<input className="i" value={form.admin_display_name} onChange={(e) => setForm({ ...form, admin_display_name: e.target.value })} /></label>
       </div>
+      <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12 }}>
+        <input type="checkbox" checked={form.managed_by_agency} onChange={(e) => setForm({ ...form, managed_by_agency: e.target.checked })} />
+        Gestionada por la agencia (sin cobro). Desmárcalo para que el cliente empiece una prueba gratis y pague con tarjeta.
+      </label>
       {error && <p className="alert error" role="alert">{error}</p>}
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <button className="btn primary" disabled={busy}>{busy ? "Creando…" : "Crear cuenta"}</button>
@@ -193,6 +208,7 @@ function AccountData({ account, onChanged, onDeleted }: { account: AccountRow; o
       </div>
       <button className="btn primary" style={{ marginTop: 12 }} onClick={save}>Guardar</button>
       <Status msg={msg} />
+      <AccountBilling account={account} onChanged={onChanged} />
       <details style={{ marginTop: 18 }}>
         <summary style={{ cursor: "pointer", color: "var(--bad)", fontWeight: 600 }}>Eliminar cuenta</summary>
         <p className="hint" style={{ marginTop: 8 }}>Borra la cuenta, su configuración y sus usuarios. Escribe <b>{account.slug}</b> para confirmar.</p>
@@ -381,5 +397,31 @@ function AccountForms({ account }: { account: AccountRow }) {
       <div className="faq-row"><b>Cuerpo (Meta Lead Ads)</b><pre className="code" style={{ whiteSpace: "pre-wrap", margin: 0 }}>{body}</pre></div>
       <p className="hint">El lead aparece en Conversaciones al momento. Si tiene teléfono y consentimiento, el asistente le escribe por WhatsApp con la plantilla configurada.</p>
     </>
+  );
+}
+
+function AccountBilling({ account, onChanged }: { account: AccountRow; onChanged: () => Promise<void> }) {
+  const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const managed = !account.billing || account.billing.status === "managed";
+
+  async function setManaged(value: boolean) {
+    try {
+      await api(`/admin/accounts/${account.id}/billing`, { method: "PATCH", body: { managed_by_agency: value } });
+      setMsg({ kind: "ok", text: value ? "Ahora la gestiona la agencia: sin cobro." : "Ahora paga con tarjeta (con prueba gratis si no la había usado)." });
+      await onChanged();
+    } catch (err) {
+      setMsg({ kind: "error", text: (err as Error).message });
+    }
+  }
+
+  return (
+    <div className="faq-row" style={{ marginTop: 18 }}>
+      <b>Cobro</b>
+      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input type="checkbox" checked={managed} onChange={(e) => setManaged(e.target.checked)} />
+        Gestionada por la agencia (sin cobro: su asistente nunca se pausa por pagos)
+      </label>
+      <Status msg={msg} />
+    </div>
   );
 }

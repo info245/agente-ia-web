@@ -120,6 +120,22 @@ export type Booking = {
 
 export type WhatsAppTemplate = { name: string; language: string; category: string; header: string; body: string; footer: string; params: number; sendable: boolean };
 
+export type Billing = {
+  status: "managed" | "trial" | "active" | "past_due" | "paused";
+  agent_active: boolean;
+  reason?: "unpaid" | "canceled" | "trial_ended";
+  plan_key?: string;
+  has_customer?: boolean;
+  trial_ends_at?: string | null;
+  grace_ends_at?: string;
+  period_end?: string | null;
+  cancel_at_period_end?: boolean;
+  days_left?: number | null;
+  subscribed?: boolean;
+};
+export type BillingPlan = { key: string; name: string; price_label?: string; description?: string };
+export type Onboarding = { steps: { key: string; label: string; done: boolean }[]; completed: boolean; completed_at: string | null };
+
 export type Privacy = { notice_text?: string; policy_url?: string; retention_months?: number; retention_action?: "anonymize" | "delete" };
 
 export type ConsentRecord = { id: string; channel?: string | null; created_at: string; payload?: { granted?: boolean | null; basis?: string; text?: string; policy_url?: string; source?: string } | null };

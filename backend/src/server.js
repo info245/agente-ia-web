@@ -119,6 +119,23 @@ import {
 } from "./lib/externalLeadIntakeStore.js";
 import { processIncomingMessage } from "./core/processIncomingMessage.js";
 import {
+  ONBOARDING_STEPS,
+  applyStripeEvent,
+  createCheckoutSession,
+  createPortalSession,
+  getBillingPlans,
+  getBillingRecord,
+  getBillingState,
+  getOnboarding,
+  isStripeConfigured,
+  newBillingRecord,
+  saveBillingRecord,
+  saveOnboarding,
+  stripeEventAccountId,
+  summarizeOnboarding,
+  verifyStripeSignature,
+} from "./lib/saas.js";
+import {
   getWhatsAppContactKey,
   isWhatsAppBsuid,
   transcribeWhatsAppAudio,
@@ -395,6 +412,8 @@ const messageRateLimiter = createTokenBucketRateLimiter({
   maxEntries: 10_000,
   idleTtlMs: 15 * 60 * 1000,
 });
+// Alta pública: pocas cuentas por IP y hora.
+const signupRateLimiter = createTokenBucketRateLimiter({ capacity: 5, refillPerSecond: 5 / 3600 });
 const schedulerState = {
   automationRunning: false,
   whatsappRunning: false,
@@ -3192,6 +3211,7 @@ app.post("/api/admin/accounts", requireCrmAuth("super_admin"), async (req, res) 
     } catch (_error) {
       // No bloqueamos la creacion de la cuenta si falla el seed inicial de config.
     }
+    await startAccountSaas(account.id, { managedByAgency: req.body?.managed_by_agency !== false });
     const adminEmail = String(req.body?.admin_email || "").trim();
     const adminPassword = String(req.body?.admin_password || "").trim();
     const shouldSendInvite =
@@ -3321,6 +3341,185 @@ app.patch("/api/admin/users/:userId", requireCrmAuth("super_admin"), async (req,
     res.json({ ok: true, user });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+// --- Venta como SaaS: alta, alta guiada y cobro con Stripe (lógica en lib/saas.js) ---
+const crmAppBaseUrl = () => CRM_APP_URL || CRM_PUBLIC_BASE_URL;
+const canManageBilling = (user) => ["super_admin", "client_admin"].includes(user?.role);
+
+async function startAccountSaas(accountId, { managedByAgency = false } = {}) {
+  await saveBillingRecord(accountId, newBillingRecord({ managedByAgency }));
+  await saveOnboarding(accountId, { done: [], started_at: new Date().toISOString() });
+}
+
+// Alta pública (crear cuenta uno mismo). Cerrada salvo PUBLIC_SIGNUP_ENABLED=true.
+app.get("/api/auth/signup-status", (_req, res) => {
+  res.json({ ok: true, enabled: process.env.PUBLIC_SIGNUP_ENABLED === "true" });
+});
+
+app.post("/api/auth/signup", async (req, res) => {
+  if (process.env.PUBLIC_SIGNUP_ENABLED !== "true") {
+    return res.status(403).json({ ok: false, error: "El alta está cerrada. Escríbenos y te damos acceso." });
+  }
+  const limit = signupRateLimiter.consume(String(req.ip || "unknown"));
+  if (!limit.allowed) {
+    res.setHeader("Retry-After", String(limit.retryAfterSeconds));
+    return res.status(429).json({ ok: false, error: "Demasiados intentos. Prueba más tarde." });
+  }
+  const name = String(req.body?.business_name || "").trim().slice(0, 120);
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const password = String(req.body?.password || "");
+  if (!name) return res.status(400).json({ ok: false, error: "Escribe el nombre de tu negocio." });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ ok: false, error: "Escribe un email válido." });
+  if (password.length < 8) return res.status(400).json({ ok: false, error: "La contraseña debe tener al menos 8 caracteres." });
+
+  let account = null;
+  try {
+    for (const slug of [name, `${name}-${crypto.randomBytes(2).toString("hex")}`]) {
+      try {
+        account = await createAccount({ name, slug, status: "trial", plan: "trial" });
+        break;
+      } catch (error) {
+        if (!/accounts_pkey|accounts_slug_key|duplicate/i.test(String(error?.message))) throw error;
+      }
+    }
+    if (!account) throw new Error("No se pudo crear la cuenta. Prueba con otro nombre.");
+    await saveAppConfig(getBlankAppConfig({ productMode: "full_crm" }), { accountId: account.id }).catch(() => null);
+    const user = await createCrmUser({
+      email,
+      password,
+      display_name: String(req.body?.display_name || "").trim() || name,
+      role: "client_admin",
+      account_id: account.id,
+      status: "active",
+    });
+    await startAccountSaas(account.id);
+    writeSessionCookie(res, signSessionToken({ user_id: user.id, role: user.role, exp: Date.now() + CRM_SESSION_TTL_MS }));
+    res.json({ ok: true, user, account });
+  } catch (error) {
+    if (account) await deleteAccount(account.id).catch(() => null);
+    const duplicate = /duplicate|unique/i.test(String(error?.message || ""));
+    res.status(duplicate ? 409 : 500).json({ ok: false, error: duplicate ? "Ya hay una cuenta con ese email. Inicia sesión." : error.message });
+  }
+});
+
+app.get("/api/crm/onboarding", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    res.json({ ok: true, onboarding: summarizeOnboarding(await getOnboarding(account.id)) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/onboarding", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const step = String(req.body?.step || "");
+    if (!ONBOARDING_STEPS.some(([key]) => key === step)) return res.status(400).json({ ok: false, error: "Paso no válido." });
+    const current = (await getOnboarding(account.id)) || { done: [], started_at: new Date().toISOString() };
+    const done = [...new Set([...(current.done || []), step])];
+    const saved = await saveOnboarding(account.id, {
+      ...current,
+      done,
+      completed_at: current.completed_at || (step === "activar" ? new Date().toISOString() : null),
+    });
+    res.json({ ok: true, onboarding: summarizeOnboarding(saved) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/crm/billing", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    res.json({
+      ok: true,
+      billing: await getBillingState(account.id, { isDefault: account.is_default }),
+      plans: getBillingPlans().map(({ key, name, price_label, description }) => ({ key, name, price_label, description })),
+      stripe_configured: isStripeConfigured(),
+      can_manage: canManageBilling(req.crmUser),
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/billing/checkout", async (req, res) => {
+  try {
+    if (!canManageBilling(req.crmUser)) return res.status(403).json({ ok: false, error: "Solo el administrador de la cuenta puede contratar." });
+    if (!isStripeConfigured()) return res.status(503).json({ ok: false, error: "El pago online todavía no está activado." });
+    const account = await resolveRequestAccount(req);
+    const plan = getBillingPlans().find((p) => p.key === req.body?.plan);
+    if (!plan) return res.status(400).json({ ok: false, error: "Elige un plan." });
+    const record = await getBillingRecord(account.id);
+    if (["active", "trialing", "past_due", "unpaid"].includes(record?.subscription_status)) {
+      return res.status(409).json({ ok: false, error: "Ya tienes una suscripción. Usa «Gestionar pago y facturas»." });
+    }
+    const session = await createCheckoutSession({
+      account,
+      plan,
+      record,
+      email: req.crmUser?.email,
+      returnUrl: `${crmAppBaseUrl()}/facturacion`,
+    });
+    res.json({ ok: true, url: session.url });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/billing/portal", async (req, res) => {
+  try {
+    if (!canManageBilling(req.crmUser)) return res.status(403).json({ ok: false, error: "Solo el administrador de la cuenta puede gestionar el pago." });
+    const account = await resolveRequestAccount(req);
+    const record = await getBillingRecord(account.id);
+    if (!process.env.STRIPE_SECRET_KEY || !record?.stripe_customer_id) {
+      return res.status(400).json({ ok: false, error: "Todavía no hay ningún pago registrado en esta cuenta." });
+    }
+    const session = await createPortalSession({ customerId: record.stripe_customer_id, returnUrl: `${crmAppBaseUrl()}/facturacion` });
+    res.json({ ok: true, url: session.url });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Stripe avisa aquí de pagos y cambios de suscripción. Solo se aceptan eventos firmados.
+app.post("/webhooks/stripe", async (req, res) => {
+  if (!verifyStripeSignature(req.rawBody, req.get("stripe-signature"), process.env.STRIPE_WEBHOOK_SECRET)) {
+    return res.status(400).json({ ok: false, error: "Firma no válida" });
+  }
+  try {
+    const event = req.body;
+    const accountId = stripeEventAccountId(event);
+    if (!accountId) return res.json({ ok: true, ignored: "sin account_id" });
+    const record = await getBillingRecord(accountId);
+    // Una cuenta gestionada por la agencia nunca pasa a cobro por un evento de Stripe.
+    if (!record) return res.json({ ok: true, ignored: "cuenta sin cobro" });
+    const next = applyStripeEvent(record, event);
+    if (next !== record) await saveBillingRecord(accountId, next);
+    res.json({ ok: true });
+  } catch (error) {
+    console.log("stripe webhook error", error?.message || error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Agencia: cuenta gestionada por la agencia (sin cobro) o de pago con prueba.
+app.patch("/api/admin/accounts/:accountId/billing", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const account = await resolveAccount(req.params.accountId);
+    if (String(account.id) !== String(req.params.accountId)) return res.status(404).json({ ok: false, error: "Cuenta no encontrada." });
+    const current = (await getBillingRecord(account.id)) || {};
+    const managed = req.body?.managed_by_agency === true;
+    const next = managed
+      ? { ...current, managed_by_agency: true }
+      : { ...newBillingRecord(), ...current, managed_by_agency: false };
+    await saveBillingRecord(account.id, next);
+    res.json({ ok: true, billing: await getBillingState(account.id, { isDefault: account.is_default }) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 
@@ -3470,6 +3669,7 @@ app.get("/api/admin/overview", requireCrmAuth("super_admin"), async (req, res) =
           agent_engine: config ? config.agent_engine || "legacy" : null,
           calendar_connected: isCalendarConnected(config?.integrations?.calendar),
           whatsapp: await getWhatsAppChannelSummary(account.id).catch(() => null),
+          billing: await getBillingState(account.id, { isDefault: account.is_default }).catch(() => null),
           leads_30d: (leads || []).filter((lead) => Date.parse(lead?.created_at || "") >= Date.now() - 30 * 24 * 60 * 60 * 1000).length,
           totals: {
             leads: leads.length,
@@ -6233,6 +6433,8 @@ async function runAutomationFlowsTask({
   const processed = [];
   for (const account of accounts) {
     if (!account?.id) continue;
+    const billing = await getBillingState(account.id, { isDefault: account.is_default }).catch(() => null);
+    if (billing && !billing.agent_active) continue;
     const appConfig = await getPublishedAppConfig({ accountId: account.id });
     // Primero las respuestas por email, para que la secuencia vea que el lead ya contestó.
     await syncEmailReplies(account, appConfig);

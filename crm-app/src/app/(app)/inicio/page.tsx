@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import { channelOf, leadName, ownerOf, relative, startOfWeek } from "@/lib/format";
-import type { Booking } from "@/lib/types";
+import type { Booking, Onboarding } from "@/lib/types";
 
 const DAYS = ["L", "M", "X", "J", "V", "S", "D"];
 
@@ -17,11 +17,13 @@ function greeting() {
 export default function InicioPage() {
   const { user, leads } = useSession();
   const [bookings, setBookings] = useState<Booking[] | null>(null);
+  const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
 
   useEffect(() => {
     api<{ bookings: Booking[] }>("/crm/bookings")
       .then((data) => setBookings(data.bookings))
       .catch(() => setBookings([]));
+    api<{ onboarding: Onboarding | null }>("/crm/onboarding").then((d) => setOnboarding(d.onboarding)).catch(() => null);
   }, []);
 
   if (!leads) return <p className="loading">Cargando…</p>;
@@ -56,6 +58,8 @@ export default function InicioPage() {
           <p className="sub">Esta semana · {range}</p>
         </div>
       </div>
+
+      {onboarding && !onboarding.completed && <MissingSteps onboarding={onboarding} />}
 
       <div className="kpis">
         <div className="card kpi">
@@ -120,5 +124,23 @@ export default function InicioPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+// Mientras el alta guiada no esté completa: qué falta y un botón para seguir donde se dejó.
+function MissingSteps({ onboarding }: { onboarding: Onboarding }) {
+  const pending = onboarding.steps.filter((s) => !s.done);
+  const done = onboarding.steps.length - pending.length;
+  return (
+    <div className="card block" style={{ marginBottom: 14, borderColor: "var(--accent)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+        <div>
+          <h2>Te falta poco para activar tu asistente</h2>
+          <p className="hint" style={{ margin: "4px 0 0" }}>{done} de {onboarding.steps.length} pasos hechos. Te falta: {pending.map((s) => s.label.toLowerCase()).join(", ")}.</p>
+        </div>
+        <Link className="btn primary" href="/alta">{done ? "Continuar" : "Empezar"}</Link>
+      </div>
+      <div className="progress" style={{ margin: "12px 0 0" }} aria-hidden><i style={{ width: `${(done / onboarding.steps.length) * 100}%` }} /></div>
+    </div>
   );
 }

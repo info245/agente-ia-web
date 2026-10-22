@@ -4,8 +4,9 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getAccountId, setAccountId } from "@/lib/api";
+import { BillingBanner } from "@/components/billing-banner";
 import { initials, ownerOf } from "@/lib/format";
-import type { Account, AppConfig, Lead, User } from "@/lib/types";
+import type { Account, AppConfig, Billing, Lead, User } from "@/lib/types";
 
 type Session = {
   user: User;
@@ -61,6 +62,8 @@ const NAV = [
 const EXTRA_PAGES = [
   { href: "/propuesta", perm: "proposals" },
   { href: "/analisis", perm: "proposals" },
+  { href: "/facturacion", perm: "billing" },
+  { href: "/alta", perm: "settings" },
 ];
 
 const AGENCY_NAV = { href: "/agencia", label: "Agencia", icon: icon(<><path d="M3 21h18M5 21V7l7-4 7 4v14" /><path d="M9 21v-6h6v6M9 10h.01M15 10h.01" /></>) };
@@ -77,6 +80,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [configError, setConfigError] = useState("");
+  const [billing, setBilling] = useState<Billing | null>(null);
 
   const reloadLeads = useCallback(async () => {
     const data = await api<{ leads: Lead[] }>(LEADS_PATH).catch(() => null);
@@ -105,6 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setUser(me.user);
       reloadLeads();
       reloadConfig();
+      api<{ billing: Billing }>("/crm/billing").then((d) => setBilling(d.billing)).catch(() => null);
     })();
   }, [router, reloadLeads, reloadConfig]);
 
@@ -173,10 +178,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {user.display_name || user.email.split("@")[0]}
               <small>{user.email}</small>
             </div>
+            {billing && billing.status !== "managed" && <Link className="logout" href="/facturacion">Plan y pago</Link>}
             <button className="logout" onClick={logout}>Salir</button>
           </div>
         </nav>
-        <main>{blocked ? <section className="page"><p className="alert error" role="alert">Tu rol no tiene acceso a esta sección. Pídeselo al propietario de la cuenta.</p></section> : children}</main>
+        <main>
+          {pathname !== "/facturacion" && <BillingBanner billing={billing} />}
+          {blocked ? <section className="page"><p className="alert error" role="alert">Tu rol no tiene acceso a esta sección. Pídeselo al propietario de la cuenta.</p></section> : children}
+        </main>
       </div>
     </SessionContext.Provider>
   );
