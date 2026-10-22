@@ -164,7 +164,7 @@ export default function ContactosPage() {
                   <input type="checkbox" aria-label="Seleccionar todos" checked={rows.length > 0 && rows.every((l) => selected.has(l.id))}
                     onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((l) => l.id)) : new Set())} />
                 </th>
-                {["Nombre", "Email", "Teléfono", "Servicio", "Presupuesto", "Entrada", "Último contacto", "Estado", ""].map((h) => <th key={h}>{h}</th>)}
+                {["Nombre", "Email", "Teléfono", "Servicio", "Presupuesto", "Entrada", "Último contacto", "Notas internas", "Estado", ""].map((h) => <th key={h}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -181,6 +181,7 @@ export default function ContactosPage() {
                     <td>{lead.budget_range || "—"}</td>
                     <td style={{ whiteSpace: "nowrap", color: "var(--muted)" }}>{day(lead.created_at)}</td>
                     <td style={{ whiteSpace: "nowrap", color: "var(--muted)" }}>{day(lastContact(lead))}</td>
+                    <td onClick={(e) => e.stopPropagation()}><NoteCell lead={lead} /></td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <select className="search" aria-label={`Estado de ${leadName(lead)}`} value={stageOf(lead) || ""} onChange={(e) => move(lead.id, e.target.value)}>
                         {stages.map((s) => <option key={s.key} value={s.key}>{s.label || s.key}</option>)}
@@ -198,5 +199,38 @@ export default function ContactosPage() {
         </div>
       )}
     </section>
+  );
+}
+
+// Nota interna editable en la propia fila: se guarda al salir del campo.
+function NoteCell({ lead }: { lead: Lead }) {
+  const [note, setNote] = useState(lead.internal_notes || "");
+  const [savedNote, setSavedNote] = useState(lead.internal_notes || "");
+  const [state, setState] = useState<"" | "saving" | "saved" | "error">("");
+
+  async function save() {
+    if (note === savedNote) return;
+    setState("saving");
+    try {
+      await api(`/crm/leads/${lead.id}`, { method: "PATCH", body: { internal_notes: note } });
+      setSavedNote(note);
+      setState("saved");
+    } catch {
+      setState("error");
+    }
+  }
+
+  return (
+    <textarea
+      className="search"
+      rows={1}
+      aria-label={`Notas internas de ${leadName(lead)}`}
+      placeholder="Añadir nota…"
+      title={state === "error" ? "No se pudo guardar" : state === "saved" ? "Guardada" : note}
+      value={note}
+      onChange={(e) => { setNote(e.target.value); setState(""); }}
+      onBlur={save}
+      style={{ minWidth: 180, resize: "vertical", borderColor: state === "error" ? "var(--bad)" : state === "saved" ? "var(--good)" : undefined }}
+    />
   );
 }

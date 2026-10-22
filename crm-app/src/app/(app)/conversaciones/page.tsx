@@ -88,6 +88,7 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<"" | "send" | "mode" | "suggest">("");
   const [forceTemplate, setForceTemplate] = useState(false);
+  const [showLead, setShowLead] = useState(false);
   const msgsRef = useRef<HTMLDivElement>(null);
   const lastCount = useRef(0);
 
@@ -180,6 +181,7 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
               <small>{[ch.label, lead.phone || lead.email, lead.business_type].filter(Boolean).join(" · ")}</small>
             </div>
           </div>
+          <button className="btn small ficha" onClick={() => setShowLead(true)}>Ficha</button>
           <span className={`pill ${OWNER_PILL[ownerOf({ ...lead, ai_status: conversation.ai_status, last_message: lastMessage })].css}`}>
             <span className="dot" />{OWNER_PILL[ownerOf({ ...lead, ai_status: conversation.ai_status, last_message: lastMessage })].label}
           </span>
@@ -248,7 +250,7 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
           )}
         </div>
       </div>
-      <LeadPanel lead={lead} stages={config?.pipeline?.stages || []} onSaved={async () => { await load(); await onChanged(); }} />
+      <LeadPanel lead={lead} stages={config?.pipeline?.stages || []} open={showLead} onClose={() => setShowLead(false)} onSaved={async () => { await load(); await onChanged(); }} />
     </>
   );
 }
@@ -345,7 +347,7 @@ function TemplateComposer({ conversationId, defaults, onSent }: { conversationId
 
 const QUOTE_STATUS: Record<string, string> = { borrador: "borrador", draft: "borrador", sent: "enviada", enviado: "enviada", accepted: "aceptada", rejected: "rechazada" };
 
-function LeadPanel({ lead, stages, onSaved }: { lead: Lead; stages: { key: string; label?: string; is_active?: boolean }[]; onSaved: () => Promise<void> }) {
+function LeadPanel({ lead, stages, open, onClose, onSaved }: { lead: Lead; stages: { key: string; label?: string; is_active?: boolean }[]; open: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
   const [note, setNote] = useState(lead.internal_notes || "");
   const [status, setStatus] = useState("");
 
@@ -361,8 +363,11 @@ function LeadPanel({ lead, stages, onSaved }: { lead: Lead; stages: { key: strin
   }
 
   return (
-    <aside className="lead">
-      <h2>{leadName(lead)}</h2>
+    <aside className={`lead${open ? " open" : ""}`}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+        <h2>{leadName(lead)}</h2>
+        <button className="btn small ficha" onClick={onClose}>Cerrar</button>
+      </div>
       {(lead.business_type || lead.company_name) && <div className="field"><span>Negocio</span>{[lead.company_name, lead.business_type].filter(Boolean).join(" · ")}</div>}
       <div className="field"><span>Le interesa</span>{lead.interest_service || "—"}</div>
       <div className="field">
@@ -383,7 +388,7 @@ function LeadPanel({ lead, stages, onSaved }: { lead: Lead; stages: { key: strin
         </select>
       </div>
       <div className="field">
-        <span>Nota para tu equipo</span>
+        <span>Notas internas</span>
         <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} onBlur={() => note !== (lead.internal_notes || "") && save({ internal_notes: note })} placeholder="Solo la ves tú" />
       </div>
       {status && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }} aria-live="polite">{status}</p>}
