@@ -1,15 +1,23 @@
 // Every call goes to this app's own /api (proxied to Express), so the session cookie is sent.
 const ACCOUNT_KEY = "crm_account_id";
 
+// La cuenta se fija al abrir la pestaña: si en otra pestaña se cambia de cuenta, esta sigue
+// guardando en la suya. Antes se releía en cada llamada y se podía guardar en la cuenta equivocada.
+let pageAccountId: string | null = null;
+
 export function getAccountId(): string {
-  try {
-    return localStorage.getItem(ACCOUNT_KEY) || "";
-  } catch {
-    return "";
+  if (pageAccountId === null) {
+    try {
+      pageAccountId = localStorage.getItem(ACCOUNT_KEY) || "";
+    } catch {
+      pageAccountId = "";
+    }
   }
+  return pageAccountId;
 }
 
 export function setAccountId(id: string) {
+  pageAccountId = id;
   try {
     localStorage.setItem(ACCOUNT_KEY, id);
   } catch {}
