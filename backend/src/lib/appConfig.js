@@ -1184,6 +1184,17 @@ function sanitizeNotificationsConfig(value = {}, defaults = {}) {
   };
 }
 
+// RGPD por cuenta: aviso del chat, enlace a su política y plazo de conservación (0 = sin plazo).
+export function sanitizePrivacyConfig(value = {}) {
+  const months = Math.trunc(Number(value?.retention_months) || 0);
+  return {
+    notice_text: cleanString(value?.notice_text).slice(0, 1000),
+    policy_url: /^https?:\/\//i.test(cleanString(value?.policy_url)) ? cleanString(value.policy_url) : "",
+    retention_months: Math.max(0, Math.min(120, months)),
+    retention_action: value?.retention_action === "delete" ? "delete" : "anonymize",
+  };
+}
+
 function sanitizeWidgetConfig(value = {}) {
   const allowedDomains = Array.isArray(value?.allowed_domains)
     ? value.allowed_domains
@@ -1480,6 +1491,7 @@ export function sanitizeAppConfig(input = {}, options = {}) {
       actions_catalog,
       notifications,
       widget,
+      privacy: sanitizePrivacyConfig(input?.privacy),
     deployment,
     pipeline: {
       stages: sanitizePipelineStages(input?.pipeline?.stages || defaults?.pipeline?.stages),
