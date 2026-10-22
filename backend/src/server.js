@@ -49,6 +49,7 @@ import { createGoogleCalendar, isCalendarConnected } from "./agent/googleCalenda
 import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParams } from "./lib/whatsappTemplates.js";
 import { emailBodyToHtml, emailBodyToText } from "./lib/emailLinks.js";
 import { addSubscription, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
+import { buildResultsReport, resolvePeriod, sanitizeSpendEntries } from "./lib/resultsReport.js";
 import { supabase } from "./lib/supabase.js";
 import { searchKnowledge } from "./lib/kbRetriever.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
@@ -6605,6 +6606,86 @@ app.post("/api/crm/bookings/:bookingId/cancel", async (req, res) => {
     return res.json({ ok: true, notified });
   } catch (error) {
     return res.status(502).json({ ok: false, error: error.message });
+  }
+});
+
+// Informe de Resultados: embudo y coste por fuente/campaña de los leads creados en el periodo.
+const adSpendKey = (accountId) => `ad_spend:${accountId}`;
+
+async function readAdSpend(accountId) {
+  const { data, error } = await supabase.from("app_settings").select("value").eq("key", adSpendKey(accountId)).maybeSingle();
+  if (error) throw error;
+  return Array.isArray(data?.value) ? data.value : [];
+}
+
+// Gasto del periodo. Hoy solo la inversión manual; cuando exista la conexión con Google Ads/Meta,
+// añadir aquí sus importes con el mismo formato ({ month, source, campaign, amount }).
+async function getAdSpendEntries(accountId) {
+  return readAdSpend(accountId);
+}
+
+async function listLeadsCreatedBetween(accountId, from, to) {
+  const rows = [];
+  // ponytail: tope de 20.000 leads por informe; con más, agregar en SQL.
+  for (let offset = 0; offset < 20000; offset += 1000) {
+    const { data, error } = await supabase
+      .from("leads")
+      .select(
+        "id, created_at, crm_status, quote_status, lead_score, source_platform, source_campaign, source_form_name, source_ad_name, custom_fields, conversations(channel, bookings(status)), bookings(status), quotes(status, total, sent_at, created_at)"
+      )
+      .eq("account_id", accountId)
+      .gte("created_at", from.toISOString())
+      .lt("created_at", to.toISOString())
+      .order("created_at", { ascending: true })
+      .range(offset, offset + 999);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if ((data || []).length < 1000) break;
+  }
+  return rows;
+}
+
+app.get("/api/crm/reports/results", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    let range;
+    try {
+      range = resolvePeriod(String(req.query.period || "this_month"), { from: req.query.from, to: req.query.to });
+    } catch (error) {
+      return res.status(400).json({ ok: false, error: error.message });
+    }
+    const [leads, spend, config] = await Promise.all([
+      listLeadsCreatedBetween(account.id, range.from, range.to),
+      getAdSpendEntries(account.id),
+      getAppConfig({ accountId: account.id }).catch(() => null),
+    ]);
+    const report = buildResultsReport({ leads, spend, stages: config?.pipeline?.stages, from: range.from, to: range.to });
+    res.json({ ok: true, period: range.period, report });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/crm/reports/spend", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    res.json({ ok: true, entries: await readAdSpend(account.id) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.put("/api/crm/reports/spend", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const entries = sanitizeSpendEntries(req.body?.entries);
+    const { error } = await supabase
+      .from("app_settings")
+      .upsert({ key: adSpendKey(account.id), value: entries, account_id: account.id }, { onConflict: "key" });
+    if (error) throw error;
+    res.json({ ok: true, entries });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 
