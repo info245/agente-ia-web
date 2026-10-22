@@ -1,4 +1,6 @@
 // Every call goes to this app's own /api (proxied to Express), so the session cookie is sent.
+export const WIDGET_SRC = "https://tmedia-global-ai.onrender.com/widget.js";
+
 const ACCOUNT_KEY = "crm_account_id";
 
 export function getAccountId(): string {
@@ -52,4 +54,10 @@ export async function api<T = Record<string, unknown>>(
     throw new ApiError(data?.error || `Error ${res.status}`, res.status, data);
   }
   return data as T;
+}
+
+// Tras entrar por primera vez: al alta guiada si la cuenta la tiene pendiente.
+export async function nextPath() {
+  const data = await api<{ onboarding: { completed: boolean } | null }>("/crm/onboarding").catch(() => null);
+  return data?.onboarding && !data.onboarding.completed ? "/alta" : "/inicio";
 }

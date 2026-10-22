@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
@@ -8,6 +9,10 @@ export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [signup, setSignup] = useState(false);
+  useEffect(() => {
+    api<{ enabled: boolean }>("/auth/signup-status").then((d) => setSignup(d.enabled)).catch(() => null);
+  }, []);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,6 +46,7 @@ export default function LoginPage() {
           {error && <p role="alert" className="alert error" style={{ marginTop: 12 }}>{error}</p>}
           <button className="btn primary" type="submit" disabled={loading}>{loading ? "Entrando…" : "Entrar"}</button>
         </form>
+        {signup && <p className="sub" style={{ marginTop: 14, fontSize: 14 }}>¿Aún no tienes cuenta? <Link href="/registro">Pruébalo gratis</Link></p>}
       </div>
     </main>
   );

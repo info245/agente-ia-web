@@ -261,3 +261,17 @@ textarea.i { resize: vertical; }
 .table tbody tr { cursor: pointer; }
 .table tbody tr:hover, .table tbody tr[aria-selected="true"] { background: var(--accent-soft); }
 code { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+
+/* Alta guiada y cobro */
+.progress { height: 8px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; margin-bottom: 12px; }
+.progress i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.steps { display: flex; gap: 6px; flex-wrap: wrap; list-style: none; padding: 0; margin: 0 0 16px; }
+.steps .chip[aria-current="step"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.steps .chip[aria-pressed="true"] { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.steps .chip[aria-pressed="true"][aria-current="step"] { border-color: var(--accent); }
+h3.f { font-size: 14px; margin: 18px 0 4px; }
+.billing-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 12px 32px 0; }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.plan { padding: 20px; display: flex; flex-direction: column; gap: 8px; }
+.plan .price { font-family: var(--display); font-size: 24px; font-weight: 700; }
+@media (max-width: 700px) { .billing-banner { margin: 12px 16px 0; } }

@@ -4,8 +4,9 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getAccountId, setAccountId } from "@/lib/api";
+import { BillingBanner } from "@/components/billing-banner";
 import { initials, ownerOf } from "@/lib/format";
-import type { Account, AppConfig, Lead, User } from "@/lib/types";
+import type { Account, AppConfig, Billing, Lead, User } from "@/lib/types";
 
 type Session = {
   user: User;
@@ -60,6 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [leads, setLeads] = useState<Lead[] | null>(null);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [configError, setConfigError] = useState("");
+  const [billing, setBilling] = useState<Billing | null>(null);
 
   const reloadLeads = useCallback(async () => {
     const data = await api<{ leads: Lead[] }>(LEADS_PATH).catch(() => null);
@@ -88,6 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setUser(me.user);
       reloadLeads();
       reloadConfig();
+      api<{ billing: Billing }>("/crm/billing").then((d) => setBilling(d.billing)).catch(() => null);
     })();
   }, [router, reloadLeads, reloadConfig]);
 
@@ -152,10 +155,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {user.display_name || user.email.split("@")[0]}
               <small>{user.email}</small>
             </div>
+            {billing && billing.status !== "managed" && <Link className="logout" href="/facturacion">Plan y pago</Link>}
             <button className="logout" onClick={logout}>Salir</button>
           </div>
         </nav>
-        <main>{children}</main>
+        <main>
+          <BillingBanner billing={billing} />
+          {children}
+        </main>
       </div>
     </SessionContext.Provider>
   );

@@ -86,3 +86,16 @@ services:
         sync: false
       - key: LEADS_CLIENT_EMAIL_FROM
         sync: false
+      # Cobro con Stripe y alta pública (ver docs/saas-cobro-y-alta.md)
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: BILLING_PLANS
+        sync: false
+      - key: BILLING_TRIAL_DAYS
+        value: 14
+      - key: BILLING_GRACE_DAYS
+        value: 7
+      - key: PUBLIC_SIGNUP_ENABLED
+        value: false

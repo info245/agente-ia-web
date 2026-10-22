@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, nextPath } from "@/lib/api";
 
 // Enlace de invitación: el cliente crea su contraseña y entra directamente.
 function ActivateForm() {
@@ -23,7 +23,7 @@ function ActivateForm() {
     setError("");
     try {
       await api("/auth/setup-password", { method: "POST", body: { token, password } });
-      router.replace("/inicio");
+      router.replace(await nextPath());
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);

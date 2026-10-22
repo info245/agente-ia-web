@@ -3,12 +3,10 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ConfigPending, useSession } from "@/components/app-shell";
-import { api } from "@/lib/api";
+import { api, WIDGET_SRC } from "@/lib/api";
 import type { AppConfig, WhatsAppTemplate } from "@/lib/types";
 
 type WhatsAppChannel = { configured?: boolean; status?: string; display_phone_number?: string; verified_name?: string };
-
-const WIDGET_SRC = "https://tmedia-global-ai.onrender.com/widget.js";
 const DAY_NAMES = ["D", "L", "M", "X", "J", "V", "S"];
 
 function hours(meeting?: { days?: number[]; start_hour?: number; end_hour?: number }) {
