@@ -40,6 +40,8 @@ export type Lead = {
   internal_notes?: string | null;
   assigned_to?: string | null;
   source_platform?: string | null;
+  consent?: boolean | null;
+  consent_at?: string | null;
   created_at?: string;
   updated_at?: string;
   channel?: string;
@@ -98,6 +100,7 @@ export type AppConfig = {
   services?: Record<string, Offer>;
   contact?: { public_whatsapp_number?: string; support_email?: string };
   pipeline?: { stages?: PipelineStage[] };
+  privacy?: Privacy;
   integrations?: {
     calendar?: { google_connected_email?: string; google_refresh_token_configured?: boolean; connected_at?: string };
     whatsapp?: { form_autocontact_enabled?: boolean; intro_template_name?: string; intro_template_language?: string };
@@ -116,3 +119,8 @@ export type Booking = {
 };
 
 export type WhatsAppTemplate = { name: string; language: string; category: string; header: string; body: string; footer: string; params: number; sendable: boolean };
+
+export type Privacy = { notice_text?: string; policy_url?: string; retention_months?: number; retention_action?: "anonymize" | "delete" };
+
+export type ConsentRecord = { id: string; channel?: string | null; created_at: string; payload?: { granted?: boolean | null; basis?: string; text?: string; policy_url?: string; source?: string } | null };
+export type AccessLogEntry = { action: "view" | "export" | "delete" | "anonymize"; actor_email?: string | null; created_at: string; details?: Record<string, unknown> };

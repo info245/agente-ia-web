@@ -47,7 +47,8 @@ export function crmPermissionFor(method, path) {
   if (p === "/team/members" && isRead(method)) return "contacts";
   if (/^\/team(\/|$)/.test(p)) return "team";
   if (/^\/billing(\/|$)/.test(p)) return "billing";
-  if (p === "/leads/bulk-delete" || (method === "DELETE" && /^\/leads\/[^/]+$/.test(p))) return "delete";
+  // Exportar todos los datos de un contacto (RGPD) es tan sensible como borrarlo.
+  if (p === "/leads/bulk-delete" || (method === "DELETE" && /^\/leads\/[^/]+$/.test(p)) || /^\/leads\/[^/]+\/export$/.test(p)) return "delete";
   if (/^\/leads\/[^/]+\/(quote|analysis)(\/|$)/.test(p) || p.startsWith("/service-facts/")) return "proposals";
   if (p === "/leads" || p.startsWith("/leads/")) return "contacts";
   // agent/try: "Sugerir respuesta" en Conversaciones (prueba el asistente sin enviar nada).

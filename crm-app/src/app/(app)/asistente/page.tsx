@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ConfigPending, useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
-import type { AppConfig, Faq, Flow, Meeting, MessageTemplate, Offer, WhatsAppTemplate } from "@/lib/types";
+import type { AppConfig, Faq, Flow, Meeting, MessageTemplate, Offer, Privacy, WhatsAppTemplate } from "@/lib/types";
 
 const TONES = [
   ["Cercano", "cercano, amable y claro"],
@@ -18,6 +18,7 @@ const TABS = [
   ["sabe", "Lo que sabe"],
   ["actua", "Cuándo actúa"],
   ["seguimientos", "Seguimientos"],
+  ["privacidad", "Privacidad"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -43,6 +44,7 @@ type Draft = {
   meeting: Meeting;
   flows: Record<string, Flow>;
   templates: Record<string, MessageTemplate>;
+  privacy: Privacy;
 };
 
 function offersOf(config: AppConfig) {
@@ -74,6 +76,7 @@ function draftFrom(config: AppConfig): Draft {
     meeting: { days: [1, 2, 3, 4, 5], start_hour: 9, end_hour: 18, duration_minutes: 30, ...config.agent?.meeting },
     flows: config.automation_flows || {},
     templates: config.message_templates || {},
+    privacy: { notice_text: "", policy_url: "", retention_months: 0, retention_action: "anonymize", ...config.privacy },
   };
 }
 
@@ -108,6 +111,7 @@ function patchFrom(config: AppConfig, d: Draft) {
     },
     automation_flows: d.flows,
     message_templates: Object.fromEntries(Object.entries(d.templates).filter(([key]) => usedTemplates.has(key))),
+    privacy: { ...d.privacy, notice_text: (d.privacy.notice_text || "").trim(), policy_url: (d.privacy.policy_url || "").trim() },
   };
 }
 
@@ -181,6 +185,7 @@ function Editor({ config, reloadConfig }: { config: AppConfig; reloadConfig: () 
           {tab === "sabe" && <KnowsTab draft={draft} update={update} />}
           {tab === "actua" && <ActsTab draft={draft} update={update} />}
           {tab === "seguimientos" && <FollowUpsTab draft={draft} update={update} />}
+          {tab === "privacidad" && <PrivacyTab draft={draft} update={update} />}
           <div className="card savebar">
             {message ? <span role="status" className={`alert ${message.kind}`}>{message.text}</span> : <span>{dirty ? "Tienes cambios sin guardar" : "Todo guardado"}</span>}
             <button className="btn primary" onClick={save} disabled={!dirty || saving}>{saving ? "Guardando…" : `Guardar y activar en ${accountName}`}</button>
@@ -208,6 +213,38 @@ function TalkTab({ draft, update }: TabProps) {
       <textarea className="i" id="tone" rows={2} value={draft.tone} onChange={(e) => update({ tone: e.target.value })} placeholder="Por ejemplo: cercano y claro, sin tecnicismos" />
       <label className="f" htmlFor="greeting">Saludo</label>
       <textarea className="i" id="greeting" rows={2} value={draft.greeting} onChange={(e) => update({ greeting: e.target.value })} />
+    </div>
+  );
+}
+
+// Aviso del chat y plazos de conservación (RGPD). El texto por defecto lo pone el servidor si se deja vacío.
+function PrivacyTab({ draft, update }: TabProps) {
+  const p = draft.privacy;
+  const set = (part: Partial<Privacy>) => update({ privacy: { ...p, ...part } });
+  return (
+    <div className="card block">
+      <h2>Privacidad</h2>
+      <p className="hint">Lo que ve el cliente en el chat antes de escribir y cuánto tiempo guardamos sus datos.</p>
+      <label className="f" htmlFor="notice">Aviso del chat</label>
+      <textarea className="i" id="notice" rows={3} value={p.notice_text || ""} onChange={(e) => set({ notice_text: e.target.value })}
+        placeholder="Este chat lo atiende un asistente con inteligencia artificial. Usaremos los datos que nos des para responder a tu consulta…" />
+      <label className="f" htmlFor="policy">Enlace a tu política de privacidad</label>
+      <input className="i" id="policy" type="url" value={p.policy_url || ""} onChange={(e) => set({ policy_url: e.target.value })} placeholder="https://tuweb.com/privacidad" />
+      <label className="f" htmlFor="retention">Borrar contactos sin actividad después de</label>
+      <select className="i" id="retention" value={p.retention_months || 0} onChange={(e) => set({ retention_months: Number(e.target.value) })}>
+        <option value={0}>No borrar automáticamente</option>
+        {[6, 12, 24, 36, 60].map((m) => <option key={m} value={m}>{m} meses</option>)}
+      </select>
+      {(p.retention_months || 0) > 0 && (
+        <>
+          <label className="f" htmlFor="retention-action">Qué hacer con ellos</label>
+          <select className="i" id="retention-action" value={p.retention_action || "anonymize"} onChange={(e) => set({ retention_action: e.target.value as Privacy["retention_action"] })}>
+            <option value="anonymize">Anonimizar (se borran nombre, contacto y conversación; quedan las cifras)</option>
+            <option value="delete">Borrar del todo</option>
+          </select>
+          <p className="hint" style={{ marginTop: 8 }}>Se revisa una vez al día. Cuenta como actividad cualquier mensaje o cambio en la ficha.</p>
+        </>
+      )}
     </div>
   );
 }

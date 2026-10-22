@@ -51,6 +51,16 @@ import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParam
 import { emailBodyToHtml, emailBodyToText } from "./lib/emailLinks.js";
 import { addSubscription, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
 import { supabase } from "./lib/supabase.js";
+import {
+  applyRetention,
+  collectLeadData,
+  DEFAULT_PRIVACY_NOTICE,
+  leadDataToCsv,
+  listDataAccessLog,
+  logDataAccess,
+  logLeadView,
+  recordConsent,
+} from "./lib/privacy.js";
 import { searchKnowledge } from "./lib/kbRetriever.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
 import {
@@ -4074,6 +4084,10 @@ app.get("/api/widget/config", async (req, res) => {
               ? "email"
               : "",
         },
+        privacy: {
+          notice_text: config?.privacy?.notice_text || DEFAULT_PRIVACY_NOTICE,
+          policy_url: config?.privacy?.policy_url || "",
+        },
       };
 
     res.json({ ok: true, config: publicConfig });
@@ -4531,6 +4545,7 @@ app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
       getConversationMessages(req.params.conversationId, 200, { accountId: account.id }),
       getConversationById(req.params.conversationId).catch(() => null),
     ]);
+    logLeadView({ accountId: account.id, leadId: lead.id, actor: req.crmUser });
     res.json({
       ok: true,
       messages,
@@ -4583,6 +4598,7 @@ app.post("/api/crm/leads/bulk-delete", async (req, res) => {
     const deletedIds = [];
     for (const leadId of leadIds) {
       await deleteCrmLeadById(leadId, { accountId: account.id });
+      await logDataAccess({ accountId: account.id, leadId, action: "delete", actor: req.crmUser, details: { bulk: true } });
       deletedIds.push(leadId);
     }
 
@@ -4601,11 +4617,52 @@ app.delete("/api/crm/leads/:leadId", async (req, res) => {
     const deleted = await deleteCrmLeadById(req.params.leadId, {
       accountId: account.id,
     });
+    await logDataAccess({ accountId: account.id, leadId: req.params.leadId, action: "delete", actor: req.crmUser });
     res.json({ ok: true, deleted });
   } catch (error) {
     const message = String(error.message || "");
     const status = message.toLowerCase().includes("no encontrado") ? 404 : 500;
     res.status(status).json({ ok: false, error: error.message });
+  }
+});
+
+// Derecho de acceso y portabilidad: todo lo que hay de un contacto, en JSON o CSV.
+app.get("/api/crm/leads/:leadId/export", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const bundle = await collectLeadData(req.params.leadId, { accountId: account.id });
+    const format = req.query?.format === "csv" ? "csv" : "json";
+    await logDataAccess({ accountId: account.id, leadId: bundle.lead.id, action: "export", actor: req.crmUser, details: { format } });
+    const filename = `contacto-${bundle.lead.id}.${format}`;
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Cache-Control", "no-store");
+    if (format === "csv") return res.type("text/csv; charset=utf-8").send(leadDataToCsv(bundle));
+    return res.type("application/json; charset=utf-8").send(JSON.stringify(bundle, null, 2));
+  } catch (error) {
+    const status = String(error.message || "").toLowerCase().includes("no encontrado") ? 404 : 500;
+    res.status(status).json({ ok: false, error: error.message });
+  }
+});
+
+// Ficha → Privacidad: consentimientos registrados y quién ha visto, exportado o borrado.
+app.get("/api/crm/leads/:leadId/privacy", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
+    if (!lead) return res.status(404).json({ ok: false, error: "Lead no encontrado" });
+    const [consent, accessLog] = await Promise.all([
+      lead.conversation_id
+        ? listConversationEventsByType(lead.conversation_id, "consent", 50).catch(() => [])
+        : [],
+      listDataAccessLog(lead.id, { accountId: account.id }),
+    ]);
+    res.json({
+      ok: true,
+      consent: { granted: lead.consent ?? null, at: lead.consent_at || null, records: consent },
+      access_log: accessLog,
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 
@@ -5299,6 +5356,20 @@ app.post("/messages", async (req, res) => {
       },
     });
 
+    // El widget manda el aviso de privacidad que mostró antes del primer mensaje.
+    const notice = req.body?.privacy_notice;
+    if (notice?.text && result?.conversation_id) {
+      await recordConsent({
+        conversationId: result.conversation_id,
+        accountId: account.id,
+        channel: channel || "web",
+        basis: "aviso_chat_web",
+        text: notice.text,
+        policyUrl: notice.policy_url,
+        source: "widget",
+      }).catch((error) => console.error("[privacy] consentimiento web", error.message));
+    }
+
     res.json(result);
   } catch (error) {
     console.log("error", error);
@@ -5510,6 +5581,21 @@ app.post("/api/integrations/external-lead", async (req, res) => {
     };
 
     const lead = await upsertLeadFromConversation(leadPayload);
+    if (consentValue !== null && consentValue !== undefined && consentValue !== "") {
+      const consentText =
+        norm(firstPayloadValue(payload, ["consent_text", "texto_consentimiento", "privacy_text", "texto_legal", "legal_text"])) ||
+        (String(consentValue).length > 20 ? String(consentValue) : "") ||
+        `Casilla de consentimiento del formulario "${sourceFormName || sourcePlatform}" (valor: ${consentValue})`;
+      await recordConsent({
+        conversationId: conversation.id,
+        accountId: account.id,
+        channel: sourcePlatform,
+        granted: hasConsent,
+        basis: "formulario",
+        text: consentText,
+        source: sourceFormName,
+      }).catch((error) => console.error("[privacy] consentimiento formulario", error.message));
+    }
     await updateLeadCrmFields(lead.id, {
       name: leadPayload.name,
       email: leadPayload.email,
@@ -6213,6 +6299,14 @@ async function processWhatsAppInboxEvent(event) {
       chat_completed: Boolean(result?.chat_completed),
       agent_processed_at: new Date().toISOString(),
     });
+    await recordConsent({
+      conversationId: result?.conversation_id,
+      accountId: event.account_id,
+      channel: "whatsapp",
+      basis: "whatsapp_iniciado_por_usuario",
+      text: "La persona inició la conversación escribiendo al WhatsApp de la empresa.",
+      source: phoneNumberId,
+    }).catch((error) => console.error("[privacy] consentimiento whatsapp", error.message));
   }
 
   let providerMessageId = null;
@@ -6432,10 +6526,37 @@ function startInternalScheduler() {
     runSchedulerJob("whatsapp", () => runWhatsAppFollowupsTask());
   }, SCHEDULER_WHATSAPP_INTERVAL_MINUTES * 60 * 1000);
 
+  // Plazos de conservación RGPD: una vez al día basta.
+  setInterval(() => {
+    runSchedulerJob("privacy-retention", () => runPrivacyRetentionTask());
+  }, 24 * 60 * 60 * 1000);
   setInterval(() => {
     runSchedulerJob("email", () => runEmailRepliesTask());
   }, SCHEDULER_EMAIL_INTERVAL_MINUTES * 60 * 1000);
 }
+
+async function runPrivacyRetentionTask() {
+  const results = [];
+  for (const account of await listAccounts({ force: true })) {
+    const config = await getPublishedAppConfig({ accountId: account.id }).catch(() => null);
+    results.push(await applyRetention({ accountId: account.id, privacy: config?.privacy }));
+  }
+  // Los webhooks de WhatsApp ya procesados guardan el texto y el teléfono: no hacen falta pasado un mes.
+  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase.from("channel_inbox_events").delete().eq("status", "completed").lt("completed_at", monthAgo);
+  return { ok: true, processed_count: results.reduce((sum, r) => sum + (r.processed || 0), 0), accounts: results };
+}
+
+app.post("/tasks/privacy-retention", async (req, res) => {
+  if (!isAuthorizedTaskRequest(req)) {
+    return res.status(401).json({ ok: false, error: "Unauthorized task request" });
+  }
+  try {
+    return res.json(await runPrivacyRetentionTask());
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
 
 function startChannelInboxWorker() {
   // Local runs against the production database must not claim real inbox events.
@@ -6641,6 +6762,7 @@ app.post("/api/crm/assistant", async (req, res) => {
       business_profile: { ...current.business_profile, ...pick(body.business_profile, ["value_proposition", "audience", "human_team_label"]) },
       contact: { ...current.contact, ...pick(body.contact, ["support_email"]) },
       notifications: { ...current.notifications, ...pick(body.notifications, ["email_to", "notify_new_lead"]) },
+      privacy: { ...current.privacy, ...pick(body.privacy, ["notice_text", "policy_url", "retention_months", "retention_action"]) },
       knowledge_sources: {
         ...current.knowledge_sources,
         ...pick(body.knowledge_sources, ["website_urls", "internal_notes", "spreadsheet_mapping"]),
