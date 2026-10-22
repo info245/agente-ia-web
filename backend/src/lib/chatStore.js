@@ -629,7 +629,7 @@ export async function findLatestLeadByEmail(email, { accountId = null } = {}) {
   return data?.[0] || null;
 }
 
-export async function listCrmLeads({ limit = 200, offset = 0, accountId = null } = {}) {
+export async function listCrmLeads({ limit = 200, offset = 0, accountId = null, assignedTo = null } = {}) {
   const safeLimit = Math.max(1, Math.min(500, Number.isFinite(Number(limit)) ? Number(limit) : 200));
   const safeOffset = Math.max(0, Number.isFinite(Number(offset)) ? Number(offset) : 0);
   const safeAccountId = clean(accountId);
@@ -658,6 +658,7 @@ export async function listCrmLeads({ limit = 200, offset = 0, accountId = null }
   if (safeAccountId && (await tableHasAccountColumn("leads"))) {
     query = query.eq("account_id", safeAccountId);
   }
+  if (clean(assignedTo)) query = query.eq("assigned_to", clean(assignedTo));
 
   const { data, error } = await query;
 

@@ -7,6 +7,9 @@ export type User = {
   role: "super_admin" | string;
   account_id?: string;
   account?: Account | null;
+  status?: string;
+  // Lo que el rol permite (lo calcula el servidor): home, inbox, contacts, agenda, proposals, settings, delete, team, billing, write.
+  permissions?: string[];
 };
 
 export type Message = {
@@ -35,6 +38,7 @@ export type Lead = {
   quote_status?: string | null;
   next_action?: string | null;
   internal_notes?: string | null;
+  assigned_to?: string | null;
   source_platform?: string | null;
   created_at?: string;
   updated_at?: string;
