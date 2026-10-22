@@ -160,7 +160,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </nav>
         <main>
-          <BillingBanner billing={billing} />
+          {pathname !== "/facturacion" && <BillingBanner billing={billing} />}
           {children}
         </main>
       </div>

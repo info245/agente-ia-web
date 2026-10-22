@@ -48,7 +48,7 @@ export default function AltaPage() {
 function Wizard({ config, onboarding }: { config: AppConfig; onboarding: Onboarding | null }) {
   const router = useRouter();
   const { account, reloadConfig } = useSession();
-  const steps = onboarding?.steps || [];
+  const [steps, setSteps] = useState(() => onboarding?.steps || []);
   const [index, setIndex] = useState(() => Math.max(0, steps.findIndex((s) => !s.done)));
   const [draft, setDraft] = useState(() => draftFrom(config, account.name || ""));
   const [busy, setBusy] = useState(false);
@@ -70,7 +70,8 @@ function Wizard({ config, onboarding }: { config: AppConfig; onboarding: Onboard
     setMsg(null);
     try {
       const notice = save ? await save() : undefined;
-      await api("/crm/onboarding", { method: "POST", body: { step: step.key } });
+      const saved = await api<{ onboarding: Onboarding }>("/crm/onboarding", { method: "POST", body: { step: step.key } });
+      setSteps(saved.onboarding.steps);
       await reloadConfig();
       if (notice) setMsg({ kind: "warn", text: notice });
       if (step.key === "activar") return router.replace("/inicio?alta=ok");
