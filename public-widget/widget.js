@@ -52,6 +52,8 @@
   CONFIG.publicWhatsappNumber = "";
   CONFIG.availableChannels = [];
   CONFIG.initialMessage = "";
+  CONFIG.privacyNotice = "";
+  CONFIG.privacyPolicyUrl = "";
   CONFIG.integrationReady = Boolean(CONFIG.accountId || CONFIG.accountSlug);
 
   async function loadRemoteWidgetConfig() {
@@ -82,9 +84,83 @@
         ? remote.contact.available_channels
         : [];
       CONFIG.initialMessage = String(remote?.agent?.initial_message || "").trim();
+      CONFIG.privacyNotice = String(remote?.privacy?.notice_text || "").trim();
+      CONFIG.privacyPolicyUrl = /^https?:\/\//i.test(String(remote?.privacy?.policy_url || ""))
+        ? String(remote.privacy.policy_url)
+        : "";
     } catch (_error) {
       // fallback silencioso: el widget sigue funcionando con la config local
     }
+  }
+
+  // Atribución de campañas: gclid/fbclid/utm de la URL y las cookies _gcl_aw/_fbc/_fbp que ya
+  // pone la web (con su propio consentimiento). Se guarda solo durante la visita (sessionStorage)
+  // y viaja con el chat y en los campos ocultos de los formularios de la página, para que el CRM
+  // pueda avisar a Google Ads y Meta cuando ese lead se convierta en cliente.
+  // data-attribution="off" en el <script> lo desactiva.
+  const ATTRIBUTION_KEYS = ["gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+  const attributionEnabled = currentScript?.getAttribute("data-attribution") !== "off";
+
+  function readCookie(name) {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
+  function captureAttribution() {
+    if (!attributionEnabled) return {};
+    const key = storageKey("agente_ia_attribution");
+    let stored = {};
+    try {
+      stored = JSON.parse(sessionStorage.getItem(key) || "{}") || {};
+    } catch {}
+    const params = new URLSearchParams(window.location.search);
+    const fresh = {};
+    for (const name of ATTRIBUTION_KEYS) {
+      const value = params.get(name);
+      if (value) fresh[name] = value.slice(0, 200);
+    }
+    if (fresh.fbclid) fresh.fbclid_at = String(Date.now());
+    const gclAw = readCookie("_gcl_aw").split(".");
+    if (!fresh.gclid && !stored.gclid && gclAw.length >= 3) fresh.gclid = gclAw.slice(2).join(".");
+    const fbc = readCookie("_fbc");
+    const fbp = readCookie("_fbp");
+    if (fbc) fresh.fbc = fbc;
+    if (fbp) fresh.fbp = fbp;
+    if (Object.keys(fresh).length && !stored.landing_page) {
+      fresh.landing_page = `${window.location.origin}${window.location.pathname}`;
+      try {
+        if (document.referrer) fresh.referrer = new URL(document.referrer).origin;
+      } catch {}
+    }
+    const merged = { ...stored, ...fresh };
+    try {
+      if (Object.keys(merged).length) sessionStorage.setItem(key, JSON.stringify(merged));
+    } catch {}
+    return merged;
+  }
+
+  const attribution = captureAttribution();
+
+  // Formularios de la web: rellena los campos ocultos que se llamen gclid, fbclid, utm_source...
+  // (o lleven data-attribution="gclid") si están vacíos. Llegan al CRM como campos del lead.
+  function fillAttributionFields(root) {
+    if (!Object.keys(attribution).length) return;
+    const fields = (root || document).querySelectorAll("input[name], input[data-attribution]");
+    fields.forEach((input) => {
+      const name = String(input.getAttribute("data-attribution") || input.name || "")
+        .toLowerCase()
+        .replace(/^.*[[\-]/, "")
+        .replace(/]$/, "");
+      if (attribution[name] && !input.value && (input.type === "hidden" || input.hasAttribute("data-attribution"))) {
+        input.value = attribution[name];
+      }
+    });
+  }
+
+  if (attributionEnabled) {
+    fillAttributionFields();
+    document.addEventListener("focusin", (event) => fillAttributionFields(event.target?.form || undefined), true);
+    document.addEventListener("submit", (event) => fillAttributionFields(event.target), true);
   }
 
   await loadRemoteWidgetConfig();
@@ -257,6 +333,11 @@
     };
 
     if (conversationId) payload.conversation_id = conversationId;
+    // Primer mensaje: queda registrado qué aviso de privacidad vio la persona.
+    else if (CONFIG.privacyNotice) {
+      payload.privacy_notice = { text: CONFIG.privacyNotice, policy_url: CONFIG.privacyPolicyUrl };
+    }
+    if (Object.keys(attribution).length) payload.attribution = attribution;
     if (CONFIG.accountId) payload.account_id = CONFIG.accountId;
     else if (CONFIG.accountSlug) payload.account_slug = CONFIG.accountSlug;
 
@@ -375,6 +456,8 @@
     .send{border:1px solid transparent;border-radius:12px;padding:10px 12px;cursor:pointer;background:${CONFIG.primaryColor};color:#fff;font:inherit;}
     .send:disabled{opacity:.6;cursor:not-allowed;}
     .mini{font-size:12px;color:#6b7280;}
+    .privacy{padding:8px 12px;font-size:11px;line-height:1.4;color:#4b5563;background:#f9fafb;border-bottom:1px solid #e5e7eb;}
+    .privacy a{color:inherit;text-decoration:underline;}
     @media (max-width:420px){.panel{width:calc(100vw - 36px);height:72vh;}}
   `;
   shadow.appendChild(style);
@@ -409,6 +492,7 @@
           <button class="icon-btn" id="closeBtn" type="button" title="Cerrar">✕</button>
         </div>
       </div>
+      <div class="privacy" id="privacy" hidden></div>
       <div class="messages" id="messages"></div>
       <div class="footer">
         <textarea id="input" class="input" placeholder="Escribe tu mensaje..." aria-label="Mensaje"></textarea>
@@ -432,6 +516,21 @@
   const status = $("status");
   const sendBtn = $("sendBtn");
   const mini = shadow.querySelector(".mini");
+
+  // Aviso de privacidad, visible antes de escribir el primer mensaje.
+  const privacy = $("privacy");
+  if (CONFIG.privacyNotice) {
+    privacy.textContent = CONFIG.privacyNotice + " ";
+    if (CONFIG.privacyPolicyUrl) {
+      const link = document.createElement("a");
+      link.href = CONFIG.privacyPolicyUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Política de privacidad";
+      privacy.appendChild(link);
+    }
+    privacy.hidden = false;
+  }
 
   function setStatus(text) {
     status.textContent = text || "Listo";

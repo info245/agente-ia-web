@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { supabase } from "./supabase.js";
+import { ACCOUNT_ROLES } from "./permissions.js";
 
 let crmUsersTableAvailable = null;
 
@@ -94,11 +95,11 @@ export async function createCrmUser(input = {}) {
   if (requirePassword && (!password || password.length < 8)) {
     throw new Error("La contraseña debe tener al menos 8 caracteres.");
   }
-  if (!["super_admin", "client_admin"].includes(role)) {
+  if (!["super_admin", "client_admin", ...ACCOUNT_ROLES].includes(role)) {
     throw new Error("Rol no valido.");
   }
-  if (role === "client_admin" && !accountId) {
-    throw new Error("El client_admin debe estar asociado a una cuenta.");
+  if (role !== "super_admin" && !accountId) {
+    throw new Error("El usuario debe estar asociado a una cuenta.");
   }
 
   const payload = {
@@ -265,4 +266,63 @@ export async function updateCrmUserStatus(userId, status) {
   if (error) throw error;
   if (!data) throw new Error("Usuario no encontrado.");
   return normalizeUser(data);
+}
+
+// Equipo de una cuenta: solo toca usuarios de esa cuenta, nunca a la agencia.
+const USER_FIELDS = "id, email, role, account_id, display_name, status";
+
+export async function getCrmUserInAccount(userId, accountId) {
+  const { data, error } = await supabase
+    .from("crm_users")
+    .select(USER_FIELDS)
+    .eq("id", clean(userId))
+    .eq("account_id", clean(accountId))
+    .neq("role", "super_admin")
+    .maybeSingle();
+  if (error) throw error;
+  return data ? normalizeUser(data) : null;
+}
+
+export async function updateCrmUserInAccount(userId, accountId, input = {}) {
+  const patch = {};
+  if (input.role !== undefined) {
+    if (!ACCOUNT_ROLES.includes(clean(input.role))) throw new Error("Rol no válido.");
+    patch.role = clean(input.role);
+  }
+  if (input.status !== undefined) {
+    if (!["active", "disabled"].includes(clean(input.status))) throw new Error("Estado no válido.");
+    patch.status = clean(input.status);
+  }
+  if (!Object.keys(patch).length) throw new Error("Nada que cambiar.");
+  const { data, error } = await supabase
+    .from("crm_users")
+    .update(patch)
+    .eq("id", clean(userId))
+    .eq("account_id", clean(accountId))
+    .neq("role", "super_admin")
+    .select(USER_FIELDS)
+    .maybeSingle();
+  if (error) {
+    if (/crm_users_role_check/.test(String(error.message))) {
+      throw new Error("Falta ejecutar sql/017_crm_roles.sql en Supabase para usar los nuevos roles.");
+    }
+    throw error;
+  }
+  if (!data) throw new Error("Usuario no encontrado.");
+  return normalizeUser(data);
+}
+
+const teamSettingsKey = (accountId) => `team_settings:${clean(accountId)}`;
+
+export async function getTeamSettings(accountId) {
+  const { data, error } = await supabase.from("app_settings").select("value").eq("key", teamSettingsKey(accountId)).maybeSingle();
+  if (error) throw error;
+  return { sales_own_leads_only: Boolean(data?.value?.sales_own_leads_only) };
+}
+
+export async function saveTeamSettings(accountId, input = {}) {
+  const value = { sales_own_leads_only: Boolean(input.sales_own_leads_only) };
+  const { error } = await supabase.from("app_settings").upsert({ key: teamSettingsKey(accountId), value, account_id: clean(accountId) }, { onConflict: "key" });
+  if (error) throw error;
+  return value;
 }

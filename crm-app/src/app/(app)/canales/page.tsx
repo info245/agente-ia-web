@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ConfigPending, useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import type { AppConfig, WhatsAppTemplate } from "@/lib/types";
+import { CampaignsCard } from "./campaigns";
 
 type WhatsAppChannel = { configured?: boolean; status?: string; display_phone_number?: string; verified_name?: string };
 
@@ -135,6 +136,8 @@ export default function CanalesPage() {
             {calendarError && <p className="alert error" role="alert" style={{ marginTop: 10 }}>{calendarError}</p>}
           </div>
         </div>
+
+        <CampaignsCard stages={config.pipeline?.stages || []} oauthResult={params.get("ads_oauth")} oauthMessage={params.get("ads_oauth_message")} />
       </div>
 
       <div className="card agency">

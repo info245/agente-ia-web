@@ -67,6 +67,7 @@ h2 { font-family: var(--display); font-size: 17px; font-weight: 700; margin: 0; 
 .p-good { background: var(--good-soft); color: var(--good); }
 .p-bad { background: var(--bad-soft); color: var(--bad); }
 .p-muted { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.p-warn { background: var(--warn-soft); color: var(--warn); }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .empty { color: var(--muted); padding: 28px 16px; text-align: center; font-size: 14px; }
 .loading { color: var(--muted); padding: 40px; text-align: center; }
@@ -257,7 +258,9 @@ textarea.i { resize: vertical; }
 }
 @media (max-width: 820px) {
   .app { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 100dvh; }
-  .side { position: fixed; bottom: 0; left: 0; right: 0; flex-direction: row; padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); border-right: 0; border-top: 1px solid var(--line); z-index: 5; justify-content: space-around; }
+  .side { position: fixed; bottom: 0; left: 0; right: 0; flex-direction: row; padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); border-right: 0; border-top: 1px solid var(--line); z-index: 5; justify-content: space-around; overflow-x: auto; scrollbar-width: none; }
+  /* Con más de 7 secciones el menú se desliza de lado en vez de apretar los botones. */
+  .side .nav { flex: 1 0 auto; min-width: 58px; }
   .brand, .side .spacer, .me, .account-select { display: none; }
   .nav { flex-direction: column; gap: 2px; font-size: 10.5px; padding: 6px 2px; position: relative; min-width: 0; }
   .nav .count { position: absolute; top: 0; right: 2px; margin: 0; }

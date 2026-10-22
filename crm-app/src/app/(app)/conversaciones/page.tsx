@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSession } from "@/components/app-shell";
-import { api, ApiError } from "@/lib/api";
+import { useSession, useTeamMembers } from "@/components/app-shell";
+import { api, ApiError, getAccountId } from "@/lib/api";
 import { channelOf, isHumanMessage, leadName, OWNER_PILL, ownerOf, shortTime, type Owner } from "@/lib/format";
-import type { Conversation, Lead, Message } from "@/lib/types";
+import type { AccessLogEntry, ConsentRecord, Conversation, Lead, Message } from "@/lib/types";
 
 type Thread = { messages: Message[]; lead: Lead; conversation: Conversation | null; fetchedAt: number };
 type Template = { name: string; language: string; category: string; header: string; body: string; footer: string; params: number; param_names?: string[]; sendable: boolean };
@@ -81,7 +81,7 @@ export default function ConversacionesPage() {
 }
 
 function ThreadView({ conversationId, onBack, onChanged }: { conversationId: string; onBack: () => void; onChanged: () => Promise<void> }) {
-  const { config } = useSession();
+  const { config, can } = useSession();
   const [thread, setThread] = useState<Thread | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<{ kind: "error" | "warn"; text: string } | null>(null);
@@ -201,6 +201,9 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
           })}
           {paused && <div className="sys">Tu asistente no responde en esta conversación: atiendes tú</div>}
         </div>
+        {!can("write") ? (
+          <div className="composer"><p className="alert warn" style={{ margin: 0 }}>Tu usuario es de solo lectura: puedes ver la conversación, pero no responder.</p></div>
+        ) : (
         <div className="composer">
           {notice && <p className={`alert ${notice.kind}`} role="alert" style={{ margin: 0 }}>{notice.text}</p>}
           <div className="mode">
@@ -249,6 +252,7 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
             </p>
           )}
         </div>
+        )}
       </div>
       <LeadPanel lead={lead} stages={config?.pipeline?.stages || []} open={showLead} onClose={() => setShowLead(false)} onSaved={async () => { await load(); await onChanged(); }} />
     </>
@@ -348,6 +352,8 @@ function TemplateComposer({ conversationId, defaults, onSent }: { conversationId
 const QUOTE_STATUS: Record<string, string> = { borrador: "borrador", draft: "borrador", sent: "enviada", enviado: "enviada", accepted: "aceptada", rejected: "rechazada" };
 
 function LeadPanel({ lead, stages, open, onClose, onSaved }: { lead: Lead; stages: { key: string; label?: string; is_active?: boolean }[]; open: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
+  const { can } = useSession();
+  const members = useTeamMembers();
   const [note, setNote] = useState(lead.internal_notes || "");
   const [status, setStatus] = useState("");
 
@@ -381,6 +387,14 @@ function LeadPanel({ lead, stages, open, onClose, onSaved }: { lead: Lead; stage
       {lead.budget_range && <div className="field"><span>Presupuesto</span>{lead.budget_range}</div>}
       {lead.current_situation && <div className="field"><span>Situación</span>{lead.current_situation}</div>}
       {lead.pain_points && <div className="field"><span>Problema</span>{lead.pain_points}</div>}
+      <fieldset disabled={!can("write")} style={{ border: 0, padding: 0, margin: 0 }}>
+      <div className="field">
+        <span>Asignado a</span>
+        <select aria-label="Asignado a" value={lead.assigned_to || ""} onChange={(e) => save({ assigned_to: e.target.value })}>
+          <option value="">Sin asignar</option>
+          {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+        </select>
+      </div>
       <div className="field">
         <span>Etapa</span>
         <select aria-label="Etapa del contacto" value={lead.crm_status || ""} onChange={(e) => save({ crm_status: e.target.value })}>
@@ -391,11 +405,13 @@ function LeadPanel({ lead, stages, open, onClose, onSaved }: { lead: Lead; stage
         <span>Notas internas</span>
         <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} onBlur={() => note !== (lead.internal_notes || "") && save({ internal_notes: note })} placeholder="Solo la ves tú" />
       </div>
+      </fieldset>
       {status && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }} aria-live="polite">{status}</p>}
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <Link className="btn small" href={`/propuesta?lead=${lead.id}`}>Propuesta{lead.quote_status && lead.quote_status !== "sin_presupuesto" ? ` · ${QUOTE_STATUS[lead.quote_status] || lead.quote_status}` : ""}</Link>
         <Link className="btn small" href={`/analisis?lead=${lead.id}`}>Análisis</Link>
       </div>
+      {open && <PrivacySection lead={lead} />}
       {/* El resumen automático es un volcado interno para el agente; aquí se ven sus datos ya ordenados arriba. */}
       {lead.next_action && (
         <div className="next">
@@ -404,5 +420,65 @@ function LeadPanel({ lead, stages, open, onClose, onSaved }: { lead: Lead; stage
         </div>
       )}
     </aside>
+  );
+}
+
+const CHANNEL_LABEL: Record<string, string> = { web: "Chat web", whatsapp: "WhatsApp", fb: "Formulario de Meta", ig: "Formulario de Meta", meta: "Formulario de Meta", web_form: "Formulario web" };
+const ACTION_LABEL: Record<AccessLogEntry["action"], string> = { view: "vio la ficha", export: "exportó los datos", delete: "borró los datos", anonymize: "anonimizó los datos" };
+const when = (value: string) => new Date(value).toLocaleString("es-ES", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// RGPD en la ficha: de dónde sale el consentimiento, exportar sus datos y quién ha accedido.
+function PrivacySection({ lead }: { lead: Lead }) {
+  const [data, setData] = useState<{ consent: { granted: boolean | null; at: string | null; records: ConsentRecord[] }; access_log: AccessLogEntry[] } | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api<NonNullable<typeof data>>(`/crm/leads/${lead.id}/privacy`).then(setData).catch((err) => setError((err as Error).message));
+  }, [lead.id]);
+
+  const exportUrl = (format: "json" | "csv") => {
+    const params = new URLSearchParams({ format });
+    const accountId = getAccountId();
+    if (accountId) params.set("account_id", accountId);
+    return `/api/crm/leads/${lead.id}/export?${params}`;
+  };
+
+  return (
+    <div className="field">
+      <span>Privacidad</span>
+      {error && <small style={{ color: "var(--bad)" }}>{error}</small>}
+      {data && (
+        <>
+          <div>
+            Consentimiento: {data.consent.granted === true ? "sí" : data.consent.granted === false ? "no" : "sin registrar"}
+            {data.consent.at && ` (${when(data.consent.at)})`}
+          </div>
+          {data.consent.records.map((r) => (
+            <details key={r.id} style={{ fontSize: 12, marginTop: 4 }}>
+              <summary>
+                {when(r.created_at)} · {CHANNEL_LABEL[r.channel || ""] || r.channel || "—"}
+                {r.payload?.granted === false ? " · rechazado" : ""}
+              </summary>
+              <p style={{ margin: "4px 0", whiteSpace: "pre-wrap" }}>{r.payload?.text || "Sin texto guardado"}</p>
+              {r.payload?.policy_url && <a href={r.payload.policy_url} target="_blank" rel="noopener noreferrer">Política enlazada</a>}
+            </details>
+          ))}
+          <div style={{ display: "flex", gap: 8, margin: "8px 0" }}>
+            <a className="btn small" href={exportUrl("json")} download>Exportar JSON</a>
+            <a className="btn small" href={exportUrl("csv")} download>Exportar CSV</a>
+          </div>
+          {data.access_log.length > 0 && (
+            <details style={{ fontSize: 12 }}>
+              <summary>Quién ha accedido ({data.access_log.length})</summary>
+              <ul style={{ margin: "4px 0", paddingLeft: 16 }}>
+                {data.access_log.map((entry, i) => (
+                  <li key={i}>{when(entry.created_at)} · {entry.actor_email || "sistema"} {ACTION_LABEL[entry.action] || entry.action}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
+      )}
+    </div>
   );
 }
