@@ -131,6 +131,8 @@ export default function AsistentePage() {
 }
 
 function Editor({ config, reloadConfig }: { config: AppConfig; reloadConfig: () => Promise<void> }) {
+  const { account, user } = useSession();
+  const accountName = account.name || account.slug || account.id;
   const [draft, setDraft] = useState<Draft>(() => draftFrom(config));
   const [saved, setSaved] = useState(() => JSON.stringify(draftFrom(config)));
   const [tab, setTab] = useState<Tab>("habla");
@@ -142,6 +144,8 @@ function Editor({ config, reloadConfig }: { config: AppConfig; reloadConfig: () 
   const update = (part: Partial<Draft>) => setDraft((d) => ({ ...d, ...part }));
 
   async function save() {
+    // La agencia trabaja con varias cuentas: confirmar siempre en cuál se guarda.
+    if (user.role === "super_admin" && !window.confirm(`Vas a guardar y activar estos cambios en la cuenta «${accountName}». ¿Es correcto?`)) return;
     setSaving(true);
     setMessage(null);
     try {
@@ -179,7 +183,7 @@ function Editor({ config, reloadConfig }: { config: AppConfig; reloadConfig: () 
           {tab === "seguimientos" && <FollowUpsTab draft={draft} update={update} />}
           <div className="card savebar">
             {message ? <span role="status" className={`alert ${message.kind}`}>{message.text}</span> : <span>{dirty ? "Tienes cambios sin guardar" : "Todo guardado"}</span>}
-            <button className="btn primary" onClick={save} disabled={!dirty || saving}>{saving ? "Guardando…" : "Guardar y activar"}</button>
+            <button className="btn primary" onClick={save} disabled={!dirty || saving}>{saving ? "Guardando…" : `Guardar y activar en ${accountName}`}</button>
           </div>
         </div>
         <TryPanel greeting={draft.greeting} config={previewConfig(patch, config)} />
