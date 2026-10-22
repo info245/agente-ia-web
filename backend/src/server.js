@@ -132,6 +132,23 @@ import {
   retrySkippedAutomationJob,
   updateAutomationJobResult,
 } from "./lib/automationJobStore.js";
+import {
+  CONVERSION_JOB_TYPE,
+  GOOGLE_DATA_MANAGER_SCOPE,
+  buildGoogleIngestBody,
+  getGoogleAccessToken,
+  mergeAttributionIntoCustomFields,
+  mergeConversionSettings,
+  publicConversionSettings,
+  sendGoogleConversion,
+} from "./lib/adConversions.js";
+import {
+  getConversionSettings,
+  listConversionJobs,
+  requeueConversionJob,
+  saveConversionSettings,
+} from "./lib/adConversionStore.js";
+import { queueLeadConversions, runConversionJob, runConversionSweep } from "./lib/adConversionRuntime.js";
 
 import { buildKnowledgeContext, getServiceFacts, getWebsiteFacts } from "./lib/websiteFacts.js";
 import {
@@ -382,8 +399,10 @@ const schedulerState = {
   whatsappRunning: false,
   inboxRunning: false,
   automationJobsRunning: false,
+  conversionsRunning: false,
   emailRunning: false,
 };
+const CONVERSION_SWEEP_INTERVAL_MS = Math.max(60_000, Number(process.env.CONVERSION_SWEEP_INTERVAL_MS || 5 * 60_000));
 const googleEmailOauthStates = new Map();
 const GOOGLE_EMAIL_OAUTH_TTL_MS = 1000 * 60 * 15;
 const LOGIN_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
@@ -4515,6 +4534,193 @@ app.post("/api/crm/integrations/whatsapp/test", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Conversiones offline (Canales → Campañas): el CRM avisa a Google Ads y Meta de qué leads
+// se cualifican, reservan o compran. El cliente ve el estado y el registro; la agencia configura.
+// ---------------------------------------------------------------------------
+
+async function getAccountPipelineStages(accountId) {
+  const config = await getAppConfig({ accountId }).catch(() => null);
+  return config?.pipeline?.stages || [];
+}
+
+function buildGoogleAdsRedirectUri(req) {
+  return `${buildPublicBaseUrl(req)}/oauth/google/ads/callback`;
+}
+
+app.get("/api/crm/integrations/conversions", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const pipelineStages = await getAccountPipelineStages(account.id);
+    const stored = await getConversionSettings(account.id);
+    return res.json({
+      ok: true,
+      settings: publicConversionSettings(stored || {}, { pipelineStages }),
+      google_oauth_ready: Boolean(GOOGLE_OAUTH_CLIENT_ID && GOOGLE_OAUTH_CLIENT_SECRET),
+      google_redirect_uri: buildGoogleAdsRedirectUri(req),
+      can_edit: req.crmUser?.role === "super_admin",
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.put("/api/crm/integrations/conversions", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const pipelineStages = await getAccountPipelineStages(account.id);
+    const stored = await getConversionSettings(account.id);
+    const next = mergeConversionSettings(stored || {}, req.body?.settings || req.body || {}, { pipelineStages });
+    const saved = await saveConversionSettings(account.id, next);
+    return res.json({ ok: true, settings: publicConversionSettings(saved, { pipelineStages }) });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/api/crm/integrations/conversions/log", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const jobs = await listConversionJobs(account.id, { limit: req.query?.limit || 100 });
+    const entries = jobs.map((job) => {
+      const payload = job.payload || {};
+      const result = job.result || {};
+      const state =
+        job.status === "completed"
+          ? result.skipped ? "skipped" : "sent"
+          : job.status === "failed"
+            ? "failed"
+            : job.attempts > 0 ? "retrying" : "pending";
+      return {
+        id: job.id,
+        state,
+        platform: payload.platform,
+        event: payload.event,
+        lead_id: payload.lead_id,
+        lead_name: payload.lead_name,
+        value: payload.value || 0,
+        currency: payload.currency || "EUR",
+        trigger: payload.trigger,
+        detail: result.reason || job.last_error || (result.identifiers?.length ? `Con ${result.identifiers.join(", ")}` : ""),
+        attempts: job.attempts,
+        created_at: job.created_at,
+        completed_at: job.completed_at,
+        next_attempt_at: state === "retrying" ? job.available_at : null,
+      };
+    });
+    return res.json({ ok: true, entries });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/integrations/conversions/jobs/:jobId/retry", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const job = await requeueConversionJob(account.id, req.params.jobId);
+    return res.json({ ok: true, job });
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+// Comprueba credenciales sin registrar ninguna conversión real (Google: validateOnly; Meta: lectura del píxel).
+app.post("/api/crm/integrations/conversions/test", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const settings = mergeConversionSettings((await getConversionSettings(account.id)) || {}, {});
+    if (req.body?.platform === "google") {
+      const event = ["qualified_lead", "booking", "sale"].find((key) => settings.events[key]?.google_conversion_action_id);
+      if (!settings.google.customer_id || !event) {
+        throw new Error("Pon el ID de cliente de Google Ads y al menos un ID de acción de conversión.");
+      }
+      const accessToken = await getGoogleAccessToken({
+        refreshToken: settings.google.refresh_token,
+        clientId: GOOGLE_OAUTH_CLIENT_ID,
+        clientSecret: GOOGLE_OAUTH_CLIENT_SECRET,
+      });
+      const { body } = buildGoogleIngestBody({
+        settings,
+        lead: { id: "prueba", email: "prueba@example.com", consent: true },
+        payload: { event, lead_id: "prueba", event_time: new Date().toISOString() },
+        validateOnly: true,
+      });
+      await sendGoogleConversion({ body, accessToken });
+      return res.json({ ok: true, message: "Google Ads acepta las conversiones de esta cuenta (prueba sin registrar nada)." });
+    }
+    if (req.body?.platform === "meta") {
+      if (!settings.meta.pixel_id || !settings.meta.access_token) throw new Error("Pon el Pixel ID y el token de Conversions API.");
+      const apiVersion = process.env.META_GRAPH_API_VERSION || WHATSAPP_API_VERSION;
+      const probe = await fetchWithTimeout(
+        `https://graph.facebook.com/${apiVersion}/${encodeURIComponent(settings.meta.pixel_id)}?fields=id,name&access_token=${encodeURIComponent(settings.meta.access_token)}`
+      );
+      const data = await probe.json().catch(() => ({}));
+      if (!probe.ok || data?.error) throw new Error(`Meta no acepta el token o el píxel: ${data?.error?.message || probe.status}`);
+      return res.json({ ok: true, message: `Meta reconoce el píxel «${data.name || data.id}».` });
+    }
+    throw new Error("Plataforma no válida.");
+  } catch (error) {
+    return res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/integrations/conversions/google/connect-url", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const { clientId, clientSecret } = getGlobalGoogleOauthCredentials();
+    if (!clientId || !clientSecret) return res.status(400).json({ ok: false, error: "Google OAuth no esta configurado todavia." });
+    const stateToken = createGoogleEmailOauthState({
+      accountId: account.id,
+      userId: req.crmUser?.id || "",
+      returnTo: CRM_APP_URL ? `${CRM_APP_URL}/canales` : "",
+    });
+    const authUrl = new URL(buildGoogleEmailAuthUrl({ clientId, redirectUri: buildGoogleAdsRedirectUri(req), stateToken }));
+    authUrl.searchParams.set("scope", `${GOOGLE_DATA_MANAGER_SCOPE} https://www.googleapis.com/auth/userinfo.email`);
+    return res.json({ ok: true, auth_url: authUrl.toString() });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get("/oauth/google/ads/callback", async (req, res) => {
+  const callbackState = consumeGoogleEmailOauthState(String(req.query?.state || "").trim());
+  const redirectUrl = new URL(callbackState?.returnTo || `${buildPublicBaseUrl(req)}/crm`);
+  try {
+    const code = String(req.query?.code || "").trim();
+    if (!code || !callbackState?.accountId) throw new Error("La autorizacion de Google no devolvio un estado valido.");
+    const account = await resolveAccount(callbackState.accountId);
+    const { clientId, clientSecret } = getGlobalGoogleOauthCredentials();
+    const tokenPayload = await exchangeGoogleEmailCode({ code, clientId, clientSecret, redirectUri: buildGoogleAdsRedirectUri(req) });
+    const current = mergeConversionSettings((await getConversionSettings(account.id)) || {}, {}, {
+      pipelineStages: await getAccountPipelineStages(account.id),
+    });
+    const refreshToken = String(tokenPayload?.refresh_token || "").trim() || current.google.refresh_token;
+    if (!refreshToken) throw new Error("Google no devolvio refresh token. Vuelve a conectar aceptando todos los permisos.");
+    if (!String(tokenPayload?.scope || "").includes(GOOGLE_DATA_MANAGER_SCOPE)) {
+      throw new Error("Falta el permiso de Google Ads (Data Manager). Vuelve a conectar y marca todas las casillas.");
+    }
+    const connectedEmail = await fetchGoogleConnectedEmail(String(tokenPayload?.access_token || "")).catch(() => "");
+    await saveConversionSettings(account.id, {
+      ...current,
+      google: {
+        ...current.google,
+        enabled: true,
+        refresh_token: refreshToken,
+        connected_email: connectedEmail,
+        connected_at: new Date().toISOString(),
+      },
+    });
+    redirectUrl.searchParams.set("account_id", account.id);
+    redirectUrl.searchParams.set("ads_oauth", "connected");
+    redirectUrl.searchParams.set("ads_oauth_message", connectedEmail);
+  } catch (error) {
+    redirectUrl.searchParams.set("ads_oauth", "error");
+    redirectUrl.searchParams.set("ads_oauth_message", String(error?.message || "No se pudo conectar Google Ads."));
+    if (callbackState?.accountId) redirectUrl.searchParams.set("account_id", callbackState.accountId);
+  }
+  return res.redirect(302, redirectUrl.toString());
+});
+
 app.post("/api/crm/knowledge/sync", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
@@ -4578,6 +4784,9 @@ async function handleCrmLeadUpdate(req, res) {
     const updated = await updateLeadCrmFields(req.params.leadId, req.body || {}, {
       accountId: account.id,
     });
+    if ("crm_status" in (req.body || {}) || "quote_status" in (req.body || {})) {
+      void queueLeadConversions({ accountId: account.id, lead: updated, trigger: "crm" });
+    }
     res.json({ ok: true, lead: updated });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -4920,6 +5129,9 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
       quote_status: response.lead?.quote_status || lead.quote_status,
       crm_status: response.lead?.crm_status || lead.crm_status,
     };
+    if (response.action === "accepted") {
+      void queueLeadConversions({ accountId: account.id, lead: updatedLead, trigger: "quote_accepted" });
+    }
 
     // Aviso interno al equipo: el estado CRM ya se actualizó en markLatestQuoteResponse.
     const notice = buildQuoteResponseNotice({
@@ -5371,6 +5583,11 @@ app.post("/messages", async (req, res) => {
     }
 
     res.json(result);
+    void saveWidgetAttribution({
+      accountId: account.id,
+      conversationId: result?.conversation_id || conversation_id,
+      attribution: req.body?.attribution,
+    });
   } catch (error) {
     console.log("error", error);
 
@@ -5380,6 +5597,19 @@ app.post("/messages", async (req, res) => {
     });
   }
 });
+
+// gclid/fbclid/utm que el widget recogió al llegar el visitante: se guardan en el lead (primer contacto).
+async function saveWidgetAttribution({ accountId, conversationId, attribution }) {
+  try {
+    if (!conversationId || !attribution || typeof attribution !== "object") return;
+    const lead = await getLeadByConversationId(conversationId, { accountId });
+    if (!lead?.id) return;
+    const merged = mergeAttributionIntoCustomFields(lead.custom_fields, attribution);
+    if (merged) await updateLeadCrmFields(lead.id, { custom_fields: merged }, { accountId });
+  } catch (error) {
+    console.log("widget attribution error", error?.message || error);
+  }
+}
 
 // {{3}} de la plantilla de bienvenida: lo que pidió el lead, en una frase y sin saltos de línea.
 async function summarizeFormLeadRequest(intake = {}) {
@@ -5483,6 +5713,11 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       firstPayloadValue(payload, ["source_adset_name", "adset_name", "adset", "adsetName"])
     );
     const customFields = buildExternalLeadCustomFields(payload);
+    // El leadgen_id de Meta Lead Ads es lo que Conversions API necesita para cerrar el círculo.
+    const externalLeadId = String(parsedIntake.value.external_user_id || "").trim();
+    if (sourcePlatform === "meta_ads" && /^\d{10,20}$/.test(externalLeadId) && !customFields.meta_lead_id) {
+      customFields.meta_lead_id = externalLeadId;
+    }
     const businessActivity = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.business_activity));
     const budgetRange = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.budget_range));
     const mainGoal = norm(firstPayloadValue(payload, EXTERNAL_LEAD_ALIASES.main_goal));
@@ -6022,6 +6257,10 @@ async function runAutomationJobsTask({ limit = 20 } = {}) {
   const processed = [];
   for (const job of jobs) {
     try {
+      if (job.job_type === CONVERSION_JOB_TYPE) {
+        processed.push(await runConversionJob(job));
+        continue;
+      }
       if (job.job_type !== "automation_step") {
         throw new Error(`Tipo de automatización no soportado: ${job.job_type}`);
       }
@@ -6467,6 +6706,8 @@ async function runSchedulerJob(jobName, fn) {
         ? "automationJobsRunning"
       : jobName === "inbox"
         ? "inboxRunning"
+      : jobName === "conversions"
+        ? "conversionsRunning"
       : jobName === "email"
         ? "emailRunning"
         : "whatsappRunning";
@@ -6575,6 +6816,10 @@ function startChannelInboxWorker() {
     runSchedulerJob("inbox", () => runChannelInboxTask());
     runSchedulerJob("automation-jobs", () => runAutomationJobsTask());
   }, CHANNEL_INBOX_INTERVAL_MS);
+  // Conversiones offline: encola lo que no entró por un disparador directo (reservas del agente, etc.).
+  setInterval(() => {
+    runSchedulerJob("conversions", async () => ({ processed_count: (await runConversionSweep()).length }));
+  }, CONVERSION_SWEEP_INTERVAL_MS);
 }
 
 app.post("/tasks/automation-flows", async (req, res) => {

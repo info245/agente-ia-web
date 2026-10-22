@@ -93,6 +93,76 @@
     }
   }
 
+  // Atribución de campañas: gclid/fbclid/utm de la URL y las cookies _gcl_aw/_fbc/_fbp que ya
+  // pone la web (con su propio consentimiento). Se guarda solo durante la visita (sessionStorage)
+  // y viaja con el chat y en los campos ocultos de los formularios de la página, para que el CRM
+  // pueda avisar a Google Ads y Meta cuando ese lead se convierta en cliente.
+  // data-attribution="off" en el <script> lo desactiva.
+  const ATTRIBUTION_KEYS = ["gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+  const attributionEnabled = currentScript?.getAttribute("data-attribution") !== "off";
+
+  function readCookie(name) {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
+  function captureAttribution() {
+    if (!attributionEnabled) return {};
+    const key = storageKey("agente_ia_attribution");
+    let stored = {};
+    try {
+      stored = JSON.parse(sessionStorage.getItem(key) || "{}") || {};
+    } catch {}
+    const params = new URLSearchParams(window.location.search);
+    const fresh = {};
+    for (const name of ATTRIBUTION_KEYS) {
+      const value = params.get(name);
+      if (value) fresh[name] = value.slice(0, 200);
+    }
+    if (fresh.fbclid) fresh.fbclid_at = String(Date.now());
+    const gclAw = readCookie("_gcl_aw").split(".");
+    if (!fresh.gclid && !stored.gclid && gclAw.length >= 3) fresh.gclid = gclAw.slice(2).join(".");
+    const fbc = readCookie("_fbc");
+    const fbp = readCookie("_fbp");
+    if (fbc) fresh.fbc = fbc;
+    if (fbp) fresh.fbp = fbp;
+    if (Object.keys(fresh).length && !stored.landing_page) {
+      fresh.landing_page = `${window.location.origin}${window.location.pathname}`;
+      try {
+        if (document.referrer) fresh.referrer = new URL(document.referrer).origin;
+      } catch {}
+    }
+    const merged = { ...stored, ...fresh };
+    try {
+      if (Object.keys(merged).length) sessionStorage.setItem(key, JSON.stringify(merged));
+    } catch {}
+    return merged;
+  }
+
+  const attribution = captureAttribution();
+
+  // Formularios de la web: rellena los campos ocultos que se llamen gclid, fbclid, utm_source...
+  // (o lleven data-attribution="gclid") si están vacíos. Llegan al CRM como campos del lead.
+  function fillAttributionFields(root) {
+    if (!Object.keys(attribution).length) return;
+    const fields = (root || document).querySelectorAll("input[name], input[data-attribution]");
+    fields.forEach((input) => {
+      const name = String(input.getAttribute("data-attribution") || input.name || "")
+        .toLowerCase()
+        .replace(/^.*[[\-]/, "")
+        .replace(/]$/, "");
+      if (attribution[name] && !input.value && (input.type === "hidden" || input.hasAttribute("data-attribution"))) {
+        input.value = attribution[name];
+      }
+    });
+  }
+
+  if (attributionEnabled) {
+    fillAttributionFields();
+    document.addEventListener("focusin", (event) => fillAttributionFields(event.target?.form || undefined), true);
+    document.addEventListener("submit", (event) => fillAttributionFields(event.target), true);
+  }
+
   await loadRemoteWidgetConfig();
 
   const uid = () => Math.random().toString(36).slice(2, 10);
@@ -267,6 +337,7 @@
     else if (CONFIG.privacyNotice) {
       payload.privacy_notice = { text: CONFIG.privacyNotice, policy_url: CONFIG.privacyPolicyUrl };
     }
+    if (Object.keys(attribution).length) payload.attribution = attribution;
     if (CONFIG.accountId) payload.account_id = CONFIG.accountId;
     else if (CONFIG.accountSlug) payload.account_slug = CONFIG.accountSlug;
 

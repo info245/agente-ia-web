@@ -67,6 +67,7 @@ h2 { font-family: var(--display); font-size: 17px; font-weight: 700; margin: 0; 
 .p-good { background: var(--good-soft); color: var(--good); }
 .p-bad { background: var(--bad-soft); color: var(--bad); }
 .p-muted { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+.p-warn { background: var(--warn-soft); color: var(--warn); }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .empty { color: var(--muted); padding: 28px 16px; text-align: center; font-size: 14px; }
 .loading { color: var(--muted); padding: 40px; text-align: center; }
