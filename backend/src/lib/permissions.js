@@ -44,6 +44,8 @@ export function crmPermissionFor(method, path) {
   if (p.startsWith("/push/")) return "self";
   if (p === "/accounts" || p === "/analytics") return "home";
   if (p === "/config" && isRead(method)) return "home";
+  // Resultados: lo ve quien ve Inicio; apuntar la inversión (PUT) queda en "settings".
+  if (p.startsWith("/reports/") && isRead(method)) return "home";
   if (p === "/team/members" && isRead(method)) return "contacts";
   if (/^\/team(\/|$)/.test(p)) return "team";
   if (/^\/billing(\/|$)/.test(p)) return "billing";

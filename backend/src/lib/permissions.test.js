@@ -90,6 +90,8 @@ test("todas las rutas /api/crm del servidor tienen permiso y las de configuraciÃ
   // Exportar los datos personales de un contacto exige el mismo permiso que borrarlo.
   assert.equal(crmPermissionFor("GET", "/leads/x/export"), "delete");
   assert.equal(crmPermissionFor("GET", "/leads/x/privacy"), "contacts");
+  assert.equal(crmPermissionFor("GET", "/reports/results"), "home");
+  assert.equal(crmPermissionFor("PUT", "/reports/spend"), "settings");
 });
 
 test("un usuario cliente nunca elige otra cuenta", () => {
