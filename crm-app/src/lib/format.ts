@@ -59,3 +59,16 @@ export function startOfWeek(date = new Date()) {
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
   return d;
 }
+
+export const ROLE_OPTIONS = [
+  ["owner", "Propietario"],
+  ["manager", "Gestor"],
+  ["sales", "Comercial"],
+  ["viewer", "Solo lectura"],
+] as const;
+
+export function roleLabel(role?: string) {
+  if (role === "super_admin") return "Agencia";
+  if (role === "client_admin") return "Propietario";
+  return ROLE_OPTIONS.find(([value]) => value === role)?.[1] || "Solo lectura";
+}

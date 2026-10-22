@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSession } from "@/components/app-shell";
+import { useSession, useTeamMembers } from "@/components/app-shell";
 import { api, ApiError, getAccountId } from "@/lib/api";
 import { channelOf, isHumanMessage, leadName, OWNER_PILL, ownerOf, shortTime, type Owner } from "@/lib/format";
 import type { AccessLogEntry, ConsentRecord, Conversation, Lead, Message } from "@/lib/types";
@@ -81,7 +81,7 @@ export default function ConversacionesPage() {
 }
 
 function ThreadView({ conversationId, onBack, onChanged }: { conversationId: string; onBack: () => void; onChanged: () => Promise<void> }) {
-  const { config } = useSession();
+  const { config, can } = useSession();
   const [thread, setThread] = useState<Thread | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<{ kind: "error" | "warn"; text: string } | null>(null);
@@ -201,6 +201,9 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
           })}
           {paused && <div className="sys">Tu asistente no responde en esta conversación: atiendes tú</div>}
         </div>
+        {!can("write") ? (
+          <div className="composer"><p className="alert warn" style={{ margin: 0 }}>Tu usuario es de solo lectura: puedes ver la conversación, pero no responder.</p></div>
+        ) : (
         <div className="composer">
           {notice && <p className={`alert ${notice.kind}`} role="alert" style={{ margin: 0 }}>{notice.text}</p>}
           <div className="mode">
@@ -249,6 +252,7 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
             </p>
           )}
         </div>
+        )}
       </div>
       <LeadPanel lead={lead} stages={config?.pipeline?.stages || []} open={showLead} onClose={() => setShowLead(false)} onSaved={async () => { await load(); await onChanged(); }} />
     </>
@@ -348,6 +352,8 @@ function TemplateComposer({ conversationId, defaults, onSent }: { conversationId
 const QUOTE_STATUS: Record<string, string> = { borrador: "borrador", draft: "borrador", sent: "enviada", enviado: "enviada", accepted: "aceptada", rejected: "rechazada" };
 
 function LeadPanel({ lead, stages, open, onClose, onSaved }: { lead: Lead; stages: { key: string; label?: string; is_active?: boolean }[]; open: boolean; onClose: () => void; onSaved: () => Promise<void> }) {
+  const { can } = useSession();
+  const members = useTeamMembers();
   const [note, setNote] = useState(lead.internal_notes || "");
   const [status, setStatus] = useState("");
 
@@ -381,6 +387,14 @@ function LeadPanel({ lead, stages, open, onClose, onSaved }: { lead: Lead; stage
       {lead.budget_range && <div className="field"><span>Presupuesto</span>{lead.budget_range}</div>}
       {lead.current_situation && <div className="field"><span>Situación</span>{lead.current_situation}</div>}
       {lead.pain_points && <div className="field"><span>Problema</span>{lead.pain_points}</div>}
+      <fieldset disabled={!can("write")} style={{ border: 0, padding: 0, margin: 0 }}>
+      <div className="field">
+        <span>Asignado a</span>
+        <select aria-label="Asignado a" value={lead.assigned_to || ""} onChange={(e) => save({ assigned_to: e.target.value })}>
+          <option value="">Sin asignar</option>
+          {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
+        </select>
+      </div>
       <div className="field">
         <span>Etapa</span>
         <select aria-label="Etapa del contacto" value={lead.crm_status || ""} onChange={(e) => save({ crm_status: e.target.value })}>
@@ -391,6 +405,7 @@ function LeadPanel({ lead, stages, open, onClose, onSaved }: { lead: Lead; stage
         <span>Notas internas</span>
         <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} onBlur={() => note !== (lead.internal_notes || "") && save({ internal_notes: note })} placeholder="Solo la ves tú" />
       </div>
+      </fieldset>
       {status && <p style={{ fontSize: 12, color: "var(--muted)", margin: "6px 0 0" }} aria-live="polite">{status}</p>}
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         <Link className="btn small" href={`/propuesta?lead=${lead.id}`}>Propuesta{lead.quote_status && lead.quote_status !== "sin_presupuesto" ? ` · ${QUOTE_STATUS[lead.quote_status] || lead.quote_status}` : ""}</Link>
