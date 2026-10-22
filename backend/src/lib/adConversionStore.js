@@ -53,7 +53,7 @@ export async function saveConversionSettings(accountId, settings) {
     .select("settings")
     .single();
   if (error) {
-    if (isMissingTable(error)) throw new Error("Falta aplicar la migración sql/016_ad_conversions.sql en Supabase.");
+    if (isMissingTable(error)) throw new Error("Falta aplicar la migración sql/018_ad_conversions.sql en Supabase.");
     throw error;
   }
   return decryptSettings(data.settings, accountId);

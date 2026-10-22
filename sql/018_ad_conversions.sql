@@ -1,4 +1,4 @@
--- 016: conversiones offline hacia Google Ads y Meta.
+-- 018: conversiones offline hacia Google Ads y Meta.
 --
 -- Ajustes por cuenta (IDs de Google Ads, Pixel de Meta, qué etapas cuentan). Los secretos
 -- (refresh token de Google, token de Conversions API) van cifrados con SECRETS_ENCRYPTION_KEY

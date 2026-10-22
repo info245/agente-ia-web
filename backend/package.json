@@ -10,7 +10,8 @@
     "dev": "node --watch src/server.js",
     "test": "node --test --test-isolation=none \"src/**/*.test.js\"",
     "check": "node --check src/server.js && node --check public-crm/app.js",
-    "test:tmedia-agents": "node scripts/test-tmedia-agents.js"
+    "test:tmedia-agents": "node scripts/test-tmedia-agents.js",
+    "eval:agent": "node scripts/eval-agent.js"
   },
   "dependencies": {
     "@langfuse/openai": "5.11.1",

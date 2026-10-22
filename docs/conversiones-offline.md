@@ -22,7 +22,7 @@ Cada evento se envía una sola vez por contacto y plataforma (clave `conversion:
 
 ## Puesta en marcha
 
-1. Aplica `sql/016_ad_conversions.sql` en Supabase.
+1. Aplica `sql/018_ad_conversions.sql` en Supabase.
 2. Google Cloud, en el proyecto del cliente OAuth de Gmail y Calendar:
    - habilita **Data Manager API**;
    - añade el redirect URI `https://<backend>/oauth/google/ads/callback`;

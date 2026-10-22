@@ -33,6 +33,7 @@ import {
   getLatestAnalysisByLeadId,
   upsertLatestAnalysisForLead,
   markLatestAnalysisAsSent,
+  findLatestLeadByEmail,
 } from "./lib/chatStore.js";
 
 import { openai, AGENT_MODEL } from "./lib/openaiClient.js";
@@ -50,6 +51,16 @@ import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParam
 import { emailBodyToHtml, emailBodyToText } from "./lib/emailLinks.js";
 import { addSubscription, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
 import { supabase } from "./lib/supabase.js";
+import {
+  applyRetention,
+  collectLeadData,
+  DEFAULT_PRIVACY_NOTICE,
+  leadDataToCsv,
+  listDataAccessLog,
+  logDataAccess,
+  logLeadView,
+  recordConsent,
+} from "./lib/privacy.js";
 import { searchKnowledge } from "./lib/kbRetriever.js";
 import { getIndustryPreset, listIndustryPresets } from "./lib/industryPresets.js";
 import {
@@ -65,11 +76,16 @@ import {
   createCrmUser,
   createPasswordSetupToken,
   getCrmUserById,
+  getCrmUserInAccount,
+  getTeamSettings,
   listCrmUsers,
+  saveTeamSettings,
+  updateCrmUserInAccount,
   setCrmUserPasswordFromToken,
   updateCrmUserStatus,
   verifyCrmUserCredentials,
 } from "./lib/authStore.js";
+import { ACCOUNT_ROLES, can, createCrmPermissionMiddleware, permissionsFor, requestAccountInput } from "./lib/permissions.js";
 import { uploadBrandLogo } from "./lib/storageStore.js";
 import {
   getWhatsAppChannelForAccount,
@@ -141,7 +157,9 @@ import {
   sendQuoteEmailToLead,
   sendTransactionalEmail,
   verifyEmailTransport,
+  getGmailAccessToken,
 } from "./lib/emailService.js";
+import { getGmailMessage, listRecentInboxMessageIds, parseGmailMessage } from "./lib/emailReplies.js";
 
 import {
   buildNextBestActionPromptBlock,
@@ -279,7 +297,25 @@ app.get("/widget.js", (_req, res) => {
 app.get("/crm", (_req, res) => {
   res.sendFile(path.join(crmPublicDir, "index.html"));
 });
-app.use("/api/crm", requireCrmAuth());
+// Contacto al que pertenece un recurso, para el comercial que solo ve lo suyo. undefined = no existe en la cuenta.
+async function getLeadOwner(accountId, { type, id }) {
+  if (type === "bookings") {
+    const { data, error } = await supabase.from("bookings").select("lead_id").eq("id", id).eq("account_id", accountId).maybeSingle();
+    if (error && error.code !== "22P02") throw error;
+    return data?.lead_id ? getLeadOwner(accountId, { type: "leads", id: data.lead_id }) : undefined;
+  }
+  const { data, error } = await supabase
+    .from("leads")
+    .select("assigned_to")
+    .eq(type === "leads" ? "id" : "conversation_id", id)
+    .eq("account_id", accountId)
+    .limit(1)
+    .maybeSingle();
+  if (error && error.code !== "22P02") throw error;
+  return data ? data.assigned_to : undefined;
+}
+// Permisos por rol para todo /api/crm/*: un único punto de control (ver lib/permissions.js).
+app.use("/api/crm", requireCrmAuth(), createCrmPermissionMiddleware({ getTeamSettings, getLeadOwner }));
 
 const PORT = process.env.PORT || 3000;
 const BUILD_TAG = "conversation-audit-v6-beta-crm";
@@ -340,6 +376,10 @@ const SCHEDULER_WHATSAPP_INTERVAL_MINUTES = Math.max(
   5,
   Number(process.env.SCHEDULER_WHATSAPP_INTERVAL_MINUTES || 30)
 );
+const SCHEDULER_EMAIL_INTERVAL_MINUTES = Math.max(
+  2,
+  Number(process.env.SCHEDULER_EMAIL_INTERVAL_MINUTES || 5)
+);
 const SCHEDULER_STARTUP_DELAY_MS = Math.max(
   1_000,
   Number(process.env.SCHEDULER_STARTUP_DELAY_MS || 15_000)
@@ -360,6 +400,7 @@ const schedulerState = {
   inboxRunning: false,
   automationJobsRunning: false,
   conversionsRunning: false,
+  emailRunning: false,
 };
 const CONVERSION_SWEEP_INTERVAL_MS = Math.max(60_000, Number(process.env.CONVERSION_SWEEP_INTERVAL_MS || 5 * 60_000));
 const googleEmailOauthStates = new Map();
@@ -542,9 +583,16 @@ async function fetchGoogleConnectedEmail(accessToken) {
   return String(payload.email || "").trim();
 }
 
+// Usuario cliente: siempre su cuenta. Si ya no existe, error (resolveAccount caería en la cuenta por defecto).
+async function resolveUserAccount(user) {
+  const account = await resolveAccount(requestAccountInput(user));
+  if (String(account?.id || "") !== String(user.account_id)) throw new Error("La cuenta de tu usuario no existe.");
+  return account;
+}
+
 async function resolveRequestAccount(req) {
   if (req.crmUser?.role && req.crmUser.role !== "super_admin") {
-    return resolveAccount(req.crmUser.account_id);
+    return resolveUserAccount(req.crmUser);
   }
 
   const accountInput =
@@ -569,7 +617,7 @@ function getExplicitRequestAccountInput(req) {
 
 async function resolveExplicitRequestAccount(req) {
   if (req.crmUser?.role && req.crmUser.role !== "super_admin") {
-    return resolveAccount(req.crmUser.account_id);
+    return resolveUserAccount(req.crmUser);
   }
 
   const accountInput = String(getExplicitRequestAccountInput(req) || "").trim();
@@ -642,7 +690,7 @@ function isRequestFromAllowedDomain(req, appConfig = {}) {
 
 async function resolveExternalLeadAccount(req, payload = {}, { allowDefault = false } = {}) {
   if (req.crmUser?.role && req.crmUser.role !== "super_admin") {
-    const account = await resolveAccount(req.crmUser.account_id);
+    const account = await resolveUserAccount(req.crmUser);
     const accountConfig = await getPublishedAppConfig({ accountId: account.id }).catch(() => null);
     return { account, accountConfig, matchedBy: "crm_user" };
   }
@@ -2826,7 +2874,7 @@ app.get("/api/crm/leads", async (req, res) => {
     const account = await resolveRequestAccount(req);
     const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 200));
     const offset = Math.max(0, Number(req.query.offset) || 0);
-    const leads = await listCrmLeads({ limit: limit + 1, offset, accountId: account.id });
+    const leads = await listCrmLeads({ limit: limit + 1, offset, accountId: account.id, assignedTo: req.crmLeadOwner });
     const hasMore = leads.length > limit;
     const page = hasMore ? leads.slice(0, limit) : leads;
 
@@ -2895,6 +2943,94 @@ app.get("/api/crm/accounts", async (req, res) => {
         : allAccounts.filter((account) => String(account.id) === String(activeAccount.id));
 
     res.json({ ok: true, accounts, active_account: activeAccount });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Equipo de la cuenta. El middleware de /api/crm ya exige el permiso "team" (Propietario o agencia).
+app.get("/api/crm/team", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const [users, settings] = await Promise.all([listCrmUsers({ accountId: account.id }), getTeamSettings(account.id)]);
+    res.json({ ok: true, users, settings });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Nombres del equipo para asignar contactos (lo ve cualquiera con acceso a Contactos).
+app.get("/api/crm/team/members", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const users = await listCrmUsers({ accountId: account.id });
+    res.json({
+      ok: true,
+      members: users.filter((u) => u.status === "active").map((u) => ({ id: u.id, display_name: u.display_name || u.email })),
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/team", async (req, res) => {
+  try {
+    // Solo roles de cuenta: desde aquí nunca se crea un usuario de agencia.
+    if (!ACCOUNT_ROLES.includes(String(req.body?.role || ""))) return res.status(400).json({ ok: false, error: "Elige un rol válido." });
+    const account = await resolveRequestAccount(req);
+    const user = await createCrmUser({
+      email: req.body?.email,
+      display_name: req.body?.display_name,
+      role: req.body?.role,
+      account_id: account.id,
+      status: "invited",
+      require_password: false,
+    });
+    const invite = await sendPasswordSetupInvite({ req, user, accountName: account.name });
+    res.json({ ok: true, user, invite_sent: invite?.email?.ok !== false, setup_url: invite?.setup_url });
+  } catch (error) {
+    const message = String(error?.message || "");
+    if (/duplicate|unique/i.test(message)) return res.status(409).json({ ok: false, error: "Ya existe un usuario con ese email." });
+    if (/crm_users_role_check/.test(message)) {
+      return res.status(500).json({ ok: false, error: "Falta ejecutar sql/017_crm_roles.sql en Supabase para usar los nuevos roles." });
+    }
+    res.status(400).json({ ok: false, error: message });
+  }
+});
+
+app.put("/api/crm/team/settings", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const settings = await saveTeamSettings(account.id, req.body || {});
+    res.json({ ok: true, settings });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.patch("/api/crm/team/:userId", async (req, res) => {
+  try {
+    if (req.params.userId === req.crmUser.id) {
+      return res.status(400).json({ ok: false, error: "No puedes cambiar tu propio rol ni desactivarte." });
+    }
+    const account = await resolveRequestAccount(req);
+    const user = await updateCrmUserInAccount(req.params.userId, account.id, {
+      role: req.body?.role,
+      status: req.body?.status,
+    });
+    res.json({ ok: true, user });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+app.post("/api/crm/team/:userId/invite", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const user = await getCrmUserInAccount(req.params.userId, account.id);
+    if (!user) return res.status(404).json({ ok: false, error: "Usuario no encontrado." });
+    const invite = await sendPasswordSetupInvite({ req, user, accountName: account.name });
+    res.json({ ok: true, invite_sent: invite?.email?.ok !== false, setup_url: invite?.setup_url });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -3022,6 +3158,7 @@ app.get("/api/auth/me", async (req, res) => {
       user: {
         ...req.crmUser,
         account,
+        permissions: permissionsFor(req.crmUser.role),
       },
     });
   } catch (error) {
@@ -3748,7 +3885,9 @@ app.post("/api/crm/config/publish-agent", async (req, res) => {
   }
 });
 
-app.post("/crm/email/google/connect", requireCrmAuth(), async (req, res) => {
+// Fuera de /api/crm: aplica a mano el mismo permiso que el resto de la configuración.
+app.post("/crm/email/google/connect", requireCrmAuth(), (req, res, next) =>
+  can(req.crmUser, "settings") ? next() : res.status(403).json({ ok: false, error: "Tu rol no tiene acceso a esta sección." }), async (req, res) => {
   const baseUrl = buildPublicBaseUrl(req);
   const redirectUrl = new URL(`${baseUrl}/crm`);
 
@@ -3963,6 +4102,10 @@ app.get("/api/widget/config", async (req, res) => {
             : hasConfiguredEmail(config)
               ? "email"
               : "",
+        },
+        privacy: {
+          notice_text: config?.privacy?.notice_text || DEFAULT_PRIVACY_NOTICE,
+          policy_url: config?.privacy?.policy_url || "",
         },
       };
 
@@ -4608,6 +4751,7 @@ app.get("/api/crm/conversations/:conversationId/messages", async (req, res) => {
       getConversationMessages(req.params.conversationId, 200, { accountId: account.id }),
       getConversationById(req.params.conversationId).catch(() => null),
     ]);
+    logLeadView({ accountId: account.id, leadId: lead.id, actor: req.crmUser });
     res.json({
       ok: true,
       messages,
@@ -4663,6 +4807,7 @@ app.post("/api/crm/leads/bulk-delete", async (req, res) => {
     const deletedIds = [];
     for (const leadId of leadIds) {
       await deleteCrmLeadById(leadId, { accountId: account.id });
+      await logDataAccess({ accountId: account.id, leadId, action: "delete", actor: req.crmUser, details: { bulk: true } });
       deletedIds.push(leadId);
     }
 
@@ -4681,11 +4826,52 @@ app.delete("/api/crm/leads/:leadId", async (req, res) => {
     const deleted = await deleteCrmLeadById(req.params.leadId, {
       accountId: account.id,
     });
+    await logDataAccess({ accountId: account.id, leadId: req.params.leadId, action: "delete", actor: req.crmUser });
     res.json({ ok: true, deleted });
   } catch (error) {
     const message = String(error.message || "");
     const status = message.toLowerCase().includes("no encontrado") ? 404 : 500;
     res.status(status).json({ ok: false, error: error.message });
+  }
+});
+
+// Derecho de acceso y portabilidad: todo lo que hay de un contacto, en JSON o CSV.
+app.get("/api/crm/leads/:leadId/export", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const bundle = await collectLeadData(req.params.leadId, { accountId: account.id });
+    const format = req.query?.format === "csv" ? "csv" : "json";
+    await logDataAccess({ accountId: account.id, leadId: bundle.lead.id, action: "export", actor: req.crmUser, details: { format } });
+    const filename = `contacto-${bundle.lead.id}.${format}`;
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Cache-Control", "no-store");
+    if (format === "csv") return res.type("text/csv; charset=utf-8").send(leadDataToCsv(bundle));
+    return res.type("application/json; charset=utf-8").send(JSON.stringify(bundle, null, 2));
+  } catch (error) {
+    const status = String(error.message || "").toLowerCase().includes("no encontrado") ? 404 : 500;
+    res.status(status).json({ ok: false, error: error.message });
+  }
+});
+
+// Ficha → Privacidad: consentimientos registrados y quién ha visto, exportado o borrado.
+app.get("/api/crm/leads/:leadId/privacy", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
+    if (!lead) return res.status(404).json({ ok: false, error: "Lead no encontrado" });
+    const [consent, accessLog] = await Promise.all([
+      lead.conversation_id
+        ? listConversationEventsByType(lead.conversation_id, "consent", 50).catch(() => [])
+        : [],
+      listDataAccessLog(lead.id, { accountId: account.id }),
+    ]);
+    res.json({
+      ok: true,
+      consent: { granted: lead.consent ?? null, at: lead.consent_at || null, records: consent },
+      access_log: accessLog,
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
   }
 });
 
@@ -5382,6 +5568,20 @@ app.post("/messages", async (req, res) => {
       },
     });
 
+    // El widget manda el aviso de privacidad que mostró antes del primer mensaje.
+    const notice = req.body?.privacy_notice;
+    if (notice?.text && result?.conversation_id) {
+      await recordConsent({
+        conversationId: result.conversation_id,
+        accountId: account.id,
+        channel: channel || "web",
+        basis: "aviso_chat_web",
+        text: notice.text,
+        policyUrl: notice.policy_url,
+        source: "widget",
+      }).catch((error) => console.error("[privacy] consentimiento web", error.message));
+    }
+
     res.json(result);
     void saveWidgetAttribution({
       accountId: account.id,
@@ -5616,6 +5816,21 @@ app.post("/api/integrations/external-lead", async (req, res) => {
     };
 
     const lead = await upsertLeadFromConversation(leadPayload);
+    if (consentValue !== null && consentValue !== undefined && consentValue !== "") {
+      const consentText =
+        norm(firstPayloadValue(payload, ["consent_text", "texto_consentimiento", "privacy_text", "texto_legal", "legal_text"])) ||
+        (String(consentValue).length > 20 ? String(consentValue) : "") ||
+        `Casilla de consentimiento del formulario "${sourceFormName || sourcePlatform}" (valor: ${consentValue})`;
+      await recordConsent({
+        conversationId: conversation.id,
+        accountId: account.id,
+        channel: sourcePlatform,
+        granted: hasConsent,
+        basis: "formulario",
+        text: consentText,
+        source: sourceFormName,
+      }).catch((error) => console.error("[privacy] consentimiento formulario", error.message));
+    }
     await updateLeadCrmFields(lead.id, {
       name: leadPayload.name,
       email: leadPayload.email,
@@ -6018,6 +6233,8 @@ async function runAutomationFlowsTask({
   for (const account of accounts) {
     if (!account?.id) continue;
     const appConfig = await getPublishedAppConfig({ accountId: account.id });
+    // Primero las respuestas por email, para que la secuencia vea que el lead ya contestó.
+    await syncEmailReplies(account, appConfig);
     const accountProcessed = await runAutomationFlowsForAccount({
       account,
       appConfig,
@@ -6064,9 +6281,15 @@ async function runAutomationJobsTask({ limit = 20 } = {}) {
       const step = payload.step || {};
       const template = payload.template || appConfig?.message_templates?.[payload.template_key] || null;
 
+      // Si el lead contestó (WhatsApp o email) después de programar el paso, no se le vuelve a escribir.
+      const recentMessages = await getConversationMessages(payload.conversation_id, 100, { accountId: job.account_id });
+      const leadReplied = userRepliedAfter(recentMessages, job.created_at);
+
       const startedAt = new Date().toISOString();
       await updateAutomationJobResult(job.id, { send_started_at: startedAt });
-      const sendResult = template
+      const sendResult = leadReplied
+        ? { skipped: true, reason: "lead-replied" }
+        : template
         ? await sendAutomationStep({
             lead,
             step,
@@ -6315,6 +6538,14 @@ async function processWhatsAppInboxEvent(event) {
       chat_completed: Boolean(result?.chat_completed),
       agent_processed_at: new Date().toISOString(),
     });
+    await recordConsent({
+      conversationId: result?.conversation_id,
+      accountId: event.account_id,
+      channel: "whatsapp",
+      basis: "whatsapp_iniciado_por_usuario",
+      text: "La persona inició la conversación escribiendo al WhatsApp de la empresa.",
+      source: phoneNumberId,
+    }).catch((error) => console.error("[privacy] consentimiento whatsapp", error.message));
   }
 
   let providerMessageId = null;
@@ -6347,16 +6578,109 @@ async function processWhatsAppInboxEvent(event) {
   };
 }
 
+async function processGmailInboxEvent(event) {
+  const payload = event?.payload && typeof event.payload === "object" ? event.payload : {};
+  const checkpoint = event?.result && typeof event.result === "object" ? event.result : {};
+  const accountId = event.account_id;
+  let saved = checkpoint.message_saved ? checkpoint : null;
+
+  if (!saved) {
+    const appConfig = await getPublishedAppConfig({ accountId });
+    const accessToken = await getGmailAccessToken(appConfig?.integrations?.email || null);
+    if (!accessToken) throw new Error("Gmail no está conectado en esta cuenta.");
+    const email = parseGmailMessage(await getGmailMessage(accessToken, payload.gmail_message_id));
+    if (!email.from || email.autoSubmitted) return { kind: "email", ignored: "auto-or-no-sender" };
+    const lead = await findLatestLeadByEmail(email.from, { accountId });
+    if (!lead?.conversation_id) return { kind: "email", ignored: "no-lead" };
+    const content = email.text || email.subject || "(email sin texto)";
+    await saveMessage({
+      conversation_id: lead.conversation_id,
+      role: "user",
+      content,
+      account_id: accountId,
+      metadata: {
+        channel: "email",
+        gmail_message_id: email.id,
+        gmail_thread_id: email.threadId,
+        email_subject: email.subject,
+        email_from: email.from,
+        received_at: email.receivedAt,
+      },
+    });
+    saved = {
+      message_saved: true,
+      conversation_id: lead.conversation_id,
+      lead_id: lead.id,
+      lead_name: lead.name || "",
+      email_from: email.from,
+      email_subject: email.subject,
+      preview: content.slice(0, 140),
+    };
+    await updateChannelInboxEventResult(event.id, saved);
+  }
+
+  await updateConversationInboxState(saved.conversation_id, { inbox_status: "pending" }, { accountId });
+  await trackConversationEvent({
+    conversation_id: saved.conversation_id,
+    event_type: "email_reply_received",
+    channel: "email",
+    external_user_id: saved.email_from,
+    account_id: accountId,
+    payload: { gmail_message_id: payload.gmail_message_id, subject: saved.email_subject },
+  });
+  void notifyAccount(accountId, {
+    title: `Respuesta por email: ${saved.lead_name || saved.email_from}`,
+    body: saved.preview,
+    url: `/conversaciones?c=${saved.conversation_id}`,
+  });
+  return { kind: "email", conversation_id: saved.conversation_id, lead_id: saved.lead_id };
+}
+
+// Lee el buzón de Gmail conectado y mete en la cola las respuestas nuevas; nunca bloquea las automatizaciones.
+async function syncEmailReplies(account, appConfig) {
+  try {
+    const accessToken = await getGmailAccessToken(appConfig?.integrations?.email || null);
+    if (!accessToken) return 0;
+    const messageIds = await listRecentInboxMessageIds(accessToken);
+    let enqueued = 0;
+    for (const messageId of messageIds) {
+      const queued = await enqueueChannelInboxEvent({
+        accountId: account.id,
+        provider: "gmail",
+        providerEventId: `${account.id}:${messageId}`,
+        channel: "email",
+        payload: { kind: "email", gmail_message_id: messageId },
+      });
+      if (!queued.duplicate) enqueued += 1;
+    }
+    if (enqueued) await runChannelInboxTask({ limit: Math.min(100, enqueued + 20) });
+    return enqueued;
+  } catch (error) {
+    console.log("[email-replies] sync error", account?.id, error?.message || error);
+    return 0;
+  }
+}
+
+async function runEmailRepliesTask() {
+  let processed = 0;
+  for (const account of await listAccounts()) {
+    if (!account?.id) continue;
+    const appConfig = await getPublishedAppConfig({ accountId: account.id });
+    processed += await syncEmailReplies(account, appConfig);
+  }
+  return { ok: true, processed_count: processed };
+}
+
 async function runChannelInboxTask({ limit = 20 } = {}) {
   const events = await claimChannelInboxEvents(limit);
   const processed = [];
 
   for (const event of events) {
     try {
-      if (event.provider !== "meta_whatsapp") {
-        throw new Error(`Proveedor de inbox no soportado: ${event.provider}`);
-      }
-      const result = await processWhatsAppInboxEvent(event);
+      let result;
+      if (event.provider === "meta_whatsapp") result = await processWhatsAppInboxEvent(event);
+      else if (event.provider === "gmail") result = await processGmailInboxEvent(event);
+      else throw new Error(`Proveedor de inbox no soportado: ${event.provider}`);
       await completeChannelInboxEvent(event.id, result);
       processed.push({ id: event.id, ok: true, result });
     } catch (error) {
@@ -6384,6 +6708,8 @@ async function runSchedulerJob(jobName, fn) {
         ? "inboxRunning"
       : jobName === "conversions"
         ? "conversionsRunning"
+      : jobName === "email"
+        ? "emailRunning"
         : "whatsappRunning";
   if (schedulerState[runningKey]) {
     console.log(`[scheduler] skip ${jobName}: previous run still active`);
@@ -6440,7 +6766,38 @@ function startInternalScheduler() {
   setInterval(() => {
     runSchedulerJob("whatsapp", () => runWhatsAppFollowupsTask());
   }, SCHEDULER_WHATSAPP_INTERVAL_MINUTES * 60 * 1000);
+
+  // Plazos de conservación RGPD: una vez al día basta.
+  setInterval(() => {
+    runSchedulerJob("privacy-retention", () => runPrivacyRetentionTask());
+  }, 24 * 60 * 60 * 1000);
+  setInterval(() => {
+    runSchedulerJob("email", () => runEmailRepliesTask());
+  }, SCHEDULER_EMAIL_INTERVAL_MINUTES * 60 * 1000);
 }
+
+async function runPrivacyRetentionTask() {
+  const results = [];
+  for (const account of await listAccounts({ force: true })) {
+    const config = await getPublishedAppConfig({ accountId: account.id }).catch(() => null);
+    results.push(await applyRetention({ accountId: account.id, privacy: config?.privacy }));
+  }
+  // Los webhooks de WhatsApp ya procesados guardan el texto y el teléfono: no hacen falta pasado un mes.
+  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase.from("channel_inbox_events").delete().eq("status", "completed").lt("completed_at", monthAgo);
+  return { ok: true, processed_count: results.reduce((sum, r) => sum + (r.processed || 0), 0), accounts: results };
+}
+
+app.post("/tasks/privacy-retention", async (req, res) => {
+  if (!isAuthorizedTaskRequest(req)) {
+    return res.status(401).json({ ok: false, error: "Unauthorized task request" });
+  }
+  try {
+    return res.json(await runPrivacyRetentionTask());
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
 
 function startChannelInboxWorker() {
   // Local runs against the production database must not claim real inbox events.
@@ -6650,6 +7007,7 @@ app.post("/api/crm/assistant", async (req, res) => {
       business_profile: { ...current.business_profile, ...pick(body.business_profile, ["value_proposition", "audience", "human_team_label"]) },
       contact: { ...current.contact, ...pick(body.contact, ["support_email"]) },
       notifications: { ...current.notifications, ...pick(body.notifications, ["email_to", "notify_new_lead"]) },
+      privacy: { ...current.privacy, ...pick(body.privacy, ["notice_text", "policy_url", "retention_months", "retention_action"]) },
       knowledge_sources: {
         ...current.knowledge_sources,
         ...pick(body.knowledge_sources, ["website_urls", "internal_notes", "spreadsheet_mapping"]),
@@ -6746,10 +7104,17 @@ app.get("/api/crm/bookings", async (req, res) => {
       .order("starts_at", { ascending: true })
       .limit(200);
     if (error) throw error;
+    let bookings = data || [];
+    if (req.crmLeadOwner) {
+      const { data: own, error: ownError } = await supabase.from("leads").select("id").eq("account_id", account.id).eq("assigned_to", req.crmLeadOwner);
+      if (ownError) throw ownError;
+      const ownIds = new Set((own || []).map((lead) => lead.id));
+      bookings = bookings.filter((booking) => ownIds.has(booking.lead_id));
+    }
     const config = await getAppConfig({ accountId: account.id }).catch(() => null);
     return res.json({
       ok: true,
-      bookings: data || [],
+      bookings,
       calendar_connected: isCalendarConnected(config?.integrations?.calendar),
       meeting: config?.agent?.meeting || null,
     });

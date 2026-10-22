@@ -313,6 +313,14 @@ function getTransporter(emailConfig = null) {
   return transporter;
 }
 
+// Token de Gmail para leer el buzón; null si la cuenta no tiene Gmail conectado por OAuth.
+export async function getGmailAccessToken(emailConfig = null) {
+  const runtime = resolveEmailRuntimeConfig(emailConfig);
+  if (runtime.provider !== "google_oauth" || !runtime.googleRefreshToken) return null;
+  const payload = await refreshGoogleOauthAccessToken(runtime);
+  return String(payload.access_token || "").trim() || null;
+}
+
 export async function verifyEmailTransport(emailConfig = null) {
   const runtime = resolveEmailRuntimeConfig(emailConfig);
   if (runtime.provider === "google_oauth") {

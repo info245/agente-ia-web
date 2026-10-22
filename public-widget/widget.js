@@ -52,6 +52,8 @@
   CONFIG.publicWhatsappNumber = "";
   CONFIG.availableChannels = [];
   CONFIG.initialMessage = "";
+  CONFIG.privacyNotice = "";
+  CONFIG.privacyPolicyUrl = "";
   CONFIG.integrationReady = Boolean(CONFIG.accountId || CONFIG.accountSlug);
 
   async function loadRemoteWidgetConfig() {
@@ -82,6 +84,10 @@
         ? remote.contact.available_channels
         : [];
       CONFIG.initialMessage = String(remote?.agent?.initial_message || "").trim();
+      CONFIG.privacyNotice = String(remote?.privacy?.notice_text || "").trim();
+      CONFIG.privacyPolicyUrl = /^https?:\/\//i.test(String(remote?.privacy?.policy_url || ""))
+        ? String(remote.privacy.policy_url)
+        : "";
     } catch (_error) {
       // fallback silencioso: el widget sigue funcionando con la config local
     }
@@ -327,6 +333,10 @@
     };
 
     if (conversationId) payload.conversation_id = conversationId;
+    // Primer mensaje: queda registrado qué aviso de privacidad vio la persona.
+    else if (CONFIG.privacyNotice) {
+      payload.privacy_notice = { text: CONFIG.privacyNotice, policy_url: CONFIG.privacyPolicyUrl };
+    }
     if (Object.keys(attribution).length) payload.attribution = attribution;
     if (CONFIG.accountId) payload.account_id = CONFIG.accountId;
     else if (CONFIG.accountSlug) payload.account_slug = CONFIG.accountSlug;
@@ -446,6 +456,8 @@
     .send{border:1px solid transparent;border-radius:12px;padding:10px 12px;cursor:pointer;background:${CONFIG.primaryColor};color:#fff;font:inherit;}
     .send:disabled{opacity:.6;cursor:not-allowed;}
     .mini{font-size:12px;color:#6b7280;}
+    .privacy{padding:8px 12px;font-size:11px;line-height:1.4;color:#4b5563;background:#f9fafb;border-bottom:1px solid #e5e7eb;}
+    .privacy a{color:inherit;text-decoration:underline;}
     @media (max-width:420px){.panel{width:calc(100vw - 36px);height:72vh;}}
   `;
   shadow.appendChild(style);
@@ -480,6 +492,7 @@
           <button class="icon-btn" id="closeBtn" type="button" title="Cerrar">✕</button>
         </div>
       </div>
+      <div class="privacy" id="privacy" hidden></div>
       <div class="messages" id="messages"></div>
       <div class="footer">
         <textarea id="input" class="input" placeholder="Escribe tu mensaje..." aria-label="Mensaje"></textarea>
@@ -503,6 +516,21 @@
   const status = $("status");
   const sendBtn = $("sendBtn");
   const mini = shadow.querySelector(".mini");
+
+  // Aviso de privacidad, visible antes de escribir el primer mensaje.
+  const privacy = $("privacy");
+  if (CONFIG.privacyNotice) {
+    privacy.textContent = CONFIG.privacyNotice + " ";
+    if (CONFIG.privacyPolicyUrl) {
+      const link = document.createElement("a");
+      link.href = CONFIG.privacyPolicyUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Política de privacidad";
+      privacy.appendChild(link);
+    }
+    privacy.hidden = false;
+  }
 
   function setStatus(text) {
     status.textContent = text || "Listo";
