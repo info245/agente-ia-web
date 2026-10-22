@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
 type Row = {
@@ -40,7 +40,7 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 const sourceLabel = (key = "") => SOURCE_LABELS[key] || (key.charAt(0).toUpperCase() + key.slice(1)).replace(/_/g, " ");
 
-const eur = (n: number | null) => (n === null ? "—" : n.toLocaleString("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: n < 100 ? 2 : 0 }));
+const eur = (n: number | null) => (n === null ? "—" : n.toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 0, maximumFractionDigits: n < 100 ? 2 : 0 }));
 const pct = (n: number | null) => (n === null ? "—" : `${n.toLocaleString("es-ES")} %`);
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -94,20 +94,17 @@ export default function ResultadosPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
-    setError("");
-    const query = new URLSearchParams({ period, ...(period === "custom" ? { from, to } : {}) });
-    try {
-      const data = await api<{ report: Report }>(`/crm/reports/results?${query}`);
-      setReport(data.report);
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }, [period, from, to]);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    const query = new URLSearchParams({ period, ...(period === "custom" ? { from, to } : {}) });
+    api<{ report: Report }>(`/crm/reports/results?${query}`)
+      .then((data) => {
+        setReport(data.report);
+        setError("");
+      })
+      .catch((err) => setError((err as Error).message));
+  }, [period, from, to, refresh]);
 
   const total = report?.total;
   const rows = report ? (byCampaign ? report.by_campaign : report.by_source) : [];
@@ -164,12 +161,12 @@ export default function ResultadosPage() {
             <div className="card kpi">
               <div className="l">Citas</div>
               <div className="n">{total.bookings}</div>
-              <div className="d">{total.cost.per_booking !== null ? `${eur(total.cost.per_booking)} por cita` : `${pct(total.rates.bookings)} de los cualificados`}</div>
+              <div className="d">{total.cost.per_booking !== null ? `${eur(total.cost.per_booking)} por cita` : total.qualified ? `${pct(total.rates.bookings)} de los cualificados` : "Sin cualificados todavía"}</div>
             </div>
             <div className="card kpi">
               <div className="l">Ventas</div>
               <div className="n">{total.sales}</div>
-              <div className="d">{total.revenue ? `${eur(total.revenue)} facturados` : `${pct(total.rates.sales)} de los leads`}</div>
+              <div className="d">{total.revenue ? `${eur(total.revenue)} facturados` : total.leads ? `${pct(total.rates.sales)} de los leads` : "Sin leads en el periodo"}</div>
             </div>
             <div className="card kpi">
               <div className="l">Inversión</div>
@@ -236,7 +233,7 @@ export default function ResultadosPage() {
             )}
           </div>
 
-          <SpendEditor sources={report.by_source.map((r) => r.key)} onSaved={load} />
+          <SpendEditor sources={report.by_source.map((r) => r.key)} onSaved={() => setRefresh((n) => n + 1)} />
         </>
       )}
     </section>
