@@ -24,7 +24,9 @@ export default function ConversacionesPage() {
 
   const select = (id: string) => router.replace(id ? `/conversaciones?c=${id}` : "/conversaciones");
 
+  // Los contactos importados para email marketing no tienen conversación: viven en Contactos.
   const visible = (leads || [])
+    .filter((lead) => Boolean(lead.conversation_id))
     .filter((lead) => filter === "all" || ownerOf(lead) === filter)
     .filter((lead) => {
       const q = query.trim().toLowerCase();

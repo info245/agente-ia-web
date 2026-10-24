@@ -603,6 +603,8 @@ export async function sendTransactionalEmail({
   html,
   replyTo = null,
   emailConfig = null,
+  headers = undefined,
+  fromName = "",
 } = {}) {
   if (!clientEnabled) return { skipped: true, reason: "client-disabled" };
   if (!to) return { skipped: true, reason: "no-email" };
@@ -611,8 +613,11 @@ export async function sendTransactionalEmail({
   if (!runtime.clientFromAddress) throw new Error("Falta el email de salida.");
 
   const t = getTransporter(emailConfig);
+  // fromName: nombre visible del remitente en campañas (la dirección sigue siendo la configurada).
+  const address = String(runtime.clientFromAddress).match(/<([^>]+)>/)?.[1] || runtime.clientFromAddress;
   const info = await t.sendMail({
-    from: runtime.clientFromAddress,
+    from: fromName ? { name: String(fromName).slice(0, 120), address } : runtime.clientFromAddress,
+    headers,
     to,
     subject: subject || "Mensaje comercial",
     text: text || "",

@@ -38,7 +38,7 @@ export default function ContactosPage() {
   const stageOf = (lead: Lead) => (stages.some((s) => s.key === lead.crm_status) ? lead.crm_status : stages[0]?.key);
   const services = [...new Set(leads.map((l) => l.interest_service).filter(Boolean) as string[])].sort();
   const rows = visible.filter((lead) => (!stageFilter || stageOf(lead) === stageFilter) && (!serviceFilter || lead.interest_service === serviceFilter));
-  const open = (lead: Lead) => router.push(`/conversaciones?c=${lead.conversation_id}`);
+  const open = (lead: Lead) => lead.conversation_id && router.push(`/conversaciones?c=${lead.conversation_id}`);
 
   async function remove(lead: Lead) {
     if (!window.confirm(`¿Eliminar a ${leadName(lead)}? Se borran también su conversación y sus mensajes. No se puede deshacer.`)) return;
@@ -178,7 +178,7 @@ export default function ContactosPage() {
                   <input type="checkbox" aria-label="Seleccionar todos" checked={rows.length > 0 && rows.every((l) => selected.has(l.id))}
                     onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((l) => l.id)) : new Set())} />
                 </th>
-                {["Nombre", "Email", "Teléfono", "Servicio", "Presupuesto", "Entrada", "Último contacto", "Asignado a", "Notas internas", "Estado", ""].map((h) => <th key={h}>{h}</th>)}
+                {["Nombre", "Email", "Teléfono", "Servicio", "Presupuesto", "Entrada", "Último contacto", "Asignado a", "Etiquetas", "Notas internas", "Estado", ""].map((h) => <th key={h}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -201,6 +201,7 @@ export default function ContactosPage() {
                         {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                       </select>
                     </td>
+                    <td onClick={(e) => e.stopPropagation()}><TagCell lead={lead} readOnly={!can("write")} /></td>
                     <td onClick={(e) => e.stopPropagation()}><NoteCell lead={lead} readOnly={!can("write")} /></td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <select className="search" disabled={!can("write")} aria-label={`Estado de ${leadName(lead)}`} value={stageOf(lead) || ""} onChange={(e) => move(lead.id, e.target.value)}>
@@ -252,6 +253,38 @@ function NoteCell({ lead, readOnly }: { lead: Lead; readOnly: boolean }) {
       onChange={(e) => { setNote(e.target.value); setState(""); }}
       onBlur={save}
       style={{ minWidth: 180, resize: "vertical", borderColor: state === "error" ? "var(--bad)" : state === "saved" ? "var(--good)" : undefined }}
+    />
+  );
+}
+
+// Etiquetas separadas por comas (para segmentar campañas de email): se guardan al salir del campo.
+function TagCell({ lead, readOnly }: { lead: Lead; readOnly: boolean }) {
+  const initial = (lead.tags || []).join(", ");
+  const [text, setText] = useState(initial);
+  const [saved, setSaved] = useState(initial);
+  const [state, setState] = useState<"" | "saved" | "error">("");
+
+  async function save() {
+    if (text === saved) return;
+    try {
+      await api(`/crm/leads/${lead.id}`, { method: "PATCH", body: { tags: text.split(",").map((t) => t.trim()).filter(Boolean) } });
+      setSaved(text);
+      setState("saved");
+    } catch {
+      setState("error");
+    }
+  }
+
+  return (
+    <input
+      className="search"
+      aria-label={`Etiquetas de ${leadName(lead)}`}
+      placeholder={readOnly ? "" : "Añadir…"}
+      readOnly={readOnly}
+      value={text}
+      onChange={(e) => { setText(e.target.value); setState(""); }}
+      onBlur={save}
+      style={{ minWidth: 140, borderColor: state === "error" ? "var(--bad)" : state === "saved" ? "var(--good)" : undefined }}
     />
   );
 }

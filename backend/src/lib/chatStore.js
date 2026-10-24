@@ -1,4 +1,5 @@
 import { supabase } from "./supabase.js";
+import { normalizeTags } from "./emailMarketing.js";
 import { eraseLead } from "./privacy.js";
 
 function clean(value) {
@@ -1057,6 +1058,11 @@ export async function updateLeadCrmFields(leadId, patch = {}, { accountId = null
 
     if (has("custom_fields")) {
       payload.custom_fields = cleanCustomFields(patch.custom_fields) || {};
+    }
+
+    // Etiquetas para segmentar campañas (sql/019): minúsculas, sin repetir.
+    if (has("tags")) {
+      payload.tags = normalizeTags(patch.tags);
     }
 
     if (has("follow_up_at")) {
