@@ -5,6 +5,8 @@ import type { NextConfig } from "next";
 const apiUrl = (process.env.CRM_API_URL || "http://localhost:3000").replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
+  // Solo en desarrollo: permite abrir el CRM local como 127.0.0.1 además de localhost.
+  allowedDevOrigins: ["127.0.0.1"],
   async rewrites() {
     return [
       { source: "/api/:path*", destination: `${apiUrl}/api/:path*` },

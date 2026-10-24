@@ -1,6 +1,6 @@
 // Acceso a datos del email marketing (sql/019_email_marketing.sql).
 import { supabase } from "./supabase.js";
-import { normalizeEmail, normalizeTags, sanitizeAutomation, sanitizeBlocks, sanitizeSegment } from "./emailMarketing.js";
+import { normalizeEmail, normalizeTags, sanitizeAutomation, sanitizeBlocks, sanitizeSegment, sanitizeSteps } from "./emailMarketing.js";
 
 const clean = (v, max = 2000) => String(v ?? "").trim().slice(0, max);
 
@@ -165,8 +165,11 @@ export async function createMessages(rows) {
   return out;
 }
 
+// Un email por nodo y ejecución: si ya existe (reintento del tick), no se duplica.
 export async function createRunMessage(row) {
-  const rows = await run(supabase.from("email_messages").upsert(row, { onConflict: "run_id,step_index", ignoreDuplicates: true }).select("id"));
+  const existing = await run(supabase.from("email_messages").select("id").eq("run_id", row.run_id).eq("step_id", row.step_id).limit(1));
+  if (existing?.length) return null;
+  const rows = await run(supabase.from("email_messages").insert(row).select("id"));
   return rows?.[0] || null;
 }
 
@@ -212,12 +215,15 @@ export async function lastRunMessage(runId) {
 
 const AUTOMATION_FIELDS = "id, name, status, trigger, steps, activated_at, created_at, updated_at";
 
+// Los pasos se devuelven siempre como mapa con ids (las antiguas, en lista, se convierten).
+const withGraph = (a) => (a ? { ...a, steps: sanitizeSteps(a.steps) } : a);
+
 export async function listAutomations(accountId) {
-  return run(supabase.from("email_automations").select(AUTOMATION_FIELDS).eq("account_id", accountId).order("created_at", { ascending: false }));
+  return ((await run(supabase.from("email_automations").select(AUTOMATION_FIELDS).eq("account_id", accountId).order("created_at", { ascending: false }))) || []).map(withGraph);
 }
 
 export async function getAutomation(accountId, id) {
-  return run(supabase.from("email_automations").select(AUTOMATION_FIELDS).eq("account_id", accountId).eq("id", id).maybeSingle());
+  return withGraph(await run(supabase.from("email_automations").select(AUTOMATION_FIELDS).eq("account_id", accountId).eq("id", id).maybeSingle()));
 }
 
 export async function saveAutomation(accountId, input = {}) {
@@ -241,7 +247,7 @@ export async function deleteAutomation(accountId, id) {
 }
 
 export async function listActiveAutomations() {
-  return run(supabase.from("email_automations").select("id, account_id, trigger, steps, activated_at").eq("status", "active").limit(500));
+  return ((await run(supabase.from("email_automations").select("id, account_id, trigger, steps, activated_at").eq("status", "active").limit(500))) || []).map(withGraph);
 }
 
 export async function enrolledLeadIds(automationId) {
@@ -267,4 +273,59 @@ export async function automationStats(accountId, automationId) {
   const runs = await run(supabase.from("email_automation_runs").select("status").eq("account_id", accountId).eq("automation_id", automationId).limit(20000));
   const list = runs || [];
   return { total: list.length, active: list.filter((r) => r.status === "active").length, done: list.filter((r) => r.status === "done").length, exited: list.filter((r) => r.status === "exited").length };
+}
+
+// Lo que ocurre en cada nodo del mapa: quién está esperando ahí y cómo van sus emails.
+export async function automationNodeStats(accountId, automationId) {
+  const runs = (await run(supabase.from("email_automation_runs").select("id, lead_id, step_id, step_index, status, exit_reason, next_at, updated_at").eq("account_id", accountId).eq("automation_id", automationId).order("updated_at", { ascending: false }).limit(5000))) || [];
+  const at = {};
+  for (const r of runs) {
+    if (r.status !== "active") continue;
+    const id = r.step_id || `s${r.step_index || 0}`;
+    at[id] = (at[id] || 0) + 1;
+  }
+  const runIds = runs.map((r) => r.id);
+  const messages = runIds.length
+    ? (await run(supabase.from("email_messages").select("step_id, step_index, status, opened_at, clicked_at").in("run_id", runIds.slice(0, 1000)))) || []
+    : [];
+  const email = {};
+  for (const m of messages) {
+    const id = m.step_id || `s${m.step_index || 0}`;
+    const e = (email[id] ||= { sent: 0, opened: 0, clicked: 0 });
+    if (m.status === "sent") e.sent += 1;
+    if (m.opened_at) e.opened += 1;
+    if (m.clicked_at) e.clicked += 1;
+  }
+  const recentRuns = runs.slice(0, 12);
+  const leadIds = [...new Set(recentRuns.map((r) => r.lead_id))];
+  const leads = leadIds.length ? (await run(supabase.from("leads").select("id, name, email").in("id", leadIds))) || [] : [];
+  const nameOf = new Map(leads.map((l) => [l.id, l.name || l.email || "Contacto"]));
+  return {
+    total: runs.length,
+    active: runs.filter((r) => r.status === "active").length,
+    done: runs.filter((r) => r.status === "done").length,
+    exited: runs.filter((r) => r.status === "exited").length,
+    at,
+    email,
+    recent: recentRuns.map((r) => ({ name: nameOf.get(r.lead_id) || "Contacto", step_id: r.step_id || `s${r.step_index || 0}`, status: r.status, exit_reason: r.exit_reason, next_at: r.next_at, updated_at: r.updated_at })),
+    last_entry_at: runs.length ? runs.reduce((max, r) => (r.updated_at > max ? r.updated_at : max), "") : null,
+  };
+}
+
+// ---------- Plantillas de email ----------
+
+const TEMPLATE_FIELDS = "id, name, subject, preheader, blocks, updated_at";
+
+export async function listTemplates(accountId) {
+  return run(supabase.from("email_templates").select(TEMPLATE_FIELDS).eq("account_id", accountId).order("updated_at", { ascending: false }).limit(200));
+}
+
+export async function saveTemplate(accountId, input = {}) {
+  const row = { name: clean(input.name, 120) || "Plantilla", subject: clean(input.subject, 200), preheader: clean(input.preheader, 200), blocks: sanitizeBlocks(input.blocks), updated_at: new Date().toISOString() };
+  if (input.id) return run(supabase.from("email_templates").update(row).eq("account_id", accountId).eq("id", input.id).select(TEMPLATE_FIELDS).single());
+  return run(supabase.from("email_templates").insert({ ...row, account_id: accountId }).select(TEMPLATE_FIELDS).single());
+}
+
+export async function deleteTemplate(accountId, id) {
+  await run(supabase.from("email_templates").delete().eq("account_id", accountId).eq("id", id));
 }
