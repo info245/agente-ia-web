@@ -36,6 +36,7 @@ export type Lead = {
   summary?: string | null;
   crm_status?: string | null;
   quote_status?: string | null;
+  tags?: string[] | null;
   next_action?: string | null;
   internal_notes?: string | null;
   assigned_to?: string | null;

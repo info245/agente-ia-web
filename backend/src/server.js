@@ -50,6 +50,7 @@ import { createGoogleCalendar, isCalendarConnected } from "./agent/googleCalenda
 import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParams } from "./lib/whatsappTemplates.js";
 import { emailBodyToHtml, emailBodyToText } from "./lib/emailLinks.js";
 import { addSubscription, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
+import { createEmailMarketing, EMAIL_JOB_TYPE } from "./emailMarketingRoutes.js";
 import { buildResultsReport, resolvePeriod, sanitizeSpendEntries } from "./lib/resultsReport.js";
 import { supabase } from "./lib/supabase.js";
 import {
@@ -421,6 +422,7 @@ const schedulerState = {
   automationJobsRunning: false,
   conversionsRunning: false,
   emailRunning: false,
+  emailMarketingRunning: false,
 };
 const CONVERSION_SWEEP_INTERVAL_MS = Math.max(60_000, Number(process.env.CONVERSION_SWEEP_INTERVAL_MS || 5 * 60_000));
 const googleEmailOauthStates = new Map();
@@ -6460,6 +6462,10 @@ async function runAutomationJobsTask({ limit = 20 } = {}) {
   const processed = [];
   for (const job of jobs) {
     try {
+      if (job.job_type === EMAIL_JOB_TYPE) {
+        processed.push(await emailMarketing.runEmailSendJob(job));
+        continue;
+      }
       if (job.job_type === CONVERSION_JOB_TYPE) {
         processed.push(await runConversionJob(job));
         continue;
@@ -6911,6 +6917,8 @@ async function runSchedulerJob(jobName, fn) {
         ? "inboxRunning"
       : jobName === "conversions"
         ? "conversionsRunning"
+      : jobName === "email-marketing"
+        ? "emailMarketingRunning"
       : jobName === "email"
         ? "emailRunning"
         : "whatsappRunning";
@@ -7023,6 +7031,10 @@ function startChannelInboxWorker() {
   setInterval(() => {
     runSchedulerJob("conversions", async () => ({ processed_count: (await runConversionSweep()).length }));
   }, CONVERSION_SWEEP_INTERVAL_MS);
+  // Email marketing: campañas programadas y pasos de las automatizaciones, cada minuto.
+  setInterval(() => {
+    runSchedulerJob("email-marketing", () => emailMarketing.runEmailMarketingTick());
+  }, 60_000);
 }
 
 app.post("/tasks/automation-flows", async (req, res) => {
@@ -7499,6 +7511,19 @@ app.put("/api/crm/reports/spend", async (req, res) => {
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
+});
+
+// Email marketing (campañas, automatizaciones, seguimiento y bajas): ver emailMarketingRoutes.js.
+const emailMarketing = createEmailMarketing({
+  app,
+  resolveRequestAccount,
+  getAccountConfig: (accountId) => getPublishedAppConfig({ accountId }),
+  openai,
+  model: AGENT_MODEL,
+  baseUrl: CRM_PUBLIC_BASE_URL,
+  secret: CRM_AUTH_SECRET,
+  sendWhatsAppTemplate,
+  normalizeLeadPhoneForWhatsApp,
 });
 
 // Avisos en el móvil: cada dispositivo se suscribe desde Canales y recibe un aviso por lead nuevo.
