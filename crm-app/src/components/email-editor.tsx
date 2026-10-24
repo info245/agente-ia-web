@@ -7,7 +7,6 @@ export type Block = { type: "heading" | "text" | "button" | "image" | "divider";
 export type Segment = { stages?: string[]; services?: string[]; sources?: string[]; tags?: string[]; exclude_tags?: string[]; created_from?: string; created_to?: string };
 export type EmailOptions = { tags: string[]; services: string[]; sources: string[] };
 
-const BLOCK_LABEL: Record<Block["type"], string> = { heading: "Título", text: "Texto", button: "Botón", image: "Imagen", divider: "Separador" };
 const SOURCE_LABEL: Record<string, string> = { whatsapp: "WhatsApp", web: "Chat web", lead_form: "Formulario", meta_ads: "Meta Ads", meta: "Meta", import: "Importados" };
 
 // Pausa los cambios rápidos (teclear) antes de pedir algo al servidor.
@@ -18,53 +17,6 @@ export function useDebounced<T>(value: T, ms = 500) {
     return () => clearTimeout(t);
   }, [value, ms]);
   return debounced;
-}
-
-export function BlockEditor({ blocks, onChange }: { blocks: Block[]; onChange: (b: Block[]) => void }) {
-  const set = (i: number, part: Partial<Block>) => onChange(blocks.map((b, j) => (j === i ? { ...b, ...part } : b)));
-  const move = (i: number, d: number) => {
-    const next = [...blocks];
-    const [b] = next.splice(i, 1);
-    next.splice(Math.max(0, Math.min(next.length, i + d)), 0, b);
-    onChange(next);
-  };
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      {blocks.map((b, i) => (
-        <div key={i} className="faq-row">
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <b style={{ fontSize: 13, marginRight: "auto" }}>{BLOCK_LABEL[b.type]}</b>
-            <button className="btn ghost small" aria-label="Subir bloque" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
-            <button className="btn ghost small" aria-label="Bajar bloque" disabled={i === blocks.length - 1} onClick={() => move(i, 1)}>↓</button>
-            <button className="btn ghost small" onClick={() => onChange(blocks.filter((_, j) => j !== i))}>Quitar</button>
-          </div>
-          {b.type === "heading" && <input className="i" value={b.text || ""} placeholder="Hola {nombre|}" onChange={(e) => set(i, { text: e.target.value })} />}
-          {b.type === "text" && <textarea className="i" rows={5} value={b.text || ""} placeholder="Texto. Enlaces: [texto](https://…)" onChange={(e) => set(i, { text: e.target.value })} />}
-          {b.type === "button" && (
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,2fr)", gap: 6 }}>
-              <input className="i" value={b.text || ""} placeholder="Texto del botón" onChange={(e) => set(i, { text: e.target.value })} />
-              <input className="i" value={b.url || ""} placeholder="https://…" onChange={(e) => set(i, { url: e.target.value })} />
-            </div>
-          )}
-          {b.type === "image" && (
-            <div style={{ display: "grid", gap: 6 }}>
-              <input className="i" value={b.url || ""} placeholder="Dirección de la imagen (https://…)" onChange={(e) => set(i, { url: e.target.value })} />
-              <input className="i" value={b.alt || ""} placeholder="Descripción (por si no se ve la imagen)" onChange={(e) => set(i, { alt: e.target.value })} />
-              <input className="i" value={b.link || ""} placeholder="Enlace al pulsar la imagen (opcional)" onChange={(e) => set(i, { link: e.target.value })} />
-            </div>
-          )}
-        </div>
-      ))}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {(Object.keys(BLOCK_LABEL) as Block["type"][]).map((type) => (
-          <button key={type} className="btn small" onClick={() => onChange([...blocks, { type }])}>+ {BLOCK_LABEL[type]}</button>
-        ))}
-      </div>
-      <p className="hint" style={{ margin: 0, color: "var(--muted)", fontSize: 13 }}>
-        Personaliza con <b>{"{nombre}"}</b>, <b>{"{empresa}"}</b> o <b>{"{servicio}"}</b>. Con alternativa si falta el dato: <b>{"{nombre|amigo}"}</b>.
-      </p>
-    </div>
-  );
 }
 
 function Chips({ label, values, selected, onChange, labelOf = (v: string) => v }: { label: string; values: string[]; selected: string[]; onChange: (v: string[]) => void; labelOf?: (v: string) => string }) {

@@ -7524,6 +7524,12 @@ const emailMarketing = createEmailMarketing({
   secret: CRM_AUTH_SECRET,
   sendWhatsAppTemplate,
   normalizeLeadPhoneForWhatsApp,
+  crmUrl: crmAppBaseUrl(),
+  // Estado de WhatsApp para el constructor: conectado y cuántas plantillas aprobadas se pueden usar.
+  getWhatsAppStatus: async (accountId) => {
+    const templates = await listApprovedWhatsAppTemplates(accountId).catch(() => null);
+    return { connected: Array.isArray(templates), templates: (templates || []).filter((t) => t.sendable).length };
+  },
 });
 
 // Avisos en el móvil: cada dispositivo se suscribe desde Canales y recibe un aviso por lead nuevo.

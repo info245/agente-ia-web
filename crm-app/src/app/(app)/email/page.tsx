@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { parseCsv } from "@/components/email-editor";
+import { TemplateThumb, type PickableTemplate } from "@/components/email-canvas";
+import { STARTER_TEMPLATES } from "@/lib/email-templates";
 
 type Campaign = { id: string; name: string; subject: string; status: string; scheduled_at?: string | null; sent_at?: string | null; recipients_count: number; created_at: string };
 type Automation = { id: string; name: string; status: string; trigger: { type: string; stage?: string; tag?: string }; steps: unknown[]; stats: { total: number; active: number; done: number; exited: number } };
@@ -17,7 +19,7 @@ const TRIGGER: Record<string, string> = { lead_created: "Contacto nuevo", stage:
 const day = (v?: string | null) => (v ? new Date(v).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
 
 export default function EmailPage() {
-  const [tab, setTab] = useState<"campanas" | "automatizaciones" | "audiencia">("campanas");
+  const [tab, setTab] = useState<"campanas" | "automatizaciones" | "plantillas" | "audiencia">("campanas");
   return (
     <section className="page">
       <div className="head">
@@ -27,12 +29,13 @@ export default function EmailPage() {
         </div>
       </div>
       <div className="tabs" role="tablist" aria-label="Email marketing">
-        {([["campanas", "Campañas"], ["automatizaciones", "Automatizaciones"], ["audiencia", "Audiencia y bajas"]] as const).map(([key, label]) => (
+        {([["campanas", "Campañas"], ["automatizaciones", "Automatizaciones"], ["plantillas", "Plantillas"], ["audiencia", "Audiencia y bajas"]] as const).map(([key, label]) => (
           <button key={key} role="tab" className="chip" aria-selected={tab === key} onClick={() => setTab(key)}>{label}</button>
         ))}
       </div>
       {tab === "campanas" && <Campaigns />}
       {tab === "automatizaciones" && <Automations />}
+      {tab === "plantillas" && <Templates />}
       {tab === "audiencia" && <Audience />}
     </section>
   );
@@ -182,6 +185,49 @@ function Audience() {
             <tbody>{suppressions.map((s) => <tr key={s.email}><td>{s.email}</td><td>{REASON[s.reason] || s.reason}</td><td style={{ color: "var(--muted)" }}>{day(s.created_at)}</td></tr>)}</tbody>
           </table>
         )}
+      </div>
+    </>
+  );
+}
+
+function Templates() {
+  const { items, error, load } = useList<PickableTemplate>("/crm/email/templates", "templates");
+  const remove = async (t: PickableTemplate) => {
+    if (!window.confirm(`¿Borrar la plantilla «${t.name}»? Las campañas que ya la usaron no cambian.`)) return;
+    await api(`/crm/email/templates/${t.id}`, { method: "DELETE" });
+    load();
+  };
+  return (
+    <>
+      <div className="card block">
+        <h2>Tus plantillas</h2>
+        <p className="hint">Guárdalas desde cualquier campaña con «Guardar como plantilla». Sirven para campañas y para los emails de las automatizaciones.</p>
+        {error && <p className="alert error">{error}</p>}
+        {items === null ? <p className="loading">Cargando…</p> : items.length === 0 ? <p className="empty">Aún no has guardado ninguna.</p> : (
+          <div className="ec-gallery">
+            {items.map((t) => (
+              <div key={t.id} className="ec-card" style={{ cursor: "default" }}>
+                <TemplateThumb blocks={t.blocks} />
+                <b>{t.name}</b>
+                <span>{t.subject || "Sin asunto"}</span>
+                <button className="btn ghost small" onClick={() => remove(t)}>Borrar</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="card block">
+        <h2>Modelos de partida</h2>
+        <p className="hint">Disponibles al crear cualquier campaña o email de automatización.</p>
+        <div className="ec-gallery">
+          {STARTER_TEMPLATES.filter((t) => t.id !== "builtin-blank").map((t) => (
+            <Link key={t.id} href="/email/campana" className="ec-card" style={{ textDecoration: "none" }}>
+              <TemplateThumb blocks={t.blocks} />
+              <b>{t.name}</b>
+              <span>{t.description}</span>
+            </Link>
+          ))}
+        </div>
       </div>
     </>
   );

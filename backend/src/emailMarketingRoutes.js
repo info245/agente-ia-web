@@ -14,16 +14,18 @@ import {
   renderEmail,
   renderEmailText,
   sanitizeBlocks,
+  sanitizeSteps,
   signLink,
   triggerMatches,
   verifyLink,
 } from "./lib/emailMarketing.js";
 import * as store from "./lib/emailMarketingStore.js";
+import { notifyAccount } from "./lib/pushNotifications.js";
 
 export const EMAIL_JOB_TYPE = "email_send";
 const GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
 
-export function createEmailMarketing({ app, resolveRequestAccount, getAccountConfig, openai, model, baseUrl, secret, sendWhatsAppTemplate, normalizeLeadPhoneForWhatsApp }) {
+export function createEmailMarketing({ app, resolveRequestAccount, getAccountConfig, openai, model, baseUrl, secret, sendWhatsAppTemplate, normalizeLeadPhoneForWhatsApp, getWhatsAppStatus, crmUrl }) {
   const urls = (messageId) => ({
     unsubscribeUrl: `${baseUrl}/e/u/${messageId}`,
     pixelUrl: `${baseUrl}/e/o/${messageId}.gif`,
@@ -137,6 +139,40 @@ export function createEmailMarketing({ app, resolveRequestAccount, getAccountCon
     return {};
   }));
 
+  app.get("/api/crm/email/automations/:id", handle(async (req, account) => {
+    const automation = await store.getAutomation(account.id, req.params.id);
+    if (!automation) throw new Error("Automatización no encontrada.");
+    return { automation, stats: await store.automationNodeStats(account.id, automation.id) };
+  }));
+
+  // ---------- Plantillas ----------
+  app.get("/api/crm/email/templates", handle(async (_req, account) => ({ templates: await store.listTemplates(account.id) })));
+  app.post("/api/crm/email/templates", handle(async (req, account) => ({ template: await store.saveTemplate(account.id, req.body || {}) })));
+  app.delete("/api/crm/email/templates/:id", handle(async (req, account) => {
+    await store.deleteTemplate(account.id, req.params.id);
+    return {};
+  }));
+
+  // ---------- Canales: qué está conectado mientras se construye ----------
+  app.get("/api/crm/email/channels", handle(async (_req, account) => {
+    const config = await getAccountConfig(account.id).catch(() => null);
+    const email = config?.integrations?.email || {};
+    const provider = String(email.provider || (process.env.SMTP_HOST ? "smtp" : "")).toLowerCase();
+    const from = email.from_email || email.google_connected_email || process.env.LEADS_EMAIL_FROM || "";
+    const whatsapp = await getWhatsAppStatus(account.id).catch(() => ({ connected: false, templates: 0 }));
+    return {
+      email: {
+        connected: Boolean(from) && process.env.LEADS_CLIENT_EMAIL_ENABLED === "true",
+        from,
+        provider,
+        // Gmail limita los envíos diarios: avisar antes de lanzar campañas grandes.
+        daily_limit: provider.includes("gmail") || provider === "google_oauth" ? 500 : null,
+      },
+      whatsapp,
+      team: { email: config?.notifications?.email_to || "", push: true },
+    };
+  }));
+
   // Vista previa con el mismo maquetado que el envío real.
   app.post("/api/crm/email/preview", handle(async (req, account) => {
     const config = await getAccountConfig(account.id);
@@ -206,6 +242,22 @@ export function createEmailMarketing({ app, resolveRequestAccount, getAccountCon
     res.send(unsubscribePage("Te has dado de baja", "No volverás a recibir nuestros emails comerciales."));
   });
 
+  // Paso «Avisar al equipo»: aviso en el móvil y email a la dirección de avisos de la cuenta.
+  async function notifyTeam(automation, lead, step) {
+    const config = await getAccountConfig(automation.account_id);
+    const who = lead.name || lead.email || "Un contacto";
+    const text = personalize(step.message || "Ha llegado a este paso de la automatización.", lead);
+    const link = `${crmUrl}/conversaciones${lead.conversation_id ? `?c=${lead.conversation_id}` : ""}`;
+    await notifyAccount(automation.account_id, { title: `${who}: ${text}`.slice(0, 120), body: "Automatización de email marketing", url: lead.conversation_id ? `/conversaciones?c=${lead.conversation_id}` : "/contactos" });
+    const to = config?.notifications?.email_to;
+    if (to) {
+      await sendTransactionalEmail({ to, subject: `Aviso: ${who}`, text: `${text}
+
+Contacto: ${who} ${lead.email || ""} ${lead.phone || ""}
+Ver en el CRM: ${link}`, emailConfig: config?.integrations?.email || null });
+    }
+  }
+
   // ---------- Envío ----------
   async function launchCampaign(campaign, accountId) {
     const { eligible } = await audience(accountId, campaign.segment);
@@ -224,7 +276,8 @@ export function createEmailMarketing({ app, resolveRequestAccount, getAccountCon
     }
     const { data: runRow } = await supabase.from("email_automation_runs").select("automation_id").eq("id", message.run_id).maybeSingle();
     const { data: automation } = await supabase.from("email_automations").select("steps").eq("id", runRow?.automation_id).maybeSingle();
-    return automation?.steps?.[message.step_index] || null;
+    const stepId = message.step_id || `s${message.step_index || 0}`;
+    return sanitizeSteps(automation?.steps).find((s) => s.id === stepId) || null;
   }
 
   async function runEmailSendJob(job) {
@@ -319,17 +372,18 @@ export function createEmailMarketing({ app, resolveRequestAccount, getAccountCon
         const lastEmail = await store.lastRunMessage(current.id);
         const action = nextAction(current, automation.steps || [], { now: now.getTime(), lead, lastEmail });
         summary.steps += 1;
-        if (action.kind === "done" || action.kind === "exit") {
-          await store.updateRun(current.id, { status: action.kind === "done" ? "done" : "exited", exit_reason: action.reason || null });
+        if (action.kind === "done") {
+          await store.updateRun(current.id, { status: "done" });
           break;
         }
+        const nodeId = action.step.id;
         if (action.kind === "email") {
           const check = eligibility(lead, (byAccount.get(automation.account_id) || {}).suppressed || new Set());
           if (!check.ok) {
             await store.updateRun(current.id, { status: "exited", exit_reason: check.reason });
             break;
           }
-          const message = await store.createRunMessage({ account_id: automation.account_id, run_id: current.id, step_index: current.step_index, lead_id: lead.id, email: check.email, subject: action.step.subject });
+          const message = await store.createRunMessage({ account_id: automation.account_id, run_id: current.id, step_id: nodeId, lead_id: lead.id, email: check.email, subject: action.step.subject });
           if (message) await enqueueAutomationJob({ accountId: automation.account_id, jobType: EMAIL_JOB_TYPE, dedupeKey: `email:${message.id}`, payload: { message_id: message.id } });
         }
         if (action.kind === "whatsapp") {
@@ -341,16 +395,24 @@ export function createEmailMarketing({ app, resolveRequestAccount, getAccountCon
             );
           }
         }
-        if (action.kind === "add_tag") {
-          lead.tags = normalizeTags([...(lead.tags || []), action.tag]);
+        if (action.kind === "notify_team") {
+          await notifyTeam(automation, lead, action.step).catch((error) => console.log("[email-marketing] notify step error", error.message));
+        }
+        if (action.kind === "add_tag" && action.step.tag) {
+          lead.tags = normalizeTags([...(lead.tags || []), action.step.tag]);
           await store.setLeadTags(automation.account_id, lead.id, lead.tags);
         }
-        if (action.kind === "set_stage" && action.stage) {
-          lead.crm_status = action.stage;
-          await store.setLeadStage(automation.account_id, lead.id, action.stage);
+        if (action.kind === "set_stage" && action.step.stage) {
+          lead.crm_status = action.step.stage;
+          await store.setLeadStage(automation.account_id, lead.id, action.step.stage);
         }
-        await store.updateRun(current.id, { step_index: action.step_index, next_at: action.next_at });
-        current = { ...current, step_index: action.step_index, next_at: action.next_at };
+        // Sin nodo siguiente: el recorrido termina aquí (también tras una espera final).
+        if (!action.step_id) {
+          await store.updateRun(current.id, { status: "done", step_id: null, next_at: action.next_at });
+          break;
+        }
+        await store.updateRun(current.id, { step_id: action.step_id, next_at: action.next_at });
+        current = { ...current, step_id: action.step_id, next_at: action.next_at };
         if (action.kind === "wait") break;
       }
     }

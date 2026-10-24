@@ -4,7 +4,7 @@ import crypto from "node:crypto";
 import { emailBodyToHtml, emailBodyToText } from "./emailLinks.js";
 
 export const BLOCK_TYPES = ["heading", "text", "button", "image", "divider"];
-export const STEP_TYPES = ["wait", "email", "whatsapp", "condition", "add_tag", "set_stage"];
+export const STEP_TYPES = ["wait", "email", "whatsapp", "notify_team", "condition", "add_tag", "set_stage"];
 export const TRIGGER_TYPES = ["lead_created", "stage", "tag"];
 
 const clean = (v, max = 2000) => String(v ?? "").trim().slice(0, max);
@@ -148,6 +148,40 @@ export function verifyLink(messageId, url, signature, secret) {
   return isHttpUrl(url) && a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+// Automatización = mapa de nodos. Cada nodo tiene id y apunta al siguiente (next); una condición
+// apunta a dos caminos (yes / no). El primer nodo de la lista es el inicio. null = fin.
+// Las automatizaciones antiguas (lista sin ids) se convierten: s0 → s1 → …; condición sin «no» = fin.
+function sanitizeStep(s) {
+  if (!STEP_TYPES.includes(s?.type)) return null;
+  if (s.type === "wait") return { type: "wait", amount: Math.max(1, Math.min(365, Number(s.amount) || 1)), unit: ["hours", "days"].includes(s.unit) ? s.unit : "days" };
+  if (s.type === "email") return { type: "email", subject: clean(s.subject, 200), preheader: clean(s.preheader, 200), blocks: sanitizeBlocks(s.blocks), template_id: clean(s.template_id, 60) };
+  if (s.type === "condition") return { type: "condition", check: ["opened_last", "clicked_last", "has_tag", "stage"].includes(s.check) ? s.check : "opened_last", value: clean(s.value, 80) };
+  if (s.type === "whatsapp") return { type: "whatsapp", template_name: clean(s.template_name, 120), language: clean(s.language, 12) || "es", params: (Array.isArray(s.params) ? s.params : []).slice(0, 3).map((p) => clean(p, 200)) };
+  if (s.type === "notify_team") return { type: "notify_team", message: clean(s.message, 500) };
+  if (s.type === "add_tag") return { type: "add_tag", tag: normalizeTags([s.tag])[0] || "" };
+  return { type: "set_stage", stage: clean(s.stage, 80) };
+}
+
+export function sanitizeSteps(input = []) {
+  const raw = (Array.isArray(input) ? input : []).slice(0, 60);
+  const legacy = raw.length > 0 && raw.every((s) => !s?.id);
+  const ids = raw.map((s, i) => (legacy ? `s${i}` : clean(s?.id, 40).replace(/[^\w-]/g, "") || `n${i}`));
+  const known = new Set(ids);
+  const ref = (v) => (v && known.has(String(v)) ? String(v) : null);
+  return raw
+    .map((s, i) => {
+      const step = sanitizeStep(s);
+      if (!step) return null;
+      const id = ids[i];
+      if (legacy) {
+        const after = ids[i + 1] || null;
+        return step.type === "condition" ? { id, ...step, yes: after, no: null } : { id, ...step, next: after };
+      }
+      return step.type === "condition" ? { id, ...step, yes: ref(s.yes), no: ref(s.no) } : { id, ...step, next: ref(s.next) };
+    })
+    .filter(Boolean);
+}
+
 export function sanitizeAutomation(input = {}) {
   const t = input.trigger || {};
   const trigger = {
@@ -156,19 +190,7 @@ export function sanitizeAutomation(input = {}) {
     tag: normalizeTags([t.tag])[0] || "",
     segment: sanitizeSegment(t.segment || {}),
   };
-  const steps = (Array.isArray(input.steps) ? input.steps : [])
-    .slice(0, 30)
-    .map((s) => {
-      if (!STEP_TYPES.includes(s?.type)) return null;
-      if (s.type === "wait") return { type: "wait", amount: Math.max(1, Math.min(365, Number(s.amount) || 1)), unit: ["hours", "days"].includes(s.unit) ? s.unit : "days" };
-      if (s.type === "email") return { type: "email", subject: clean(s.subject, 200), preheader: clean(s.preheader, 200), blocks: sanitizeBlocks(s.blocks) };
-      if (s.type === "condition") return { type: "condition", check: ["opened_last", "clicked_last", "has_tag", "stage"].includes(s.check) ? s.check : "opened_last", value: clean(s.value, 80) };
-      if (s.type === "whatsapp") return { type: "whatsapp", template_name: clean(s.template_name, 120), language: clean(s.language, 12) || "es", params: (Array.isArray(s.params) ? s.params : []).slice(0, 3).map((p) => clean(p, 200)) };
-      if (s.type === "add_tag") return { type: "add_tag", tag: normalizeTags([s.tag])[0] || "" };
-      return { type: "set_stage", stage: clean(s.stage, 80) };
-    })
-    .filter(Boolean);
-  return { name: clean(input.name, 120), trigger, steps };
+  return { name: clean(input.name, 120), trigger, steps: sanitizeSteps(input.steps) };
 }
 
 // ¿Este contacto entra en la automatización? Solo cuenta lo ocurrido después de activarla.
@@ -185,23 +207,30 @@ export function triggerMatches(trigger = {}, lead = {}, { activatedAt } = {}) {
 
 const UNIT_MS = { hours: 3_600_000, days: 86_400_000 };
 
-// Qué hacer con el paso actual de una ejecución. ctx: { now, lead, lastEmail: {opened_at, clicked_at} }.
+// Nodo en el que está una ejecución (las antiguas guardaban la posición: step_index → s<n>).
+export function currentStepId(run = {}, steps = []) {
+  if (run.step_id) return run.step_id;
+  if (run.step_index && steps.some((s) => s.id === `s${run.step_index}`)) return `s${run.step_index}`;
+  return steps[0]?.id || null;
+}
+
+// Qué hacer con el nodo actual de una ejecución. ctx: { now, lead, lastEmail: {opened_at, clicked_at} }.
+// Devuelve step_id (el siguiente nodo, null = fin) y next_at.
 export function nextAction(run = {}, steps = [], ctx = {}) {
   const now = ctx.now ?? Date.now();
-  const index = Number(run.step_index) || 0;
-  const step = steps[index];
+  const id = currentStepId(run, steps);
+  const step = steps.find((s) => s.id === id);
   if (!step) return { kind: "done" };
-  const advance = { step_index: index + 1, next_at: new Date(now).toISOString() };
-  if (step.type === "wait") return { kind: "wait", ...advance, next_at: new Date(now + step.amount * UNIT_MS[step.unit]).toISOString() };
-  if (step.type === "email") return { kind: "email", step, ...advance };
-  if (step.type === "whatsapp") return { kind: "whatsapp", step, ...advance };
-  if (step.type === "add_tag") return { kind: "add_tag", tag: step.tag, ...advance };
-  if (step.type === "set_stage") return { kind: "set_stage", stage: step.stage, ...advance };
-  const lead = ctx.lead || {};
-  const passed =
-    step.check === "opened_last" ? Boolean(ctx.lastEmail?.opened_at)
-    : step.check === "clicked_last" ? Boolean(ctx.lastEmail?.clicked_at)
-    : step.check === "has_tag" ? normalizeTags(lead.tags).includes(normalizeTags([step.value])[0])
-    : clean(lead.crm_status) === step.value;
-  return passed ? { kind: "continue", ...advance } : { kind: "exit", reason: `condicion:${step.check}` };
+  const go = (to, at = now) => ({ step_id: to || null, next_at: new Date(at).toISOString() });
+  if (step.type === "wait") return { kind: "wait", step, ...go(step.next, now + step.amount * UNIT_MS[step.unit]) };
+  if (step.type === "condition") {
+    const lead = ctx.lead || {};
+    const passed =
+      step.check === "opened_last" ? Boolean(ctx.lastEmail?.opened_at)
+      : step.check === "clicked_last" ? Boolean(ctx.lastEmail?.clicked_at)
+      : step.check === "has_tag" ? normalizeTags(lead.tags).includes(normalizeTags([step.value])[0])
+      : clean(lead.crm_status) === step.value;
+    return { kind: "branch", step, passed, ...go(passed ? step.yes : step.no) };
+  }
+  return { kind: step.type, step, ...go(step.next) };
 }

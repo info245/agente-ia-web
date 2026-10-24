@@ -1,0 +1,106 @@
+import type { Block } from "@/components/email-editor";
+
+export type EmailTemplate = { id: string; name: string; description?: string; subject: string; preheader: string; blocks: Block[]; builtin?: boolean };
+
+// Plantillas de partida: el cliente elige una y la retoca sobre el propio email.
+export const STARTER_TEMPLATES: EmailTemplate[] = [
+  {
+    id: "builtin-blank",
+    builtin: true,
+    name: "En blanco",
+    description: "Empieza desde cero",
+    subject: "",
+    preheader: "",
+    blocks: [{ type: "heading", text: "Hola {nombre|}" }, { type: "text", text: "" }],
+  },
+  {
+    id: "builtin-welcome",
+    builtin: true,
+    name: "Bienvenida",
+    description: "Para quien acaba de llegar",
+    subject: "{nombre|Hola}, gracias por escribirnos",
+    preheader: "Te contamos cómo podemos ayudarte",
+    blocks: [
+      { type: "heading", text: "¡Hola {nombre|}! Encantados de conocerte" },
+      { type: "text", text: "Gracias por interesarte en {servicio|nuestros servicios}. Somos un equipo pequeño y cercano: aquí tienes cómo trabajamos y qué puedes esperar de nosotros." },
+      { type: "text", text: "1. Analizamos tu caso sin compromiso.\n2. Te proponemos un plan claro, con precio cerrado.\n3. Te acompañamos y medimos resultados cada mes." },
+      { type: "button", text: "Reservar una llamada", url: "https://" },
+      { type: "text", text: "Si tienes cualquier duda, responde a este email y te contestamos personalmente." },
+    ],
+  },
+  {
+    id: "builtin-newsletter",
+    builtin: true,
+    name: "Newsletter",
+    description: "Novedades del mes",
+    subject: "Novedades de este mes",
+    preheader: "Lo más interesante, en 2 minutos",
+    blocks: [
+      { type: "heading", text: "Lo que ha pasado este mes" },
+      { type: "text", text: "Hola {nombre|}, te resumimos lo más útil de las últimas semanas." },
+      { type: "divider" },
+      { type: "heading", text: "1. Primera novedad" },
+      { type: "text", text: "Cuéntalo en dos o tres frases. Enlaza a más información: [leer más](https://)." },
+      { type: "heading", text: "2. Segunda novedad" },
+      { type: "text", text: "Otra idea, consejo o caso de éxito." },
+      { type: "divider" },
+      { type: "button", text: "Ver todas las novedades", url: "https://" },
+    ],
+  },
+  {
+    id: "builtin-offer",
+    builtin: true,
+    name: "Oferta",
+    description: "Promoción con fecha límite",
+    subject: "{nombre|Hola}, solo hasta el viernes",
+    preheader: "Una oferta pensada para ti",
+    blocks: [
+      { type: "image", url: "", alt: "Oferta" },
+      { type: "heading", text: "Una oferta pensada para ti" },
+      { type: "text", text: "Durante esta semana, {servicio|nuestro servicio} con condiciones especiales para clientes como tú." },
+      { type: "button", text: "Quiero aprovecharla", url: "https://" },
+      { type: "text", text: "Válido hasta el viernes. Plazas limitadas." },
+    ],
+  },
+  {
+    id: "builtin-event",
+    builtin: true,
+    name: "Evento o webinar",
+    description: "Invitación con fecha y hora",
+    subject: "Te invitamos: {servicio|nuestro próximo evento}",
+    preheader: "Fecha, hora y cómo apuntarte",
+    blocks: [
+      { type: "heading", text: "Te invitamos" },
+      { type: "text", text: "Hola {nombre|}, organizamos una sesión gratuita para contarte cómo mejorar tus resultados." },
+      { type: "text", text: "Fecha: día, mes\nHora: 10:00 (hora de Madrid)\nDuración: 45 minutos, online" },
+      { type: "button", text: "Apuntarme", url: "https://" },
+    ],
+  },
+  {
+    id: "builtin-reactivation",
+    builtin: true,
+    name: "Reactivación",
+    description: "Para contactos que se enfriaron",
+    subject: "{nombre|Hola}, ¿seguimos?",
+    preheader: "Hace tiempo que no hablamos",
+    blocks: [
+      { type: "heading", text: "Hace tiempo que no hablamos" },
+      { type: "text", text: "Hola {nombre|}, quería saber si sigues pensando en {servicio|mejorar tu negocio}. Si el momento ha llegado, estaremos encantados de ayudarte." },
+      { type: "button", text: "Retomemos la conversación", url: "https://" },
+      { type: "text", text: "Y si ya no te interesa, no pasa nada: puedes darte de baja abajo." },
+    ],
+  },
+  {
+    id: "builtin-quote",
+    builtin: true,
+    name: "Seguimiento de propuesta",
+    description: "Tras enviar un presupuesto",
+    subject: "¿Pudiste revisar la propuesta?",
+    preheader: "Resolvemos tus dudas cuando quieras",
+    blocks: [
+      { type: "text", text: "Hola {nombre|}, te escribo por la propuesta de {servicio|nuestro servicio} que te enviamos. ¿Pudiste revisarla?" },
+      { type: "text", text: "Si quieres, lo vemos juntos en una llamada de 15 minutos y ajustamos lo que necesites." },
+      { type: "button", text: "Elegir hora", url: "https://" },
+    ],
+  },
+];
