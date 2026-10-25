@@ -183,7 +183,10 @@ export function createEmailMarketing({ app, resolveRequestAccount, getAccountCon
   app.post("/api/crm/email/preview", handle(async (req, account) => {
     const config = await getAccountConfig(account.id);
     const lead = { name: "Ana López", company_name: "Su empresa", interest_service: "su servicio" };
-    return { html: renderEmail({ blocks: req.body?.blocks, subject: req.body?.subject, preheader: req.body?.preheader, lead, brand: brandOf(config), unsubscribeUrl: "#" }) };
+    // Asunto y vista previa personalizados igual que al enviar, para que la vista previa no enseñe {nombre}.
+    const subject = personalize(String(req.body?.subject || ""), lead);
+    const preheader = personalize(String(req.body?.preheader || ""), lead);
+    return { subject, preheader, html: renderEmail({ blocks: req.body?.blocks, subject, preheader, lead, brand: brandOf(config), unsubscribeUrl: "#" }) };
   }));
 
   // ---------- IA ----------
