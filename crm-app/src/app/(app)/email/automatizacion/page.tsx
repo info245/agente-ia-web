@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
-import type { EmailOptions } from "@/components/email-editor";
+import { EmailPreview, type EmailOptions } from "@/components/email-editor";
 import { EmailCanvas, type PickableTemplate } from "@/components/email-canvas";
 import { STARTER_TEMPLATES } from "@/lib/email-templates";
 import { hasWaitBefore, insertNode, newId, nodeById, removeNode, updateNode, type Edge, type FlowNode } from "@/lib/automation-graph";
@@ -68,6 +68,7 @@ export default function AutomationPage() {
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [realView, setRealView] = useState(false);
   // El refresco automático de datos en directo no pisa lo que se está editando.
   const dirtyRef = useRef(false);
   useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
@@ -218,6 +219,8 @@ export default function AutomationPage() {
 
   const triggerText = `${TRIGGER_LABEL[a.trigger.type]}${isFollowUp(a.trigger.type) ? ` ${a.trigger.hours || 24} h` : ""}${a.trigger.type === "stage" ? ` «${stageLabel(a.trigger.stage)}»` : ""}${a.trigger.type === "tag" ? ` «${a.trigger.tag || "…"}»` : ""}${a.trigger.segment?.services?.length ? ` · solo ${a.trigger.segment.services.join(" o ")}` : ""}`;
   const emailTemplates = [...STARTER_TEMPLATES.slice(1), ...saved];
+  const wa = config?.integrations?.whatsapp;
+  const welcome = a.trigger.type === "lead_created" && wa?.form_autocontact_enabled && wa.intro_template_name ? wa.intro_template_name : "";
 
   return (
     <section className="page">
@@ -257,6 +260,18 @@ export default function AutomationPage() {
                 </span>
               )}
             </button>
+            {welcome && (
+              // El primer WhatsApp a leads de formulario no es un paso de esta automatización (sale desde Canales),
+              // pero ocurre a la vez: se dibuja para ver la secuencia completa.
+              <>
+                <span className="edge" />
+                <Link href="/canales" className="node node-external">
+                  <span className="node-title"><span className="node-ico" style={{ background: "var(--good-soft)", color: "var(--wa)" }}>◍</span>WhatsApp de bienvenida <span className="pill p-muted">al momento</span></span>
+                  <span className="node-sub">Plantilla «{welcome.replace(/_/g, " ")}» · solo a leads de formulario, a la vez que el primer email.</span>
+                  <span className="node-sub" style={{ fontSize: 12 }}>Se envía desde Configuración → Canales → Formularios. Si contesta, sigue el asistente y esta automatización se para.</span>
+                </Link>
+              </>
+            )}
             <Path edge={{ from: null, key: "next" }} nodeId={a.steps[0]?.id} seen={new Set()} />
           </div>
         </div>
@@ -338,6 +353,16 @@ export default function AutomationPage() {
                     <option value="">Usar una plantilla…</option>
                     {emailTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.builtin ? "" : " (tuya)"}</option>)}
                   </select>
+                  <div className="tabs" role="tablist" aria-label="Vista del email" style={{ margin: "10px 0 0" }}>
+                    <button type="button" role="tab" className="chip" aria-selected={!realView} onClick={() => setRealView(false)}>Editar</button>
+                    <button type="button" role="tab" className="chip" aria-selected={realView} onClick={() => setRealView(true)}>Cómo le llega</button>
+                  </div>
+                  {realView ? (
+                    <div style={{ marginTop: 10 }}>
+                      <p className="hint" style={{ margin: "0 0 8px" }}>Con datos de ejemplo («Ana López»): así se ve en su bandeja, con tu marca y el enlace de baja.</p>
+                      <EmailPreview subject={node.subject || ""} preheader={node.preheader || ""} blocks={node.blocks || []} />
+                    </div>
+                  ) : (
                   <div style={{ marginTop: 10 }}>
                     <EmailCanvas
                       blocks={node.blocks || []}
@@ -350,6 +375,7 @@ export default function AutomationPage() {
                       }
                     />
                   </div>
+                  )}
                 </>
               )}
               {node.type === "whatsapp" && (

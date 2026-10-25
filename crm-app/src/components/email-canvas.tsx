@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Block } from "@/components/email-editor";
+import { useSession } from "@/components/app-shell";
 
 const BLOCK_LABEL: Record<Block["type"], string> = { heading: "Título", text: "Texto", button: "Botón", image: "Imagen", divider: "Separador" };
 const INSERT_TYPES: Block["type"][] = ["heading", "text", "button", "image", "divider"];
@@ -33,6 +34,8 @@ function InsertBar({ onInsert }: { onInsert: (type: Block["type"]) => void }) {
 
 // El email se edita sobre su propia maqueta (600 px, tarjeta blanca), igual que llegará.
 export function EmailCanvas({ blocks, onChange, header, mobile = false }: { blocks: Block[]; onChange: (b: Block[]) => void; header?: React.ReactNode; mobile?: boolean }) {
+  const { config, account } = useSession();
+  const brand = config?.brand?.name || account.name;
   const [selected, setSelected] = useState<number | null>(null);
   const set = (i: number, part: Partial<Block>) => onChange(blocks.map((b, j) => (j === i ? { ...b, ...part } : b)));
   const insert = (at: number, type: Block["type"]) => {
@@ -97,7 +100,7 @@ export function EmailCanvas({ blocks, onChange, header, mobile = false }: { bloc
             </div>
           );
         })}
-        <p className="ec-footer">Tu negocio · <u>Darme de baja</u></p>
+        <p className="ec-footer">{brand || "Tu negocio"} · <u>Darme de baja</u></p>
       </div>
       <p style={{ textAlign: "center", fontSize: 12.5, color: "var(--muted)", margin: 0 }}>
         Pulsa un bloque para editarlo · <b>{"{nombre}"}</b> <b>{"{empresa}"}</b> <b>{"{servicio}"}</b> personalizan · <b>{"{nombre|amigo}"}</b> si falta el dato

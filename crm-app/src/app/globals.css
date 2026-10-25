@@ -493,3 +493,7 @@ h3.f { font-size: 14px; margin: 18px 0 4px; }
 .health-banner { margin-bottom: 14px; }
 .health-banner a { color: inherit; font-weight: 600; }
 @media (max-width: 820px) { .health-list li { grid-template-columns: 12px minmax(0, 1fr); } .health-list .btn { grid-column: 2; justify-self: start; } }
+
+/* Mapa: paso que ocurre fuera de la automatización (p. ej. WhatsApp de bienvenida desde Canales) */
+.node.node-external { border-style: dashed; background: var(--surface-2); text-decoration: none; }
+.node.node-external .node-title { flex-wrap: wrap; }
