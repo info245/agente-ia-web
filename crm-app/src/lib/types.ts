@@ -29,6 +29,7 @@ export type Lead = {
   company_name?: string | null;
   business_type?: string | null;
   interest_service?: string | null;
+  interest_plan?: string | null;
   budget_range?: string | null;
   main_goal?: string | null;
   current_situation?: string | null;
@@ -64,6 +65,7 @@ export type Offer = {
   url?: string;
   min_monthly_fee?: string;
   min_project_fee?: string;
+  pricing_plans?: { plan?: string; notes?: string; monthly_price?: string; setup?: string; annual_price?: string }[];
   [key: string]: unknown;
 };
 

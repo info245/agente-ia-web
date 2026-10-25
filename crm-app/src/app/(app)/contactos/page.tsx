@@ -191,7 +191,7 @@ export default function ContactosPage() {
                     <td><b>{leadName(lead)}</b></td>
                     <td>{lead.email || "—"}</td>
                     <td style={{ whiteSpace: "nowrap" }}>{lead.phone || "—"}</td>
-                    <td>{lead.interest_service || "—"}</td>
+                    <td>{lead.interest_service || "—"}{lead.interest_plan && <div style={{ color: "var(--muted)", fontSize: 12 }}>{lead.interest_plan}</div>}</td>
                     <td>{lead.budget_range || "—"}</td>
                     <td style={{ whiteSpace: "nowrap", color: "var(--muted)" }}>{day(lead.created_at)}</td>
                     <td style={{ whiteSpace: "nowrap", color: "var(--muted)" }}>{day(lastContact(lead))}</td>

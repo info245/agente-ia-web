@@ -34,6 +34,24 @@ const STATUS: Record<string, [string, string]> = { draft: ["Borrador", "p-muted"
 const BILLING: Record<string, string> = { monthly: "Mensual", one_time: "Pago único", custom: "Otro" };
 const money = (n: number) => (Number(n) || 0).toLocaleString("es-ES", { style: "currency", currency: "EUR" });
 const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "");
+// "desde 1.200 €" → 1200; "350 € + 7 % de…" → 350.
+const priceOf = (text = "") => Number((String(text).match(/\d[\d.]*(?:,\d+)?/)?.[0] || "0").replace(/\./g, "").replace(",", ".")) || 0;
+
+type Plan = { service: string; name: string; label: string; price: number; monthly: boolean; notes: string };
+// Planes de Mi asistente → Servicios; un servicio sin planes cuenta como un único plan con su precio mínimo.
+function planCatalog(services: Record<string, Offer> = {}): Plan[] {
+  return Object.entries(services).flatMap(([service, offer]) => {
+    const plans = (offer.pricing_plans || []).filter((p) => p.plan);
+    if (!plans.length) {
+      const label = offer.min_monthly_fee || offer.min_project_fee || "";
+      return [{ service, name: service, label, price: priceOf(label), monthly: Boolean(offer.min_monthly_fee), notes: offer.description || "" }];
+    }
+    return plans.map((p) => {
+      const label = p.monthly_price || p.setup || p.annual_price || "";
+      return { service, name: p.plan || "", label, price: priceOf(label), monthly: Boolean(p.monthly_price), notes: p.notes || "" };
+    });
+  });
+}
 
 function fromQuote(q: Quote | null): Draft {
   const c = q?.content_json || {};
@@ -47,7 +65,7 @@ function fromQuote(q: Quote | null): Draft {
 export default function PropuestaPage() {
   const params = useSearchParams();
   const leadId = params.get("lead") || "";
-  const { leads, account, reloadLeads } = useSession();
+  const { leads, account, config, reloadLeads } = useSession();
   const lead = leads?.find((l) => l.id === leadId);
   const [quote, setQuote] = useState<Quote | null | undefined>(undefined);
   const [versions, setVersions] = useState<Quote[]>([]);
@@ -72,6 +90,14 @@ export default function PropuestaPage() {
     const service = (lead?.interest_service || "").toLowerCase();
     return [...templates].sort((a, b) => Number(service && b.service.toLowerCase() === service) - Number(service && a.service.toLowerCase() === service));
   }, [templates, lead?.interest_service]);
+
+  // Planes agrupados por servicio, con el que le interesa a este contacto primero.
+  const planGroups = useMemo(() => {
+    const groups = new Map<string, Plan[]>();
+    for (const p of planCatalog(config?.services)) groups.set(p.service, [...(groups.get(p.service) || []), p]);
+    const service = (lead?.interest_service || "").toLowerCase();
+    return [...groups].sort(([a], [b]) => Number(b.toLowerCase() === service) - Number(a.toLowerCase() === service));
+  }, [config?.services, lead?.interest_service]);
 
   if (!leadId) return <section className="page"><p className="empty">Abre la propuesta desde la ficha de un contacto o desde <Link href="/propuestas">Propuestas</Link>.</p></section>;
   if (quote === undefined || !leads) return <p className="loading">Cargando…</p>;
@@ -105,6 +131,25 @@ export default function PropuestaPage() {
     });
   }
 
+  // Un clic añade el plan como partida (y su contenido a «Qué incluye»); otro clic lo quita. Se pueden combinar.
+  const togglePlan = (p: Plan) => {
+    const line = p.notes ? `• ${p.name}: ${p.notes}` : "";
+    if (d.items.some((it) => it.concept === p.name)) {
+      return set({
+        items: d.items.filter((it) => it.concept !== p.name),
+        scope: line ? d.scope.split("\n").filter((l) => l !== line).join("\n") : d.scope,
+      });
+    }
+    const items = d.items.filter((it) => it.concept.trim());
+    set({
+      items: [...items, { concept: p.name, quantity: 1, unit_price: p.price }],
+      scope: line && !d.scope.includes(line) ? [d.scope.trim(), line].filter(Boolean).join("\n") : d.scope,
+      title: d.title || `Propuesta ${p.service}`,
+      ...(items.length ? {} : { billing_type: p.monthly ? "monthly" : "one_time" }),
+    });
+  };
+  const chosenPlans = planGroups.flatMap(([, plans]) => plans).filter((p) => d.items.some((it) => it.concept === p.name));
+
   const applyTemplate = (id: string) => {
     const t = templates.find((x) => x.id === id);
     if (!t) return;
@@ -134,6 +179,13 @@ export default function PropuestaPage() {
         method: "POST",
         body: { ...d, status: "draft", subtotal, tax, total: subtotal + tax, currency: "EUR", items: d.items.filter((it) => it.concept.trim()) },
       });
+      // El plan elegido queda en la ficha del contacto (y el servicio, si no lo tenía).
+      const plan = chosenPlans.map((p) => p.name).join(", ");
+      if (plan && plan !== (lead?.interest_plan || "")) {
+        const body: Record<string, string> = { interest_plan: plan };
+        if (!lead?.interest_service) body.interest_service = [...new Set(chosenPlans.map((p) => p.service))].join(", ");
+        await api(`/crm/leads/${leadId}`, { method: "PATCH", body }).then(() => reloadLeads()).catch(() => {});
+      }
       const newVersion = Number(r.quote.version) || 1;
       setQuote(r.quote);
       setD(fromQuote(r.quote));
@@ -178,7 +230,7 @@ export default function PropuestaPage() {
         <div>
           <p className="sub" style={{ margin: 0 }}><Link href="/propuestas">← Propuestas</Link> · <Link href={`/conversaciones?c=${lead.conversation_id}`}>{leadName(lead)}</Link></p>
           <h1>Propuesta</h1>
-          <p className="sub">{lead.interest_service || "Sin servicio"} · versión {version} · <span className={`pill ${STATUS[status]?.[1] || "p-muted"}`}>{STATUS[status]?.[0] || status}</span></p>
+          <p className="sub">{[lead.interest_service || "Sin servicio", lead.interest_plan].filter(Boolean).join(" · ")} · versión {version} · <span className={`pill ${STATUS[status]?.[1] || "p-muted"}`}>{STATUS[status]?.[0] || status}</span></p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {!d.items.length && !quote && <button className="btn" onClick={autofill}>Rellenar con sus datos</button>}
@@ -204,6 +256,25 @@ export default function PropuestaPage() {
         <p className="alert warn" style={{ marginBottom: 14 }}>
           Esta es la versión {version}, {status === "sent" ? `enviada el ${day(quote?.sent_at)}` : status === "accepted" ? "ya aceptada" : "ya respondida"}. Si cambias algo y guardas, se crea la versión {version + 1} y la que vio el cliente no se toca.
         </p>
+      )}
+
+      {planGroups.length > 0 && (
+        <div className="card block">
+          <h2>Planes</h2>
+          <p className="hint">Pulsa uno o varios para añadirlos (puedes combinar SEO y Google Ads). Al guardar, el plan queda en la ficha del contacto. Los planes y precios se cambian en Mi asistente → Servicios.</p>
+          {planGroups.map(([service, plans]) => (
+            <div key={service} style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", marginBottom: 6 }}>{service}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {plans.map((p) => (
+                  <button key={p.name} className="chip" aria-pressed={chosenPlans.includes(p)} title={p.notes} onClick={() => togglePlan(p)}>
+                    {chosenPlans.includes(p) ? "✓ " : ""}{p.name}{p.label ? ` · ${p.label}` : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="card block">

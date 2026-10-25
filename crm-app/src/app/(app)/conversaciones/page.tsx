@@ -378,6 +378,7 @@ function LeadPanel({ lead, stages, open, onClose, onSaved }: { lead: Lead; stage
       </div>
       {(lead.business_type || lead.company_name) && <div className="field"><span>Negocio</span>{[lead.company_name, lead.business_type].filter(Boolean).join(" · ")}</div>}
       <div className="field"><span>Le interesa</span>{lead.interest_service || "—"}</div>
+      {lead.interest_plan && <div className="field"><span>Plan propuesto</span>{lead.interest_plan}</div>}
       <div className="field">
         <span>Contacto</span>
         {lead.email ? <a href={`mailto:${lead.email}`}>{lead.email}</a> : null}

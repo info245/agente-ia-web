@@ -1039,6 +1039,7 @@ export async function updateLeadCrmFields(leadId, patch = {}, { accountId = null
   assignClean("phone");
   assignClean("company_name");
   assignClean("interest_service");
+  assignClean("interest_plan");
   assignClean("budget_range");
   assignClean("summary");
   assignClean("main_goal");
