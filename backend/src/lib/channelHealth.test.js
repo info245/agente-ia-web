@@ -28,6 +28,8 @@ test("resto de canales y recuento", () => {
   const h = buildChannelHealth({ whatsapp: { configured: false }, email: { connected: true, from: "a@b.c", failed_7d: 2 }, conversions: { enabled: true }, push: { devices: 1 } }, now);
   assert.equal(h.checks.find((c) => c.key === "email").status, "warn");
   assert.equal(h.checks.find((c) => c.key === "conversions").status, "ok");
+  assert.equal(h.checks.find((c) => c.key === "push").detail, "1 dispositivo recibe avisos.");
+  assert.doesNotMatch(buildChannelHealth({ email: { connected: true, from: "a@b.c" } }, now).checks[1].detail, /nunca/);
   assert.equal(h.warnings, 1);
   assert.equal(h.errors, 0);
   assert.equal(timeAgo(null, now), "nunca");
