@@ -1,20 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import { leadName } from "@/lib/format";
-import type { Offer } from "@/lib/types";
+import type { Offer, QuoteTemplate } from "@/lib/types";
 
 type Item = { concept: string; quantity: number; unit_price: number };
+type Acceptance = { name: string; nif?: string | null; signature?: string; at?: string; ip?: string; version?: number };
 type Quote = {
   id?: string;
   title?: string;
   status?: string;
+  version?: number;
   currency?: string;
+  total?: number;
   sent_at?: string | null;
+  created_at?: string;
+  acceptance?: Acceptance | null;
   content_json?: {
     body?: string; summary?: string; scope?: string; assumptions?: string;
     billing_type?: string; billing_label?: string; tax_rate?: number; items?: Item[];
@@ -25,9 +30,10 @@ type Draft = {
   summary: string; scope: string; body: string; assumptions: string; items: Item[];
 };
 
-const STATUS: Record<string, string> = { draft: "Borrador", sent: "Enviada", accepted: "Aceptada", rejected: "Rechazada" };
+const STATUS: Record<string, [string, string]> = { draft: ["Borrador", "p-muted"], sent: ["Enviada", "p-warn"], accepted: ["Aceptada", "p-good"], rejected: ["Rechazada", "p-muted"] };
 const BILLING: Record<string, string> = { monthly: "Mensual", one_time: "Pago único", custom: "Otro" };
-const money = (n: number) => n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
+const money = (n: number) => (Number(n) || 0).toLocaleString("es-ES", { style: "currency", currency: "EUR" });
+const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "");
 
 function fromQuote(q: Quote | null): Draft {
   const c = q?.content_json || {};
@@ -44,18 +50,30 @@ export default function PropuestaPage() {
   const { leads, account, reloadLeads } = useSession();
   const lead = leads?.find((l) => l.id === leadId);
   const [quote, setQuote] = useState<Quote | null | undefined>(undefined);
+  const [versions, setVersions] = useState<Quote[]>([]);
+  const [templates, setTemplates] = useState<QuoteTemplate[]>([]);
   const [d, setD] = useState<Draft>(fromQuote(null));
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState("");
+
+  const loadVersions = () => api<{ versions: Quote[] }>(`/crm/leads/${leadId}/quote/versions`).then((r) => setVersions(r.versions || [])).catch(() => {});
 
   useEffect(() => {
     if (!leadId) return;
     api<{ quote: Quote | null }>(`/crm/leads/${leadId}/quote`)
       .then((r) => { setQuote(r.quote); setD(fromQuote(r.quote)); })
       .catch((err) => { setQuote(null); setMsg({ kind: "error", text: (err as Error).message }); });
+    api<{ versions: Quote[] }>(`/crm/leads/${leadId}/quote/versions`).then((r) => setVersions(r.versions || [])).catch(() => {});
+    api<{ templates: QuoteTemplate[] }>("/crm/quote-templates").then((r) => setTemplates(r.templates || [])).catch(() => {});
   }, [leadId]);
 
-  if (!leadId) return <section className="page"><p className="empty">Abre la propuesta desde la ficha de un contacto en Conversaciones.</p></section>;
+  // Primero las plantillas del servicio que le interesa a este contacto.
+  const sortedTemplates = useMemo(() => {
+    const service = (lead?.interest_service || "").toLowerCase();
+    return [...templates].sort((a, b) => Number(service && b.service.toLowerCase() === service) - Number(service && a.service.toLowerCase() === service));
+  }, [templates, lead?.interest_service]);
+
+  if (!leadId) return <section className="page"><p className="empty">Abre la propuesta desde la ficha de un contacto o desde <Link href="/propuestas">Propuestas</Link>.</p></section>;
   if (quote === undefined || !leads) return <p className="loading">Cargando…</p>;
   if (!lead) return <section className="page"><p className="empty">Este contacto no está en la cuenta seleccionada. Cambia de cuenta abajo a la izquierda o vuelve a <Link href="/contactos">Contactos</Link>.</p></section>;
 
@@ -64,9 +82,10 @@ export default function PropuestaPage() {
   const subtotal = d.items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0);
   const tax = subtotal * ((Number(d.tax_rate) || 0) / 100);
   const status = quote?.status || "draft";
-  const sent = status !== "draft";
+  const version = Number(quote?.version) || 1;
+  const locked = Boolean(quote?.id) && status !== "draft";
+  const dirty = JSON.stringify(d) !== JSON.stringify(fromQuote(quote || null));
 
-  // Primer borrador con lo que ya sabemos del lead y el precio configurado en "Qué vendes".
   async function autofill() {
     const service = lead?.interest_service || "servicio";
     let facts: Offer | null = null;
@@ -86,61 +105,115 @@ export default function PropuestaPage() {
     });
   }
 
-  async function save(): Promise<boolean> {
+  const applyTemplate = (id: string) => {
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    if (d.items.length && !window.confirm(`¿Sustituir el contenido por la plantilla «${t.name}»?`)) return;
+    const first = String(lead?.name || "").split(/\s+/)[0];
+    const fill = (text: string) => text.replace(/\{nombre\}/g, first).replace(/\{empresa\}/g, lead?.company_name || "tu negocio").replace(/\{servicio\}/g, lead?.interest_service || t.service);
+    set({ title: fill(t.title), billing_type: t.billing_type, tax_rate: Number(t.tax_rate), items: t.items.map((i) => ({ ...i })), summary: fill(t.summary), scope: fill(t.scope), body: fill(t.body), assumptions: fill(t.assumptions) });
+  };
+
+  async function saveTemplate() {
+    const name = window.prompt("Nombre de la plantilla", `${lead?.interest_service || "Servicio"} · estándar`);
+    if (!name) return;
+    try {
+      const r = await api<{ template: QuoteTemplate }>("/crm/quote-templates", { method: "POST", body: { ...d, name, service: lead?.interest_service || "" } });
+      setTemplates((prev) => [...prev, r.template]);
+      setMsg({ kind: "ok", text: `Plantilla «${name}» guardada. La tienes en todas las propuestas y en Propuestas → Plantillas.` });
+    } catch (err) {
+      setMsg({ kind: "error", text: (err as Error).message });
+    }
+  }
+
+  async function save(): Promise<Quote | null> {
     setBusy("save");
     setMsg(null);
     try {
       const r = await api<{ quote: Quote }>(`/crm/leads/${leadId}/quote`, {
         method: "POST",
-        body: { ...d, status, subtotal, tax, total: subtotal + tax, currency: "EUR", items: d.items.filter((it) => it.concept.trim()) },
+        body: { ...d, status: "draft", subtotal, tax, total: subtotal + tax, currency: "EUR", items: d.items.filter((it) => it.concept.trim()) },
       });
+      const newVersion = Number(r.quote.version) || 1;
       setQuote(r.quote);
-      setMsg({ kind: "ok", text: "Propuesta guardada." });
+      setD(fromQuote(r.quote));
+      loadVersions();
+      setMsg({ kind: "ok", text: newVersion > version ? `Guardada como versión ${newVersion} (la versión ${version} enviada no cambia).` : "Propuesta guardada." });
       setBusy("");
-      return true;
+      return r.quote;
     } catch (err) {
       setMsg({ kind: "error", text: (err as Error).message });
       setBusy("");
-      return false;
+      return null;
     }
   }
 
   async function send(via: "email" | "whatsapp") {
     const to = via === "email" ? lead?.email : lead?.phone;
     if (!to) return setMsg({ kind: "error", text: via === "email" ? "Este contacto no tiene email." : "Este contacto no tiene teléfono." });
-    if (!window.confirm(`¿Enviar la propuesta por ${via === "email" ? "email" : "WhatsApp"} a ${to}?`)) return;
-    if (!(await save())) return;
+    const resend = locked && !dirty;
+    if (!window.confirm(`¿${resend ? "Reenviar" : "Enviar"} la propuesta por ${via === "email" ? "email" : "WhatsApp"} a ${to}?`)) return;
+    // Si no hay cambios en una propuesta ya enviada, se reenvía la misma versión (sin crear otra).
+    if (!resend && !(await save())) return;
     setBusy(via);
     try {
       const r = await api<{ quote: Quote }>(`/crm/leads/${leadId}/quote/send`, { method: "POST", body: { via } });
       if (r.quote) setQuote(r.quote);
+      loadVersions();
       await reloadLeads();
-      setMsg({ kind: "ok", text: `Propuesta enviada por ${via === "email" ? "email" : "WhatsApp"}.` });
+      setMsg({ kind: "ok", text: `Propuesta enviada por ${via === "email" ? "email" : "WhatsApp"}. Si la acepta, la firmará desde su enlace.` });
     } catch (err) {
       setMsg({ kind: "error", text: (err as Error).message });
     }
     setBusy("");
   }
 
-  const preview = `/crm/quotes/${leadId}/preview?account_id=${encodeURIComponent(account.id)}`;
+  const preview = `/crm/quotes/${leadId}/preview?account_id=${encodeURIComponent(account.id)}&borrador=1`;
+  const pdf = `/crm/quotes/${leadId}/pdf?account_id=${encodeURIComponent(account.id)}`;
+  const acceptance = quote?.acceptance;
 
   return (
     <section className="page">
       <div className="head">
         <div>
-          <p className="sub" style={{ margin: 0 }}><Link href={lead ? `/conversaciones?c=${lead.conversation_id}` : "/conversaciones"}>← {lead ? leadName(lead) : "Volver"}</Link></p>
+          <p className="sub" style={{ margin: 0 }}><Link href="/propuestas">← Propuestas</Link> · <Link href={`/conversaciones?c=${lead.conversation_id}`}>{leadName(lead)}</Link></p>
           <h1>Propuesta</h1>
-          <p className="sub">{lead?.interest_service || "Sin servicio"} · <span className={`pill ${sent ? "p-good" : "p-muted"}`}>{STATUS[status] || status}</span></p>
+          <p className="sub">{lead.interest_service || "Sin servicio"} · versión {version} · <span className={`pill ${STATUS[status]?.[1] || "p-muted"}`}>{STATUS[status]?.[0] || status}</span></p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {!d.items.length && !quote && <button className="btn" onClick={autofill}>Rellenar con sus datos</button>}
           {quote?.id && <a className="btn" href={preview} target="_blank" rel="noopener noreferrer">Ver como el cliente</a>}
-          <button className="btn primary" disabled={Boolean(busy)} onClick={save}>{busy === "save" ? "Guardando…" : "Guardar"}</button>
+          {quote?.id && <a className="btn" href={pdf}>PDF</a>}
+          <button className="btn primary" disabled={Boolean(busy) || (locked && !dirty)} onClick={save}>{busy === "save" ? "Guardando…" : locked ? `Guardar como versión ${version + 1}` : "Guardar"}</button>
         </div>
       </div>
       {msg && <p className={`alert ${msg.kind}`} role="status">{msg.text}</p>}
 
+      {acceptance?.name && (
+        <div className="card block" style={{ borderColor: "#bfe3cd" }}>
+          <h2>✓ Aceptada y firmada</h2>
+          <p style={{ margin: "4px 0 10px" }}>
+            Por <b>{acceptance.name}</b>{acceptance.nif ? ` (NIF/CIF ${acceptance.nif})` : ""} el {acceptance.at ? new Date(acceptance.at).toLocaleString("es-ES") : ""} · versión {acceptance.version || version}
+          </p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {acceptance.signature && <img src={acceptance.signature} alt="Firma del cliente" style={{ maxWidth: 280, maxHeight: 120, background: "#fff", border: "1px solid var(--line)", borderRadius: 8 }} />}
+          <p className="hint" style={{ margin: "8px 0 0" }}>La firma aparece también en la propuesta y en su PDF. IP: {acceptance.ip || "—"}</p>
+        </div>
+      )}
+      {locked && (
+        <p className="alert warn" style={{ marginBottom: 14 }}>
+          Esta es la versión {version}, {status === "sent" ? `enviada el ${day(quote?.sent_at)}` : status === "accepted" ? "ya aceptada" : "ya respondida"}. Si cambias algo y guardas, se crea la versión {version + 1} y la que vio el cliente no se toca.
+        </p>
+      )}
+
       <div className="card block">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 6 }}>
+          <select className="i" style={{ maxWidth: 320 }} aria-label="Usar una plantilla de propuesta" value="" onChange={(e) => applyTemplate(e.target.value)}>
+            <option value="">{templates.length ? "Usar una plantilla…" : "Aún no tienes plantillas de propuesta"}</option>
+            {sortedTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}{t.service ? ` · ${t.service}` : ""}</option>)}
+          </select>
+          <button className="btn small" disabled={!d.items.length} onClick={saveTemplate}>Guardar como plantilla</button>
+        </div>
         <label className="f" htmlFor="q-title">Título</label>
         <input id="q-title" className="i" value={d.title} onChange={(e) => set({ title: e.target.value })} placeholder="Propuesta Google Ads" />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
@@ -183,10 +256,33 @@ export default function PropuestaPage() {
       </div>
 
       <div className="card block" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <b style={{ marginRight: "auto" }}>{sent && quote?.sent_at ? `Enviada el ${new Date(quote.sent_at).toLocaleDateString("es-ES")}` : "Cuando esté lista, envíasela:"}</b>
-        <button className="btn" disabled={Boolean(busy) || !lead?.phone} onClick={() => send("whatsapp")}>{busy === "whatsapp" ? "Enviando…" : "Enviar por WhatsApp"}</button>
-        <button className="btn primary" disabled={Boolean(busy) || !lead?.email} onClick={() => send("email")}>{busy === "email" ? "Enviando…" : "Enviar por email"}</button>
+        <b style={{ marginRight: "auto" }}>
+          {locked && !dirty ? `Versión ${version} ${status === "sent" ? `enviada el ${day(quote?.sent_at)}` : STATUS[status]?.[0].toLowerCase()}` : locked ? `Al enviar se guarda como versión ${version + 1}` : "Cuando esté lista, envíasela:"}
+        </b>
+        <button className="btn" disabled={Boolean(busy) || !lead.phone || status === "accepted"} onClick={() => send("whatsapp")}>{busy === "whatsapp" ? "Enviando…" : locked && !dirty ? "Reenviar por WhatsApp" : "Enviar por WhatsApp"}</button>
+        <button className="btn primary" disabled={Boolean(busy) || !lead.email || status === "accepted"} onClick={() => send("email")}>{busy === "email" ? "Enviando…" : locked && !dirty ? "Reenviar por email" : "Enviar por email"}</button>
       </div>
+
+      {versions.length > 1 && (
+        <div className="card block">
+          <h2>Versiones</h2>
+          <table className="table">
+            <thead><tr>{["Versión", "Título", "Importe", "Estado", "Enviada", "Firmada por"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
+            <tbody>
+              {versions.map((v) => (
+                <tr key={v.id} style={{ cursor: "default" }} aria-selected={v.id === quote?.id}>
+                  <td>v{Number(v.version) || 1}{v.id === quote?.id ? " (actual)" : ""}</td>
+                  <td>{v.title}</td>
+                  <td>{money(Number(v.total))}</td>
+                  <td><span className={`pill ${STATUS[v.status || "draft"]?.[1] || "p-muted"}`}>{STATUS[v.status || "draft"]?.[0] || v.status}</span></td>
+                  <td>{day(v.sent_at) || "—"}</td>
+                  <td>{v.acceptance?.name || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

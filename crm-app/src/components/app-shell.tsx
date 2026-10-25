@@ -52,6 +52,7 @@ const NAV = [
   { href: "/inicio", label: "Inicio", perm: "home", icon: icon(<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" />) },
   { href: "/conversaciones", label: "Conversaciones", perm: "inbox", short: "Mensajes", icon: icon(<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />) },
   { href: "/contactos", label: "Contactos", perm: "contacts", icon: icon(<><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 3.5a4 4 0 0 1 0 9M22 21a7 7 0 0 0-4-6.3" /></>) },
+  { href: "/propuestas", label: "Propuestas", perm: "proposals", icon: icon(<><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5M10 13h6M10 17h6" /></>) },
   { href: "/agenda", label: "Agenda", perm: "agenda", icon: icon(<><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></>) },
   { href: "/email", label: "Automatizaciones", short: "Automatiz.", perm: "settings", icon: icon(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>) },
   { href: "/resultados", label: "Resultados", perm: "home", icon: icon(<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />) },

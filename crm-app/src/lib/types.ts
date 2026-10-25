@@ -143,3 +143,9 @@ export type Privacy = { notice_text?: string; policy_url?: string; retention_mon
 
 export type ConsentRecord = { id: string; channel?: string | null; created_at: string; payload?: { granted?: boolean | null; basis?: string; text?: string; policy_url?: string; source?: string } | null };
 export type AccessLogEntry = { action: "view" | "export" | "delete" | "anonymize"; actor_email?: string | null; created_at: string; details?: Record<string, unknown> };
+
+// Plantilla de propuesta por servicio (Propuestas → Plantillas).
+export type QuoteTemplate = {
+  id?: string; name: string; service: string; title: string; billing_type: string; tax_rate: number;
+  items: { concept: string; quantity: number; unit_price: number }[]; summary: string; scope: string; body: string; assumptions: string;
+};

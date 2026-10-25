@@ -30,6 +30,9 @@ import {
   upsertLatestQuoteForLead,
   markLatestQuoteAsSent,
   markLatestQuoteResponse,
+  listQuotesByLead,
+  getClientQuoteByLeadId,
+  listQuotesForAccount,
   getLatestAnalysisByLeadId,
   upsertLatestAnalysisForLead,
   markLatestAnalysisAsSent,
@@ -49,6 +52,8 @@ import { runAgentTurn } from "./agent/engine.js";
 import { createGoogleCalendar, isCalendarConnected } from "./agent/googleCalendar.js";
 import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParams } from "./lib/whatsappTemplates.js";
 import { emailBodyToHtml, emailBodyToText } from "./lib/emailLinks.js";
+import { renderQuoteSignHtml, validateAcceptance } from "./lib/quoteSignature.js";
+import { listQuoteTemplates, saveQuoteTemplate, deleteQuoteTemplate } from "./lib/quoteTemplatesStore.js";
 import { addSubscription, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
 import { createEmailMarketing, EMAIL_JOB_TYPE } from "./emailMarketingRoutes.js";
 import * as emailMarketingStore from "./lib/emailMarketingStore.js";
@@ -5137,7 +5142,8 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
       return res.status(404).send("Lead no encontrado");
     }
 
-    const quote = await getLatestQuoteByLeadId(req.params.leadId);
+    // El cliente ve la última versión enviada; desde el CRM, con ?borrador=1, el borrador en curso.
+    const quote = req.query.borrador ? await getLatestQuoteByLeadId(req.params.leadId) : (await getClientQuoteByLeadId(req.params.leadId)) || (await getLatestQuoteByLeadId(req.params.leadId));
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     const responseToken = quote
       ? buildQuoteResponseToken({
@@ -5254,11 +5260,13 @@ app.get("/crm/analysis/:leadId/preview", async (req, res) => {
   }
 });
 
-app.get("/crm/quotes/:leadId/respond", async (req, res) => {
+// GET abre la página de firma (o de «no me encaja»); la respuesta solo se registra con el POST.
+async function handleQuoteRespond(req, res) {
   try {
+    const isPost = req.method === "POST";
     const account = await resolveRequestAccount(req);
     const appConfig = await getAppConfig({ accountId: account.id });
-    const action = String(req.query.action || "").trim().toLowerCase();
+    const action = String((isPost ? req.body?.action : null) || req.query.action || "").trim().toLowerCase();
     if (!["accept", "reject", "human"].includes(action)) {
       return res.status(400).send("Accion no valida");
     }
@@ -5269,12 +5277,12 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
       return res.status(404).send("Lead no encontrado");
     }
 
-    const quote = await getLatestQuoteByLeadId(req.params.leadId);
+    const quote = (await getClientQuoteByLeadId(req.params.leadId)) || (await getLatestQuoteByLeadId(req.params.leadId));
     if (!quote) {
       return res.status(404).send("No hay propuesta disponible");
     }
 
-    const token = String(req.query.token || "").trim();
+    const token = String((isPost ? req.body?.token : null) || req.query.token || "").trim();
     const validToken = isValidQuoteResponseToken({
       leadId: lead.id,
       quoteId: quote.id,
@@ -5311,10 +5319,42 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
       return res.redirect(humanAgentUrl);
     }
 
+    const brandName = appConfig?.brand?.name || "TMedia Global";
+    const signPage = (errors = [], values = {}) => {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(errors.length ? 400 : 200).send(renderQuoteSignHtml({ action, lead, quote, brandName, postUrl: req.originalUrl, token, errors, values }));
+    };
+    // Ya respondida: se enseña la propuesta (con la firma, si la hay) en vez de volver a pedirla.
+    if (["accepted", "rejected"].includes(String(quote.status))) return res.redirect(previewUrl);
+    if (!isPost) return signPage();
+
+    let acceptance = null;
+    if (action === "accept") {
+      const check = validateAcceptance(req.body || {});
+      if (!check.ok) return signPage(check.errors, req.body || {});
+      acceptance = {
+        name: check.name,
+        nif: check.nif,
+        signature: req.body.signature,
+        at: new Date().toISOString(),
+        ip: String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "").split(",")[0].trim(),
+        user_agent: String(req.headers["user-agent"] || "").slice(0, 300),
+        quote_id: quote.id,
+        version: Number(quote.version) || 1,
+        total: quote.total,
+        currency: quote.currency || "EUR",
+      };
+    }
+    const rejectReason = action === "reject" ? String(req.body?.reason || "").trim().slice(0, 1000) : "";
+
     const response = await markLatestQuoteResponse(
       lead.id,
-      action === "accept" ? "accepted" : "rejected"
+      action === "accept" ? "accepted" : "rejected",
+      { acceptance, quoteId: quote.id }
     );
+    if (rejectReason) {
+      await saveMessage({ conversation_id: lead.conversation_id, role: "tool", content: `Propuesta rechazada. Motivo: ${rejectReason}`, account_id: account.id }).catch(() => null);
+    }
 
     await trackConversationEvent({
       conversation_id: lead.conversation_id,
@@ -5374,7 +5414,9 @@ app.get("/crm/quotes/:leadId/respond", async (req, res) => {
     console.log("crm quote respond error", error);
     return res.status(500).send(error.message);
   }
-});
+}
+app.get("/crm/quotes/:leadId/respond", handleQuoteRespond);
+app.post("/crm/quotes/:leadId/respond", handleQuoteRespond);
 
 app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
   try {
@@ -5385,7 +5427,8 @@ app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
       return res.status(404).send("Lead no encontrado");
     }
 
-    const quote = await getLatestQuoteByLeadId(req.params.leadId);
+    // El cliente ve la última versión enviada; desde el CRM, con ?borrador=1, el borrador en curso.
+    const quote = req.query.borrador ? await getLatestQuoteByLeadId(req.params.leadId) : (await getClientQuoteByLeadId(req.params.leadId)) || (await getLatestQuoteByLeadId(req.params.leadId));
     const html = renderQuotePreviewHtml({
       lead,
       quote,
@@ -5425,6 +5468,53 @@ async function handleCrmQuoteUpsert(req, res) {
 
 app.put("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
 app.post("/api/crm/leads/:leadId/quote", handleCrmQuoteUpsert);
+
+// Versiones de las propuestas de un contacto (v1 enviada, v2 borrador…).
+app.get("/api/crm/leads/:leadId/quote/versions", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const lead = await getCrmLeadById(req.params.leadId, { accountId: account.id });
+    if (!lead) return res.status(404).json({ ok: false, error: "Lead no encontrado" });
+    res.json({ ok: true, versions: await listQuotesByLead(lead.id) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Listado de propuestas de la cuenta y plantillas de propuesta por servicio.
+app.get("/api/crm/quotes", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    res.json({ ok: true, quotes: await listQuotesForAccount(account.id) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+app.get("/api/crm/quote-templates", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    res.json({ ok: true, templates: await listQuoteTemplates(account.id) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+app.post("/api/crm/quote-templates", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    res.json({ ok: true, template: await saveQuoteTemplate(account.id, req.body || {}) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+app.delete("/api/crm/quote-templates/:id", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    await deleteQuoteTemplate(account.id, req.params.id);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
 
 app.post("/api/crm/leads/:leadId/analysis/generate", async (req, res) => {
   try {

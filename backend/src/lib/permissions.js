@@ -51,7 +51,7 @@ export function crmPermissionFor(method, path) {
   if (/^\/billing(\/|$)/.test(p)) return "billing";
   // Exportar todos los datos de un contacto (RGPD) es tan sensible como borrarlo.
   if (p === "/leads/bulk-delete" || (method === "DELETE" && /^\/leads\/[^/]+$/.test(p)) || /^\/leads\/[^/]+\/export$/.test(p)) return "delete";
-  if (/^\/leads\/[^/]+\/(quote|analysis)(\/|$)/.test(p) || p.startsWith("/service-facts/")) return "proposals";
+  if (/^\/leads\/[^/]+\/(quote|analysis)(\/|$)/.test(p) || p.startsWith("/service-facts/") || p === "/quotes" || /^\/quote-templates(\/|$)/.test(p)) return "proposals";
   if (p === "/leads" || p.startsWith("/leads/")) return "contacts";
   // agent/try: "Sugerir respuesta" en Conversaciones (prueba el asistente sin enviar nada).
   if (p === "/inbox" || p.startsWith("/conversations/") || p === "/agent/try" || (p === "/whatsapp/templates" && isRead(method))) return "inbox";
