@@ -446,6 +446,12 @@ function norm(v) {
   return String(v || "").trim();
 }
 
+// Enlaces que recibe el cliente (propuestas y análisis): con el dominio del CRM (crm.t-mediaglobal.com),
+// que reenvía /crm/quotes y /crm/analysis a este servidor. Sin CRM_APP_URL, el propio servidor.
+function clientLinkBaseUrl(req) {
+  return CRM_APP_URL || `${req.protocol}://${req.get("host")}`;
+}
+
 function buildPublicBaseUrl(req) {
   return CRM_PUBLIC_BASE_URL || `${req.protocol}://${req.get("host")}`;
 }
@@ -5162,9 +5168,10 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
           quoteUpdatedAt: quote.updated_at || quote.created_at || "",
         })
       : "";
+    const linkBase = clientLinkBaseUrl(req);
     const acceptUrl = quote
       ? buildQuoteResponseUrl({
-          baseUrl,
+          baseUrl: linkBase,
           leadId: lead.id,
           action: "accept",
           token: responseToken,
@@ -5173,7 +5180,7 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
       : "";
     const rejectUrl = quote
       ? buildQuoteResponseUrl({
-          baseUrl,
+          baseUrl: linkBase,
           leadId: lead.id,
           action: "reject",
           token: responseToken,
@@ -5182,7 +5189,7 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
       : "";
     const humanAgentUrl = quote
       ? buildQuoteResponseUrl({
-          baseUrl,
+          baseUrl: linkBase,
           leadId: lead.id,
           action: "human",
           token: responseToken,
@@ -5309,7 +5316,7 @@ async function handleQuoteRespond(req, res) {
       appConfig
     );
     const previewUrl = buildScopedCrmUrl(
-      `${req.protocol}://${req.get("host")}`,
+      clientLinkBaseUrl(req),
       `/crm/quotes/${lead.id}/preview`,
       account
     );
@@ -5601,8 +5608,7 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Canal de envío no válido" });
     }
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const previewUrl = buildScopedCrmUrl(baseUrl, `/crm/quotes/${lead.id}/preview`, account);
+    const previewUrl = buildScopedCrmUrl(clientLinkBaseUrl(req), `/crm/quotes/${lead.id}/preview`, account);
 
     if (via === "email") {
       if (!lead.email) {
@@ -5750,9 +5756,8 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
       content_json: sanitizeAnalysisForClient(analysis.content_json || {}, lead),
     };
 
-    const baseUrl = `${req.protocol}://${req.get("host")}`;
     const previewUrl = buildScopedCrmUrl(
-      baseUrl,
+      clientLinkBaseUrl(req),
       `/crm/analysis/${lead.id}/preview`,
       account
     );
@@ -7783,6 +7788,27 @@ app.post("/api/crm/channels/form-whatsapp", async (req, res) => {
       changeSummary: "Canales: primer WhatsApp a leads de formulario",
     });
     return res.json({ ok: true, version: version?.version, enabled, template_name: template?.name || current.integrations?.whatsapp?.intro_template_name || "" });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Configuración → Canales → WhatsApp: plantilla para enviar propuestas pasadas 24 h ({{1}} nombre, {{2}} enlace).
+app.post("/api/crm/channels/quote-whatsapp", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    let template = null;
+    if (req.body?.template_name) {
+      const templates = await listApprovedWhatsAppTemplates(account.id);
+      template = templates.find((t) => t.name === req.body.template_name && t.language === (req.body.template_language || t.language));
+      if (!template || !template.sendable) return res.status(400).json({ ok: false, error: "Esa plantilla no está aprobada o no se puede usar." });
+      if (template.params !== 2) return res.status(400).json({ ok: false, error: "La plantilla de propuestas debe tener exactamente dos datos: {{1}} el nombre y {{2}} el enlace." });
+    }
+    const current = await getAppConfig({ accountId: account.id });
+    const whatsapp = { ...current.integrations?.whatsapp, quote_template_name: template?.name || "", quote_template_language: template?.language || "es" };
+    const config = await saveAppConfig(sanitizeAppConfig({ ...current, integrations: { ...current.integrations, whatsapp } }), { accountId: account.id });
+    await publishConfigVersion({ accountId: account.id, config, createdBy: req.crmUser?.id || null, changeSummary: "Canales: plantilla de WhatsApp para propuestas" });
+    return res.json({ ok: true, template_name: template?.name || "" });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
   }
