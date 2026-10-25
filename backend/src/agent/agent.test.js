@@ -215,3 +215,15 @@ test("las preguntas frecuentes de Mi asistente llegan al contexto del agente", a
   assert.match(context, /¿Hay permanencia\?\n  No, ningún servicio tiene permanencia\./);
   assert.doesNotMatch(buildAccountContext(sanitizeAppConfig({})), /PREGUNTAS FRECUENTES/);
 });
+
+test("estado del turno: todo lo que sabemos del contacto (también la web) y el formato del canal", async () => {
+  const { buildTurnState } = await import("./instructions.js");
+  const lead = { company_name: "SANCHO AI", business_type: "agencia de IA", main_goal: "más leads", custom_fields: { website: "https://heysancho.com", consent: "true" } };
+  const appConfig = { lead_capture: { fields: { company_name: true } } };
+  const whatsapp = buildTurnState({ lead, appConfig, channel: "whatsapp" });
+  assert.match(whatsapp, /business_type=agencia de IA/, "aunque la cuenta no pida capturarlo");
+  assert.match(whatsapp, /website=https:\/\/heysancho\.com/);
+  assert.doesNotMatch(whatsapp, /consent/);
+  assert.match(whatsapp, /Formato WhatsApp/);
+  assert.match(buildTurnState({ lead, appConfig, channel: "web" }), /Formato web: texto plano/);
+});

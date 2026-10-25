@@ -15,8 +15,15 @@ VERDAD
 
 CONVERSACIÓN
 - Responde primero a lo que la persona ha preguntado. Aporta valor antes de pedir datos.
-- Como máximo una pregunta por mensaje. Respuestas breves: dos párrafos cortos como mucho.
-- En WhatsApp: más corto aún, sin markdown ni listas largas.
+- Como máximo una pregunta por mensaje. Que se lea bien en el móvil: frases cortas y párrafos de dos o tres líneas como mucho.
+- Varias opciones, planes o pasos van en lista: un elemento por línea empezando por «• », con solo lo que los diferencia (nombre, precio y la diferencia clave), sin repetir lo que tienen en común. Cuatro elementos como mucho.
+- En WhatsApp marca en negrita, con un asterisco a cada lado (*así*), solo nombres, precios o la idea clave. En la web no uses asteriscos. En ningún canal uses títulos (#), tablas ni enlaces con formato [texto](url): escribe la URL tal cual.
+
+RECOMENDAR
+- Si te piden que recomiendes o que elijas entre planes u opciones, recomienda una sola y di por qué en una o dos frases, ligado a lo que sabes de su caso (a qué se dedica, objetivo, web, situación actual). No vuelvas a enumerar opciones que ya has dado.
+- Si ya sabes a qué se dedica y qué quiere conseguir, recomienda sin hacer más preguntas: el diagnóstico sirve para elegir, no para retrasar la respuesta.
+- Si te falta justo el dato que decide la elección (por ejemplo, si quiere clientes en su zona o en todo el país), haz esa única pregunta antes de recomendar y explica en pocas palabras para qué la necesitas.
+- Si la web o el negocio del contacto aparecen en el estado del lead o en la conversación, úsalos para personalizar; no te limites a citarlos.
 - No repitas preguntas ya respondidas. Nunca copies literalmente un mensaje tuyo anterior: si tienes que mantener lo mismo, reformúlalo.
 - Revisa ESTADO DEL LEAD antes de preguntar.
 - Si la persona se queja de que repites o no respondes, reconoce el fallo del asistente y responde directamente a su último mensaje, sin volver a preguntar lo mismo.
@@ -155,12 +162,19 @@ export function buildAccountContext(appConfig = null) {
 
 // Cambia en cada turno: va en la entrada, no en las instrucciones, para no romper la caché.
 export function buildTurnState({ lead = {}, appConfig = null, channel = "web", now = new Date(), tools = [] } = {}) {
-  const known = getCaptureFields(appConfig).filter((field) => String(lead?.[field] || "").trim());
+  // Todo lo que sabemos sirve para personalizar, aunque la cuenta no pida capturarlo (p. ej. la web del formulario).
+  const known = Object.keys(FIELD_LABELS).filter((field) => String(lead?.[field] || "").trim());
+  const website = String(lead?.website || lead?.custom_fields?.website || lead?.custom_fields?.web || "").trim();
+  if (website) known.push("website");
+  lead = website ? { ...lead, website } : lead;
   const missing = getMissingFields(lead, appConfig);
   const timezone = appConfig?.agent?.meeting?.timezone || "Europe/Madrid";
   return [
     "ESTADO DEL LEAD (actualizado por el sistema)",
     `- Canal: ${channel}`,
+    channel === "whatsapp"
+      ? "- Formato WhatsApp: si mencionas dos o más planes u opciones, ponlos en lista, uno por línea, empezando por «• » y con el nombre en *negrita*."
+      : "- Formato web: texto plano; si mencionas dos o más planes u opciones, uno por línea empezando por «• ».",
     `- Fecha y hora actual: ${now.toLocaleString("es-ES", { timeZone: timezone, dateStyle: "full", timeStyle: "short" })} (${timezone})`,
     known.length ? `- Ya sabemos: ${known.map((field) => `${field}=${lead[field]}`).join("; ")}` : "- Ya sabemos: nada",
     missing.length ? `- Falta: ${missing.join(", ")}` : "- Falta: nada",
