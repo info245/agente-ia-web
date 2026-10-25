@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   canWhatsApp,
   eligibility,
+  followUpReady,
+  isFollowUpTrigger,
   matchesSegment,
   nextAction,
   personalize,
@@ -119,4 +121,15 @@ test("las automatizaciones antiguas (lista sin ids) se convierten y las ejecucio
   assert.equal(steps[0].next, "s1");
   assert.deepEqual([steps[1].yes, steps[1].no], ["s2", null]);
   assert.equal(nextAction({ step_index: 2 }, steps, {}).kind, "set_stage");
+});
+
+test("seguimientos: empiezan tras X horas sin respuesta y solo después de activarlos", () => {
+  const trigger = { type: "no_reply", hours: 24 };
+  const now = Date.parse("2026-10-25T12:00:00Z");
+  assert.equal(followUpReady(trigger, { baseAt: "2026-10-24T11:00:00Z", activatedAt: "2026-10-24T00:00:00Z", now }), true);
+  assert.equal(followUpReady(trigger, { baseAt: "2026-10-25T00:00:00Z", activatedAt: "2026-10-24T00:00:00Z", now }), false, "aún no han pasado 24 h");
+  assert.equal(followUpReady(trigger, { baseAt: "2026-10-20T00:00:00Z", activatedAt: "2026-10-24T00:00:00Z", now }), false, "silencio anterior a activarla");
+  assert.equal(isFollowUpTrigger("quote_sent"), true);
+  assert.equal(isFollowUpTrigger("lead_created"), false);
+  assert.equal(sanitizeAutomation({ trigger: { type: "no_reply", hours: 48 } }).trigger.hours, 48);
 });

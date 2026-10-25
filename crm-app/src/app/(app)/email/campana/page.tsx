@@ -146,7 +146,7 @@ export default function CampaignPage() {
     <section className="page">
       <div className="head">
         <div style={{ minWidth: 0, flex: 1 }}>
-          <p className="sub" style={{ margin: 0 }}><Link href="/email">← Email marketing</Link></p>
+          <p className="sub" style={{ margin: 0 }}><Link href="/email">← Automatizaciones</Link></p>
           <input className="i" aria-label="Nombre de la campaña" style={{ fontSize: 22, fontWeight: 700, border: 0, padding: "2px 0", background: "transparent", maxWidth: 520 }} value={c.name} placeholder="Nombre de la campaña" onChange={(e) => set({ name: e.target.value })} disabled={!editable} />
           {c.status && c.status !== "draft" && (
             <p className="sub" style={{ margin: 0 }}>{c.status === "scheduled" ? `Programada para el ${new Date(c.scheduled_at || "").toLocaleString("es-ES")}` : c.status === "sending" ? "Enviando…" : `Enviada el ${new Date(c.sent_at || "").toLocaleString("es-ES")} a ${c.recipients_count} contactos`}</p>

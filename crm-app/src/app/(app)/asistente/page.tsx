@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ConfigPending, useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import { TryPanel } from "@/components/try-panel";
-import type { AppConfig, Faq, Flow, Meeting, MessageTemplate, Offer, Privacy, WhatsAppTemplate } from "@/lib/types";
+import type { AppConfig, Faq, Flow, Meeting, MessageTemplate, Offer, Privacy } from "@/lib/types";
 
 const TONES = [
   ["Cercano", "cercano, amable y claro"],
@@ -18,7 +18,6 @@ const TABS = [
   ["vende", "Qué vendes"],
   ["sabe", "Lo que sabe"],
   ["actua", "Cuándo actúa"],
-  ["seguimientos", "Seguimientos"],
   ["privacidad", "Privacidad"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
@@ -185,7 +184,6 @@ function Editor({ config, reloadConfig }: { config: AppConfig; reloadConfig: () 
           {tab === "vende" && <SellTab draft={draft} update={update} />}
           {tab === "sabe" && <KnowsTab draft={draft} update={update} />}
           {tab === "actua" && <ActsTab draft={draft} update={update} />}
-          {tab === "seguimientos" && <FollowUpsTab draft={draft} update={update} />}
           {tab === "privacidad" && <PrivacyTab draft={draft} update={update} />}
           <div className="card savebar">
             {message ? <span role="status" className={`alert ${message.kind}`}>{message.text}</span> : <span>{dirty ? "Tienes cambios sin guardar" : "Todo guardado"}</span>}
@@ -440,7 +438,7 @@ function ActsTab({ draft, update }: TabProps) {
   return (
     <div className="card block">
       <h2>Cuándo actúa</h2>
-      <p className="hint">Cuándo ofrece una videollamada y cuándo te pasa la conversación a ti.</p>
+      <p className="hint">Cuándo ofrece una videollamada y cuándo te pasa la conversación a ti. Los seguimientos automáticos (WhatsApp y email cuando no contestan) están en <a href="/email">Automatizaciones</a>.</p>
       <label className="f" htmlFor="meet-when">Cuándo ofrecer una videollamada</label>
       <textarea className="i" id="meet-when" rows={2} value={draft.meetingWhen} onChange={(e) => update({ meetingWhen: e.target.value })} placeholder="Cuando el cliente ya ha contado su caso y pregunta por precios o quiere avanzar." />
       <label className="f" htmlFor="handoff-when">Cuándo pasarte la conversación</label>
@@ -472,121 +470,5 @@ function ActsTab({ draft, update }: TabProps) {
         </label>
       </div>
     </div>
-  );
-}
-
-function FollowUpsTab({ draft, update }: TabProps) {
-  const [waTemplates, setWaTemplates] = useState<WhatsAppTemplate[] | null>(null);
-  useEffect(() => {
-    api<{ templates: WhatsAppTemplate[] }>("/crm/whatsapp/templates")
-      .then((d) => setWaTemplates(d.templates.filter((t) => t.sendable)))
-      .catch(() => setWaTemplates([]));
-  }, []);
-
-  const setFlow = (key: string, part: Partial<Flow>) => update({ flows: { ...draft.flows, [key]: { ...draft.flows[key], ...part } } });
-  const setStep = (key: string, index: number, part: Record<string, unknown>) =>
-    setFlow(key, { steps: (draft.flows[key].steps || []).map((s, i) => (i === index ? { ...s, ...part } : s)) });
-  const setTemplate = (key: string, part: Partial<MessageTemplate>) =>
-    update({ templates: { ...draft.templates, [key]: { ...draft.templates[key], ...part } } });
-
-  // Cada paso nuevo lleva su propio texto (plantilla) para no pisar el de otro paso.
-  const addStep = (key: string) => {
-    const templateKey = `${key}_${Date.now().toString(36)}`;
-    update({
-      flows: { ...draft.flows, [key]: { ...draft.flows[key], steps: [...(draft.flows[key].steps || []), { channel: "email", delay_value: "48", delay_unit: "hours", template_key: templateKey, active: true }] } },
-      templates: { ...draft.templates, [templateKey]: { channel: "email", label: "Seguimiento", subject: "¿Seguimos con lo que hablamos?", body: "Hola {nombre}, te escribo por si quieres retomar lo de {servicio}. Si te encaja, responde a este mensaje y lo vemos." } },
-    });
-  };
-  const removeStep = (key: string, index: number) => setFlow(key, { steps: (draft.flows[key].steps || []).filter((_, i) => i !== index) });
-
-  const entries = Object.entries(draft.flows);
-  if (!entries.length) return <div className="card block"><p className="empty">Esta cuenta no tiene seguimientos configurados.</p></div>;
-
-  return (
-    <>
-      <p className="hint" style={{ margin: "0 0 12px" }}>
-        Mensajes que tu asistente envía solo cuando un cliente deja de responder. Usa <b>{"{nombre}"}</b> y <b>{"{servicio}"}</b> para personalizarlos.
-      </p>
-      <ul className="hint" style={{ margin: "0 0 12px", paddingLeft: 18 }}>
-        <li>Las horas de cada paso cuentan desde el <b>último mensaje</b> de la conversación.</li>
-        <li>En cuanto el cliente <b>contesta</b>, la secuencia se para y no se envía nada más.</li>
-        <li><b>Email si no contesta al WhatsApp:</b> WhatsApp a las 24 h y email a las 48 h.</li>
-        <li><b>Email y WhatsApp a la vez:</b> pon las mismas horas en los dos pasos (el segundo sale una hora después).</li>
-        <li>Si el cliente no tiene el dato de un paso (por ejemplo, no dejó teléfono), ese paso se salta.</li>
-        <li><b>Enlaces en el email:</b> escribe <code>[Quiero la beta](https://tuweb.com/beta)</code> y el cliente verá «Quiero la beta» como enlace. Las direcciones sueltas (https://…) también se pueden pulsar.</li>
-      </ul>
-      {entries.map(([key, flow]) => (
-        <div className="card block" key={key}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-            <div>
-              <h2>{flow.label || key}</h2>
-              <p className="hint" style={{ marginBottom: 0 }}>{flow.description}</p>
-            </div>
-            <label style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 600, whiteSpace: "nowrap" }}>
-              <input type="checkbox" checked={flow.enabled !== false} onChange={(e) => setFlow(key, { enabled: e.target.checked })} />
-              {flow.enabled !== false ? "Activado" : "Desactivado"}
-            </label>
-          </div>
-          {flow.enabled !== false && key === "lead_recovery" && (
-            <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12 }}>
-              <input type="checkbox" style={{ marginTop: 3 }} checked={flow.contact_chat_leads === true} onChange={(e) => setFlow(key, { contact_chat_leads: e.target.checked })} />
-              <span>
-                <b>Escribir también a quien dejó su email o teléfono en el chat de la web</b>
-                <span className="hint" style={{ display: "block", margin: 0 }}>
-                  Sin esto, solo se escribe a quien aceptó expresamente que le contactéis (formularios) o a quien te escribió por ese canal. Nunca a quien dijo que no. Asegúrate de que el aviso de privacidad de tu web lo cubre.
-                </span>
-              </span>
-            </label>
-          )}
-          {flow.enabled !== false && (flow.steps || []).map((step, i) => {
-            const tpl = draft.templates[step.template_key || ""] || {};
-            const isWa = step.channel === "whatsapp";
-            return (
-              <div className="faq-row" key={i} style={{ marginTop: 12, opacity: step.active === false ? 0.6 : 1 }}>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontWeight: 600 }}>
-                    <input type="checkbox" checked={step.active !== false} onChange={(e) => setStep(key, i, { active: e.target.checked })} />
-                    Paso {i + 1}
-                  </label>
-                  <span style={{ color: "var(--muted)", fontSize: 13 }}>{i === 0 ? "Si no ha contestado a las" : "Si sigue sin contestar a las"}</span>
-                  <input className="i" type="number" min={1} style={{ width: 80 }} aria-label="Espera" value={step.delay_value || "24"} onChange={(e) => setStep(key, i, { delay_value: e.target.value })} />
-                  <select className="i" style={{ width: 110 }} aria-label="Unidad" value={step.delay_unit || "hours"} onChange={(e) => setStep(key, i, { delay_unit: e.target.value })}>
-                    <option value="hours">horas</option>
-                    <option value="days">días</option>
-                  </select>
-                  <span style={{ color: "var(--muted)", fontSize: 13 }}>, enviar</span>
-                  <select className="i" style={{ width: 140 }} aria-label={`Canal del paso ${i + 1}`} value={isWa ? "whatsapp" : "email"} onChange={(e) => setStep(key, i, { channel: e.target.value })}>
-                    <option value="whatsapp">un WhatsApp</option>
-                    <option value="email">un email</option>
-                  </select>
-                  <button className="btn ghost small" style={{ marginLeft: "auto" }} aria-label={`Quitar paso ${i + 1}`} onClick={() => removeStep(key, i)}>Quitar</button>
-                </div>
-                {!isWa && <input className="i" aria-label="Asunto del email" placeholder="Asunto del email" value={tpl.subject || ""} onChange={(e) => setTemplate(step.template_key || "", { subject: e.target.value })} />}
-                <textarea className="i" rows={3} aria-label="Mensaje" value={tpl.body || ""} onChange={(e) => setTemplate(step.template_key || "", { body: e.target.value })} />
-                {isWa && (
-                  <label className="f" style={{ margin: 0 }}>
-                    Plantilla de WhatsApp si han pasado más de 24 h (obligatorio por WhatsApp)
-                    <select className="i" value={step.whatsapp_template_name ? `${step.whatsapp_template_name}|${step.whatsapp_template_language || "es"}` : ""}
-                      onChange={(e) => {
-                        const [name, language] = e.target.value.split("|");
-                        setStep(key, i, { whatsapp_template_name: name || "", whatsapp_template_language: language || "es" });
-                      }}>
-                      <option value="">{waTemplates === null ? "Cargando…" : waTemplates.length ? "Sin plantilla (no se enviará fuera de 24 h)" : "No hay plantillas aprobadas"}</option>
-                      {(waTemplates || []).map((t) => <option key={`${t.name}|${t.language}`} value={`${t.name}|${t.language}`}>{t.name.replace(/_/g, " ")} · {t.language}</option>)}
-                    </select>
-                  </label>
-                )}
-              </div>
-            );
-          })}
-          {flow.enabled !== false && (
-            <div style={{ marginTop: 12 }}>
-              {!(flow.steps || []).length && <p className="hint" style={{ marginTop: 0 }}>No tiene pasos: no se enviará nada hasta que añadas uno.</p>}
-              <button className="btn small" onClick={() => addStep(key)}>+ Añadir paso</button>
-            </div>
-          )}
-        </div>
-      ))}
-    </>
   );
 }

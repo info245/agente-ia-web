@@ -12,7 +12,7 @@ import { hasWaitBefore, insertNode, newId, nodeById, removeNode, updateNode, typ
 import type { WhatsAppTemplate } from "@/lib/types";
 import type { Channels } from "../campana/page";
 
-type Trigger = { type: "lead_created" | "stage" | "tag"; stage?: string; tag?: string; segment?: { services?: string[] } };
+type Trigger = { type: "lead_created" | "stage" | "tag" | "no_reply" | "quote_sent"; stage?: string; tag?: string; hours?: number; contact_chat_leads?: boolean; segment?: { services?: string[] } };
 type Automation = { id?: string; name: string; status?: string; trigger: Trigger; steps: FlowNode[] };
 type Stats = {
   total: number; active: number; done: number; exited: number;
@@ -33,7 +33,8 @@ const KIND: Record<FlowNode["type"], { label: string; ico: string; bg: string; f
 };
 const ADD_ORDER: FlowNode["type"][] = ["email", "whatsapp", "wait", "condition", "notify_team", "add_tag", "set_stage"];
 const CHECK_LABEL: Record<string, string> = { opened_last: "¿Abrió el email anterior?", clicked_last: "¿Hizo clic en el email anterior?", has_tag: "¿Tiene la etiqueta", stage: "¿Está en la etapa" };
-const TRIGGER_LABEL: Record<Trigger["type"], string> = { lead_created: "Entra un contacto nuevo", stage: "Un contacto pasa a la etapa", tag: "Un contacto recibe la etiqueta" };
+const TRIGGER_LABEL: Record<Trigger["type"], string> = { lead_created: "Entra un contacto nuevo", stage: "Un contacto pasa a la etapa", tag: "Un contacto recibe la etiqueta", no_reply: "Le escribimos y lleva sin contestar", quote_sent: "Le enviamos una propuesta y lleva sin responder" };
+const isFollowUp = (t: Trigger["type"]) => t === "no_reply" || t === "quote_sent";
 const ago = (v?: string | null) => {
   if (!v) return "";
   const min = Math.round((Date.now() - Date.parse(v)) / 60000);
@@ -215,14 +216,14 @@ export default function AutomationPage() {
     );
   };
 
-  const triggerText = `${TRIGGER_LABEL[a.trigger.type]}${a.trigger.type === "stage" ? ` «${stageLabel(a.trigger.stage)}»` : ""}${a.trigger.type === "tag" ? ` «${a.trigger.tag || "…"}»` : ""}${a.trigger.segment?.services?.[0] ? ` · solo ${a.trigger.segment.services[0]}` : ""}`;
+  const triggerText = `${TRIGGER_LABEL[a.trigger.type]}${isFollowUp(a.trigger.type) ? ` ${a.trigger.hours || 24} h` : ""}${a.trigger.type === "stage" ? ` «${stageLabel(a.trigger.stage)}»` : ""}${a.trigger.type === "tag" ? ` «${a.trigger.tag || "…"}»` : ""}${a.trigger.segment?.services?.[0] ? ` · solo ${a.trigger.segment.services[0]}` : ""}`;
   const emailTemplates = [...STARTER_TEMPLATES.slice(1), ...saved];
 
   return (
     <section className="page">
       <div className="head">
         <div style={{ minWidth: 0, flex: 1 }}>
-          <p className="sub" style={{ margin: 0 }}><Link href="/email">← Email marketing</Link></p>
+          <p className="sub" style={{ margin: 0 }}><Link href="/email">← Automatizaciones</Link></p>
           <input className="i" aria-label="Nombre de la automatización" style={{ fontSize: 22, fontWeight: 700, border: 0, padding: "2px 0", background: "transparent", maxWidth: 520 }} value={a.name} placeholder="Nombre de la automatización" onChange={(e) => change({ name: e.target.value })} />
           <div className="chan-chips" style={{ marginTop: 4 }}>
             <span className={`pill ${a.status === "active" ? "p-good" : "p-muted"}`}><span className="dot" />{a.status === "active" ? "Activa" : a.status === "paused" ? "Pausada" : "Borrador"}</span>
@@ -246,6 +247,7 @@ export default function AutomationPage() {
             <button type="button" className={`node trigger${selected === "trigger" ? " selected" : ""}`} onClick={() => setSelected("trigger")}>
               <span className="node-title"><span className="node-ico" style={{ background: "var(--accent)", color: "#fff" }}>⚡</span>Empieza cuando</span>
               <span className="node-sub">{triggerText}</span>
+              <span className="node-sub" style={{ fontSize: 12 }}>⏹ Se para en cuanto contesta por WhatsApp o email</span>
               {stats && (
                 <span className="node-stats">
                   <span className={stats.active ? "live" : ""}>{stats.total} han entrado</span>
@@ -267,7 +269,22 @@ export default function AutomationPage() {
                 <option value="lead_created">Entra un contacto nuevo</option>
                 <option value="stage">Un contacto pasa a la etapa…</option>
                 <option value="tag">Un contacto recibe la etiqueta…</option>
+                <option value="no_reply">Le escribimos y no contesta (seguimiento)</option>
+                <option value="quote_sent">Le enviamos una propuesta y no responde</option>
               </select>
+              {isFollowUp(a.trigger.type) && (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+                  <span style={{ fontSize: 13 }}>Después de</span>
+                  <input className="i" type="number" min={1} style={{ width: 90 }} aria-label="Horas sin respuesta" value={a.trigger.hours || 24} onChange={(e) => change({ trigger: { ...a.trigger, hours: Number(e.target.value) } })} />
+                  <span style={{ fontSize: 13 }}>horas sin respuesta</span>
+                </div>
+              )}
+              {a.trigger.type === "no_reply" && (
+                <label style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 10, fontSize: 13 }}>
+                  <input type="checkbox" style={{ marginTop: 2 }} checked={a.trigger.contact_chat_leads === true} onChange={(e) => change({ trigger: { ...a.trigger, contact_chat_leads: e.target.checked } })} />
+                  <span>Escribir también a quien dejó su email o teléfono en el chat de la web (aunque no marcara una casilla). Nunca a quien dijo que no.</span>
+                </label>
+              )}
               {a.trigger.type === "stage" && (
                 <select className="i" style={{ marginTop: 8 }} aria-label="Etapa" value={a.trigger.stage || ""} onChange={(e) => change({ trigger: { ...a.trigger, stage: e.target.value } })}>
                   <option value="">Elige etapa</option>
@@ -281,7 +298,12 @@ export default function AutomationPage() {
                   {options!.services.map((s) => <option key={s} value={s}>Solo si le interesa {s}</option>)}
                 </select>
               )}
-              <p className="hint" style={{ marginTop: 10 }}>Entran contactos con email y consentimiento (o que ya son clientes), una sola vez. Salen si se dan de baja. Se revisa cada minuto.</p>
+              <p className="hint" style={{ marginTop: 10 }}>
+                {isFollowUp(a.trigger.type)
+                  ? "Es un seguimiento de su solicitud: vale con que aceptara que le contactéis. Cada contacto entra una vez, y sale si contesta, si pasa a Ganado o Perdido o si se da de baja."
+                  : "Es comunicación comercial: solo entran contactos que aceptaron recibir novedades (o que ya son clientes), una vez. Salen si contestan o se dan de baja."}
+                {" "}Se revisa cada minuto.
+              </p>
             </div>
           ) : node ? (
             <div className="card block" style={{ marginBottom: 0 }}>
@@ -332,7 +354,9 @@ export default function AutomationPage() {
                   {waTemplate(node.template_name) && (
                     <div className="m" style={{ marginTop: 10, maxWidth: "100%", background: "#dcf8c6", color: "#1d1b26", borderRadius: 10 }}>{waTemplate(node.template_name)?.body}</div>
                   )}
-                  <p className="hint" style={{ marginTop: 8 }}>Solo se envía si el contacto tiene teléfono. Si contesta, la conversación sigue en Conversaciones con tu asistente.</p>
+                  <label className="f" htmlFor="n-watext">Texto si te escribió en las últimas 24 h (opcional)</label>
+                  <textarea id="n-watext" className="i" rows={3} value={node.text || ""} onChange={(e) => edit({ text: e.target.value })} placeholder="Con la conversación abierta WhatsApp permite texto libre; si no, se usa la plantilla de arriba." />
+                  <p className="hint" style={{ marginTop: 8 }}>Solo se envía si el contacto tiene teléfono y no ha rechazado WhatsApp. Queda en Conversaciones, y si contesta sigue tu asistente.</p>
                 </>
               )}
               {node.type === "condition" && (

@@ -9,27 +9,28 @@ import { TemplateThumb, type PickableTemplate } from "@/components/email-canvas"
 import { STARTER_TEMPLATES } from "@/lib/email-templates";
 
 type Campaign = { id: string; name: string; subject: string; status: string; scheduled_at?: string | null; sent_at?: string | null; recipients_count: number; created_at: string };
-type Automation = { id: string; name: string; status: string; trigger: { type: string; stage?: string; tag?: string }; steps: unknown[]; stats: { total: number; active: number; done: number; exited: number } };
+type Automation = { id: string; name: string; status: string; trigger: { type: string; stage?: string; tag?: string; hours?: number }; steps: { type: string }[]; stats: { total: number; active: number; done: number; exited: number } };
 
 const STATUS: Record<string, [string, string]> = {
   draft: ["Borrador", "p-muted"], scheduled: ["Programada", "p-warn"], sending: ["Enviando", "p-warn"], sent: ["Enviada", "p-good"], cancelled: ["Cancelada", "p-muted"],
   active: ["Activa", "p-good"], paused: ["Pausada", "p-muted"],
 };
-const TRIGGER: Record<string, string> = { lead_created: "Contacto nuevo", stage: "Cambia a la etapa", tag: "Recibe la etiqueta" };
+const TRIGGER: Record<string, string> = { lead_created: "Entra un contacto nuevo", stage: "Pasa a la etapa", tag: "Recibe la etiqueta", no_reply: "Sin contestar", quote_sent: "Propuesta sin responder" };
+const CHANNEL_ICON: Record<string, string> = { email: "✉ Email", whatsapp: "◍ WhatsApp", notify_team: "🔔 Equipo" };
 const day = (v?: string | null) => (v ? new Date(v).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
 
 export default function EmailPage() {
-  const [tab, setTab] = useState<"campanas" | "automatizaciones" | "plantillas" | "audiencia">("campanas");
+  const [tab, setTab] = useState<"campanas" | "automatizaciones" | "plantillas" | "audiencia">("automatizaciones");
   return (
     <section className="page">
       <div className="head">
         <div>
-          <h1>Email marketing</h1>
-          <p className="sub">Campañas a tus contactos y emails automáticos según lo que hacen.</p>
+          <h1>Automatizaciones</h1>
+          <p className="sub">Todo lo que se envía solo: bienvenidas, seguimientos por WhatsApp y email, avisos al equipo y campañas.</p>
         </div>
       </div>
-      <div className="tabs" role="tablist" aria-label="Email marketing">
-        {([["campanas", "Campañas"], ["automatizaciones", "Automatizaciones"], ["plantillas", "Plantillas"], ["audiencia", "Audiencia y bajas"]] as const).map(([key, label]) => (
+      <div className="tabs" role="tablist" aria-label="Automatizaciones">
+        {([["automatizaciones", "Automatizaciones"], ["campanas", "Campañas"], ["plantillas", "Plantillas"], ["audiencia", "Audiencia y bajas"]] as const).map(([key, label]) => (
           <button key={key} role="tab" className="chip" aria-selected={tab === key} onClick={() => setTab(key)}>{label}</button>
         ))}
       </div>
@@ -97,13 +98,13 @@ function Automations() {
         <p className="empty">Por ejemplo: «cuando entre un contacto nuevo, envíale una bienvenida; a los 3 días, si no la abrió, mándale un WhatsApp».</p>
       ) : (
         <table className="table">
-          <thead><tr>{["Nombre", "Empieza cuando", "Pasos", "Estado", "En curso", "Terminados"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
+          <thead><tr>{["Nombre", "Cuándo salta", "Por dónde escribe", "Estado", "En curso", "Terminados"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
           <tbody>
             {items.map((a) => (
               <tr key={a.id} onClick={() => router.push(`/email/automatizacion?id=${a.id}`)}>
                 <td><b>{a.name || "Sin nombre"}</b></td>
-                <td>{TRIGGER[a.trigger?.type] || "—"}{a.trigger?.stage ? ` «${a.trigger.stage}»` : ""}{a.trigger?.tag ? ` «${a.trigger.tag}»` : ""}</td>
-                <td>{a.steps?.length || 0}</td>
+                <td>{TRIGGER[a.trigger?.type] || "—"}{a.trigger?.type === "no_reply" || a.trigger?.type === "quote_sent" ? ` ${a.trigger.hours || 24} h` : ""}{a.trigger?.stage ? ` «${a.trigger.stage}»` : ""}{a.trigger?.tag ? ` «${a.trigger.tag}»` : ""}</td>
+                <td style={{ whiteSpace: "nowrap" }}>{[...new Set((a.steps || []).map((s) => s.type))].filter((t) => CHANNEL_ICON[t]).map((t) => CHANNEL_ICON[t]).join(" · ") || "—"}</td>
                 <td><span className={`pill ${STATUS[a.status]?.[1] || "p-muted"}`}>{STATUS[a.status]?.[0] || a.status}</span></td>
                 <td>{a.stats?.active ?? 0}</td>
                 <td>{(a.stats?.done ?? 0) + (a.stats?.exited ?? 0)}</td>

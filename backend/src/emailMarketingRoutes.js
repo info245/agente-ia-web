@@ -8,6 +8,9 @@ import { enqueueAutomationJob, completeAutomationJob } from "./lib/automationJob
 import {
   canWhatsApp,
   eligibility,
+  followUpReady,
+  isFollowUpTrigger,
+  normalizeEmail,
   matchesSegment,
   nextAction,
   normalizeTags,
@@ -22,11 +25,13 @@ import {
 } from "./lib/emailMarketing.js";
 import * as store from "./lib/emailMarketingStore.js";
 import { notifyAccount } from "./lib/pushNotifications.js";
+import { canRecoverLead, canUseAutomationChannel } from "./lib/automationPolicy.js";
+import { saveMessage } from "./lib/chatStore.js";
 
 export const EMAIL_JOB_TYPE = "email_send";
 const GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64");
 
-export function createEmailMarketing({ app, resolveRequestAccount, getAccountConfig, openai, model, baseUrl, secret, sendWhatsAppTemplate, normalizeLeadPhoneForWhatsApp, getWhatsAppStatus, crmUrl }) {
+export function createEmailMarketing({ app, resolveRequestAccount, getAccountConfig, openai, model, baseUrl, secret, sendWhatsAppTemplate, sendWhatsAppText, isWhatsAppCustomerWindowOpen, normalizeLeadPhoneForWhatsApp, getWhatsAppStatus, crmUrl }) {
   const urls = (messageId) => ({
     unsubscribeUrl: `${baseUrl}/e/u/${messageId}`,
     pixelUrl: `${baseUrl}/e/o/${messageId}.gif`,
@@ -296,7 +301,7 @@ Ver en el CRM: ${link}`, emailConfig: config?.integrations?.email || null });
     const [content, config, leadRow] = await Promise.all([
       contentFor(message),
       getAccountConfig(message.account_id),
-      message.lead_id ? supabase.from("leads").select("name, company_name, interest_service").eq("id", message.lead_id).maybeSingle() : { data: {} },
+      message.lead_id ? supabase.from("leads").select("name, company_name, interest_service, conversation_id").eq("id", message.lead_id).maybeSingle() : { data: {} },
     ]);
     if (!content) {
       await store.updateMessage(message.id, { status: "failed", error: "contenido no encontrado" });
@@ -316,6 +321,10 @@ Ver en el CRM: ${link}`, emailConfig: config?.integrations?.email || null });
       });
       if (result?.skipped) throw new Error(`envío desactivado (${result.reason})`);
       await store.updateMessage(message.id, { status: "sent", sent_at: new Date().toISOString(), error: null });
+      // Los emails de automatizaciones quedan anotados en la conversación (las campañas no, para no llenarla).
+      if (message.run_id && lead.conversation_id) {
+        await saveMessage({ conversation_id: lead.conversation_id, role: "tool", content: `Email automático enviado: ${personalize(content.subject, lead)}`, account_id: message.account_id }).catch(() => null);
+      }
       return finish({ sent: true, provider_message_id: result?.messageId || null });
     } catch (error) {
       // Rechazo del servidor de correo: se marca como fallido y no se reintenta para no duplicar.
@@ -344,16 +353,55 @@ Ver en el CRM: ${link}`, emailConfig: config?.integrations?.email || null });
 
     const automations = (await store.listActiveAutomations()) || [];
     const byAccount = new Map();
-    for (const automation of automations) {
-      if (!byAccount.has(automation.account_id)) {
-        const [leads, suppressed] = await Promise.all([store.listMarketingLeads(automation.account_id), store.getSuppressedSet(automation.account_id)]);
-        byAccount.set(automation.account_id, { leads: leads || [], suppressed });
+    // Datos por cuenta: contactos, bajas, últimos mensajes de cada conversación y propuestas enviadas.
+    const accountData = async (accountId) => {
+      if (byAccount.has(accountId)) return byAccount.get(accountId);
+      const [leads, suppressed] = await Promise.all([store.listMarketingLeads(accountId), store.getSuppressedSet(accountId)]);
+      const data = { leads: leads || [], suppressed, messages: null, quotes: null };
+      byAccount.set(accountId, data);
+      return data;
+    };
+    const messagesOf = async (data, accountId) => {
+      if (!data.messages) {
+        const since = new Date(now.getTime() - 45 * 86_400_000).toISOString();
+        const { data: rows } = await supabase.from("messages").select("conversation_id, role, created_at").eq("account_id", accountId).gte("created_at", since).order("created_at", { ascending: false }).limit(10000);
+        data.messages = new Map();
+        for (const m of rows || []) {
+          if (!data.messages.has(m.conversation_id)) data.messages.set(m.conversation_id, []);
+          data.messages.get(m.conversation_id).push(m);
+        }
       }
-      const { leads, suppressed } = byAccount.get(automation.account_id);
+      return data.messages;
+    };
+    const quotesOf = async (data, accountId) => {
+      if (!data.quotes) {
+        const { data: rows } = await supabase.from("quotes").select("lead_id, status, sent_at, updated_at").eq("account_id", accountId).eq("status", "sent");
+        data.quotes = new Map((rows || []).map((q) => [q.lead_id, q.sent_at || q.updated_at]));
+      }
+      return data.quotes;
+    };
+
+    for (const automation of automations) {
+      const data = await accountData(automation.account_id);
       const enrolled = await store.enrolledLeadIds(automation.id);
-      for (const lead of leads) {
-        if (enrolled.has(lead.id) || !eligibility(lead, suppressed).ok) continue;
-        if (!triggerMatches(automation.trigger, lead, { activatedAt: automation.activated_at })) continue;
+      const trigger = automation.trigger || {};
+      const followUp = isFollowUpTrigger(trigger.type);
+      for (const lead of data.leads) {
+        if (enrolled.has(lead.id) || !matchesSegment(lead, trigger.segment || {})) continue;
+        let ready = false;
+        if (!followUp) {
+          ready = eligibility(lead, data.suppressed).ok && triggerMatches(trigger, lead, { activatedAt: automation.activated_at });
+        } else if (lead.consent !== false && (lead.email || lead.phone)) {
+          if (trigger.type === "no_reply") {
+            const msgs = (await messagesOf(data, automation.account_id)).get(lead.conversation_id) || [];
+            const lastTalk = msgs.find((m) => m.role !== "tool");
+            ready = canRecoverLead({ lead, messages: msgs }) && followUpReady(trigger, { baseAt: lastTalk?.created_at || lead.created_at, activatedAt: automation.activated_at, now: now.getTime() });
+          } else {
+            const sentAt = lead.quote_status === "sent" ? (await quotesOf(data, automation.account_id)).get(lead.id) : null;
+            ready = Boolean(sentAt) && followUpReady(trigger, { baseAt: sentAt, activatedAt: automation.activated_at, now: now.getTime() });
+          }
+        }
+        if (!ready) continue;
         await store.enroll(automation.account_id, automation.id, lead.id);
         summary.enrolled += 1;
       }
@@ -363,11 +411,31 @@ Ver en el CRM: ${link}`, emailConfig: config?.integrations?.email || null });
     for (const runRow of (await store.listDueRuns(nowIso)) || []) {
       const automation = automationById.get(runRow.automation_id);
       if (!automation) continue; // pausada: la ejecución espera a que se reactive
-      const { data: lead } = await supabase.from("leads").select("*").eq("id", runRow.lead_id).maybeSingle();
+      const { data: lead } = await supabase.from("leads").select("*, conversations(channel)").eq("id", runRow.lead_id).maybeSingle();
       if (!lead) {
         await store.updateRun(runRow.id, { status: "exited", exit_reason: "contacto_borrado" });
         continue;
       }
+      const trigger = automation.trigger || {};
+      const followUp = isFollowUpTrigger(trigger.type);
+      const flowKey = trigger.type === "quote_sent" ? "quote_followup" : "lead_recovery";
+      // En cuanto contesta (por cualquier canal) la automatización se para: ya hay conversación.
+      if (lead.conversation_id) {
+        const { data: reply } = await supabase.from("messages").select("id").eq("conversation_id", lead.conversation_id).eq("role", "user").gt("created_at", runRow.created_at).limit(1);
+        if (reply?.length) {
+          await store.updateRun(runRow.id, { status: "exited", exit_reason: "contestó" });
+          continue;
+        }
+      }
+      if (trigger.type === "quote_sent" && lead.quote_status !== "sent") {
+        await store.updateRun(runRow.id, { status: "exited", exit_reason: "propuesta_respondida" });
+        continue;
+      }
+      if (followUp && ["ganado", "perdido"].includes(String(lead.crm_status || ""))) {
+        await store.updateRun(runRow.id, { status: "exited", exit_reason: `etapa_${lead.crm_status}` });
+        continue;
+      }
+      const suppressed = (await accountData(automation.account_id)).suppressed;
       let current = { ...runRow };
       for (let guard = 0; guard < 10; guard += 1) {
         const lastEmail = await store.lastRunMessage(current.id);
@@ -379,21 +447,40 @@ Ver en el CRM: ${link}`, emailConfig: config?.integrations?.email || null });
         }
         const nodeId = action.step.id;
         if (action.kind === "email") {
-          const check = eligibility(lead, (byAccount.get(automation.account_id) || {}).suppressed || new Set());
-          if (!check.ok) {
-            await store.updateRun(current.id, { status: "exited", exit_reason: check.reason });
-            break;
+          const email = normalizeEmail(lead.email);
+          const allowed = followUp
+            ? Boolean(email) && !suppressed.has(email) && canUseAutomationChannel({ lead, channel: "email", flowKey, allowVolunteeredContact: trigger.contact_chat_leads === true })
+            : eligibility(lead, suppressed).ok;
+          // Sin permiso para este canal: se salta el paso (no corta el resto del recorrido).
+          if (allowed) {
+            const message = await store.createRunMessage({ account_id: automation.account_id, run_id: current.id, step_id: nodeId, lead_id: lead.id, email, subject: action.step.subject });
+            if (message) await enqueueAutomationJob({ accountId: automation.account_id, jobType: EMAIL_JOB_TYPE, dedupeKey: `email:${message.id}`, payload: { message_id: message.id } });
           }
-          const message = await store.createRunMessage({ account_id: automation.account_id, run_id: current.id, step_id: nodeId, lead_id: lead.id, email: check.email, subject: action.step.subject });
-          if (message) await enqueueAutomationJob({ accountId: automation.account_id, jobType: EMAIL_JOB_TYPE, dedupeKey: `email:${message.id}`, payload: { message_id: message.id } });
         }
         if (action.kind === "whatsapp") {
           const phone = normalizeLeadPhoneForWhatsApp(lead);
-          if (phone && action.step.template_name && canWhatsApp(lead)) {
-            const bodyParams = (action.step.params || []).map((p) => personalize(p, lead) || "-");
-            await sendWhatsAppTemplate(phone, action.step.template_name, action.step.language || "es", { accountId: automation.account_id, bodyParams }).catch((error) =>
-              console.log("[email-marketing] whatsapp step error", error.message)
-            );
+          const allowed = followUp
+            ? canUseAutomationChannel({ lead, channel: "whatsapp", flowKey, allowVolunteeredContact: trigger.contact_chat_leads === true })
+            : canWhatsApp(lead);
+          if (phone && allowed) {
+            try {
+              // Conversación abierta (contestó en las últimas 24 h): texto libre. Si no, plantilla aprobada.
+              const open = action.step.text && lead.conversation_id ? await isWhatsAppCustomerWindowOpen(lead.conversation_id) : false;
+              let sentText = "";
+              if (open) {
+                sentText = personalize(action.step.text, lead);
+                await sendWhatsAppText(phone, sentText, { accountId: automation.account_id });
+              } else if (action.step.template_name) {
+                const bodyParams = (action.step.params || []).map((p) => personalize(p, lead) || "-");
+                await sendWhatsAppTemplate(phone, action.step.template_name, action.step.language || "es", { accountId: automation.account_id, bodyParams });
+                sentText = `[Plantilla WhatsApp: ${action.step.template_name}] ${bodyParams.join(" | ")}`.trim();
+              }
+              if (sentText && lead.conversation_id) {
+                await saveMessage({ conversation_id: lead.conversation_id, role: "assistant", content: sentText, metadata: { automation_id: automation.id, step_id: nodeId }, account_id: automation.account_id });
+              }
+            } catch (error) {
+              console.log("[automatizaciones] whatsapp step error", error.message);
+            }
           }
         }
         if (action.kind === "notify_team") {
