@@ -53,7 +53,7 @@ const NAV = [
   { href: "/conversaciones", label: "Conversaciones", perm: "inbox", short: "Mensajes", icon: icon(<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />) },
   { href: "/contactos", label: "Contactos", perm: "contacts", icon: icon(<><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 3.5a4 4 0 0 1 0 9M22 21a7 7 0 0 0-4-6.3" /></>) },
   { href: "/agenda", label: "Agenda", perm: "agenda", icon: icon(<><rect x="3" y="4.5" width="18" height="16" rx="2" /><path d="M3 9.5h18M8 2.5v4M16 2.5v4" /></>) },
-  { href: "/email", label: "Email marketing", short: "Email", perm: "settings", icon: icon(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>) },
+  { href: "/email", label: "Automatizaciones", short: "Automatiz.", perm: "settings", icon: icon(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>) },
   { href: "/resultados", label: "Resultados", perm: "home", icon: icon(<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />) },
   { href: "/asistente", label: "Mi asistente", perm: "settings", short: "Asistente", icon: icon(<><path d="M12 3v3M5 9h14a2 2 0 0 1 2 2v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a2 2 0 0 1 2-2z" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /></>) },
   { href: "/canales", label: "Canales", perm: "settings", icon: icon(<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />) },

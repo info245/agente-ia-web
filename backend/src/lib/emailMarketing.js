@@ -5,7 +5,9 @@ import { emailBodyToHtml, emailBodyToText } from "./emailLinks.js";
 
 export const BLOCK_TYPES = ["heading", "text", "button", "image", "divider"];
 export const STEP_TYPES = ["wait", "email", "whatsapp", "notify_team", "condition", "add_tag", "set_stage"];
-export const TRIGGER_TYPES = ["lead_created", "stage", "tag"];
+export const TRIGGER_TYPES = ["lead_created", "stage", "tag", "no_reply", "quote_sent"];
+// Seguimientos de una solicitud (no son publicidad): usan el permiso de contacto, no el de novedades.
+export const isFollowUpTrigger = (type) => type === "no_reply" || type === "quote_sent";
 
 const clean = (v, max = 2000) => String(v ?? "").trim().slice(0, max);
 const isHttpUrl = (v) => /^https?:\/\/[^\s<>"']+$/i.test(String(v || ""));
@@ -165,7 +167,7 @@ function sanitizeStep(s) {
   if (s.type === "wait") return { type: "wait", amount: Math.max(1, Math.min(365, Number(s.amount) || 1)), unit: ["hours", "days"].includes(s.unit) ? s.unit : "days" };
   if (s.type === "email") return { type: "email", subject: clean(s.subject, 200), preheader: clean(s.preheader, 200), blocks: sanitizeBlocks(s.blocks), template_id: clean(s.template_id, 60) };
   if (s.type === "condition") return { type: "condition", check: ["opened_last", "clicked_last", "has_tag", "stage"].includes(s.check) ? s.check : "opened_last", value: clean(s.value, 80) };
-  if (s.type === "whatsapp") return { type: "whatsapp", template_name: clean(s.template_name, 120), language: clean(s.language, 12) || "es", params: (Array.isArray(s.params) ? s.params : []).slice(0, 3).map((p) => clean(p, 200)) };
+  if (s.type === "whatsapp") return { type: "whatsapp", template_name: clean(s.template_name, 120), language: clean(s.language, 12) || "es", params: (Array.isArray(s.params) ? s.params : []).slice(0, 3).map((p) => clean(p, 200)), text: clean(s.text, 1000) };
   if (s.type === "notify_team") return { type: "notify_team", message: clean(s.message, 500) };
   if (s.type === "add_tag") return { type: "add_tag", tag: normalizeTags([s.tag])[0] || "" };
   return { type: "set_stage", stage: clean(s.stage, 80) };
@@ -197,6 +199,8 @@ export function sanitizeAutomation(input = {}) {
     type: TRIGGER_TYPES.includes(t.type) ? t.type : "lead_created",
     stage: clean(t.stage, 80),
     tag: normalizeTags([t.tag])[0] || "",
+    hours: Math.max(1, Math.min(720, Number(t.hours) || 24)),
+    contact_chat_leads: t.contact_chat_leads === true,
     segment: sanitizeSegment(t.segment || {}),
   };
   return { name: clean(input.name, 120), trigger, steps: sanitizeSteps(input.steps) };
@@ -242,4 +246,13 @@ export function nextAction(run = {}, steps = [], ctx = {}) {
     return { kind: "branch", step, passed, ...go(passed ? step.yes : step.no) };
   }
   return { kind: step.type, step, ...go(step.next) };
+}
+
+// Seguimientos: ¿toca empezar? «no_reply» cuenta desde nuestro último mensaje sin respuesta;
+// «quote_sent», desde que se envió la propuesta. Solo lo ocurrido después de activar la automatización.
+export function followUpReady(trigger = {}, { baseAt, activatedAt, now = Date.now() } = {}) {
+  const base = Date.parse(baseAt || "");
+  const since = Date.parse(activatedAt || "");
+  if (!Number.isFinite(base) || !Number.isFinite(since) || base < since) return false;
+  return now - base >= (Number(trigger.hours) || 24) * 3_600_000;
 }

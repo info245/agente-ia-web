@@ -51,6 +51,7 @@ import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParam
 import { emailBodyToHtml, emailBodyToText } from "./lib/emailLinks.js";
 import { addSubscription, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
 import { createEmailMarketing, EMAIL_JOB_TYPE } from "./emailMarketingRoutes.js";
+import * as emailMarketingStore from "./lib/emailMarketingStore.js";
 import { buildResultsReport, resolvePeriod, sanitizeSpendEntries } from "./lib/resultsReport.js";
 import { supabase } from "./lib/supabase.js";
 import {
@@ -7543,6 +7544,8 @@ const emailMarketing = createEmailMarketing({
   baseUrl: CRM_PUBLIC_BASE_URL,
   secret: CRM_AUTH_SECRET,
   sendWhatsAppTemplate,
+  sendWhatsAppText,
+  isWhatsAppCustomerWindowOpen,
   normalizeLeadPhoneForWhatsApp,
   crmUrl: crmAppBaseUrl(),
   // Estado de WhatsApp para el constructor: conectado y cuántas plantillas aprobadas se pueden usar.
@@ -7836,7 +7839,76 @@ app.post("/webhooks/whatsapp", async (req, res) => {
   }
 });
 
+// Una sola vez por cuenta: los seguimientos antiguos (Mi asistente → Seguimientos) pasan a ser
+// automatizaciones en mapa (Automatizaciones), y el sistema antiguo se apaga para que no se dupliquen.
+const LEGACY_FLOW_TRIGGERS = { lead_recovery: "no_reply", quote_followup: "quote_sent" };
+const stepHours = (step = {}) => Math.max(1, Math.round((Number(step.delay_value) || 24) * (String(step.delay_unit) === "days" ? 24 : 1)));
+
+async function migrateLegacyFollowUps() {
+  const accounts = await listAccounts().catch(() => []);
+  for (const account of accounts) {
+    const markerKey = `automations_migrated:${account.id}`;
+    try {
+      const { data: marker } = await supabase.from("app_settings").select("key").eq("key", markerKey).maybeSingle();
+      if (marker) continue;
+      const config = await getAppConfig({ accountId: account.id });
+      const flows = config?.automation_flows || {};
+      const templates = config?.message_templates || {};
+      const waTemplates = await listApprovedWhatsAppTemplates(account.id).catch(() => []);
+      const created = [];
+      for (const [flowKey, triggerType] of Object.entries(LEGACY_FLOW_TRIGGERS)) {
+        const flow = flows[flowKey];
+        const steps = (flow?.steps || []).filter((s) => s && s.active !== false);
+        if (!steps.length) continue;
+        const nodes = [];
+        steps.forEach((step, i) => {
+          if (i > 0) nodes.push({ id: `m${i}w`, type: "wait", amount: Math.max(1, stepHours(step) - stepHours(steps[i - 1])), unit: "hours" });
+          const tpl = templates[step.template_key] || {};
+          if (String(step.channel || tpl.channel) === "whatsapp") {
+            const meta = waTemplates.find((t) => t.name === step.whatsapp_template_name);
+            nodes.push({
+              id: `m${i}`,
+              type: "whatsapp",
+              template_name: step.whatsapp_template_name || "",
+              language: step.whatsapp_template_language || "es",
+              params: Array.from({ length: meta?.params || 0 }, (_, k) => (k === 0 ? "{nombre|hola}" : k === 1 ? "{servicio|tu consulta}" : "-")),
+              text: tpl.body || "",
+            });
+          } else {
+            nodes.push({ id: `m${i}`, type: "email", subject: tpl.subject || "Seguimos en contacto", blocks: [{ type: "text", text: tpl.body || "" }] });
+          }
+        });
+        nodes.forEach((n, i) => {
+          n.next = nodes[i + 1]?.id || null;
+        });
+        const automation = await emailMarketingStore.saveAutomation(account.id, {
+          name: flow.label || (flowKey === "lead_recovery" ? "Recuperación de leads" : "Seguimiento de propuesta"),
+          trigger: { type: triggerType, hours: stepHours(steps[0]), contact_chat_leads: flow.contact_chat_leads === true },
+          steps: nodes,
+        });
+        if (flow.enabled !== false) await emailMarketingStore.setAutomationStatus(account.id, automation.id, "active");
+        created.push(`${automation.name}${flow.enabled !== false ? " (activa)" : ""}`);
+      }
+      if (created.length) {
+        const disabled = Object.fromEntries(Object.entries(flows).map(([k, f]) => [k, { ...f, enabled: false }]));
+        const saved = await saveAppConfig({ ...config, automation_flows: disabled }, { accountId: account.id });
+        await publishConfigVersion({ accountId: account.id, config: saved, changeSummary: "Seguimientos pasados a Automatizaciones" });
+      }
+      await supabase.from("app_settings").upsert({ key: markerKey, account_id: account.id, value: { at: new Date().toISOString(), created } }, { onConflict: "key" });
+      console.log("[automatizaciones] migración", account.id, created);
+    } catch (error) {
+      // Sin marca: se reintenta en el siguiente arranque. El sistema antiguo sigue funcionando mientras tanto.
+      console.log("[automatizaciones] migración fallida", account.id, error.message);
+    }
+  }
+}
+
 app.listen(PORT, () => {
+  // Seguimientos antiguos → Automatizaciones (una vez por cuenta; ver migrateLegacyFollowUps).
+  // Solo en el servidor real: en local (misma base de datos, otra clave de cifrado) no se toca nada.
+  if (process.env.CHANNEL_INBOX_WORKER !== "off") {
+    setTimeout(() => migrateLegacyFollowUps().catch((error) => console.log("[automatizaciones] migración", error.message)), 15_000);
+  }
   console.log("Server running on port", PORT);
   startInternalScheduler();
   startChannelInboxWorker();

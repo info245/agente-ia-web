@@ -21,7 +21,7 @@ export async function listMarketingLeads(accountId) {
   return run(
     supabase
       .from("leads")
-      .select("id, name, email, consent, whatsapp_consent, marketing_consent, crm_status, interest_service, source_platform, company_name, tags, created_at, updated_at, conversations(channel)")
+      .select("id, name, email, phone, conversation_id, quote_status, current_step, consent, whatsapp_consent, marketing_consent, crm_status, interest_service, source_platform, company_name, tags, created_at, updated_at, conversations(channel)")
       .eq("account_id", accountId)
       .order("created_at", { ascending: false })
       .limit(5000)

@@ -17,6 +17,7 @@ export type FlowNode = {
   language?: string;
   params?: string[];
   message?: string;
+  text?: string;
   check?: "opened_last" | "clicked_last" | "has_tag" | "stage";
   value?: string;
   tag?: string;
