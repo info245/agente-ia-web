@@ -1169,9 +1169,11 @@ export async function upsertLatestQuoteForLead(lead = {}, quote = {}) {
       updated_at: new Date().toISOString(),
     }, clean(lead.account_id));
 
-  const query = current
+  // Una propuesta enviada o respondida no se reescribe: editarla crea la versión siguiente.
+  const editable = current && (current.status || "draft") === "draft";
+  const query = editable
     ? supabase.from("quotes").update(payload).eq("id", current.id)
-    : supabase.from("quotes").insert(payload);
+    : supabase.from("quotes").insert({ ...payload, status: "draft", sent_at: null, sent_via: null, version: current ? (Number(current.version) || 1) + 1 : 1 });
 
   const { data, error } = await query.select().single();
 
@@ -1216,7 +1218,33 @@ export async function markLatestQuoteAsSent(leadId, sentVia) {
   return data;
 }
 
-export async function markLatestQuoteResponse(leadId, action) {
+// La propuesta que ve el cliente: la última enviada o respondida (un borrador nuevo no se le enseña).
+export async function getClientQuoteByLeadId(leadId) {
+  const { data, error } = await supabase.from("quotes").select("*").eq("lead_id", clean(leadId)).neq("status", "draft").order("created_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+// Todas las versiones de las propuestas de un contacto, de la más reciente a la más antigua.
+export async function listQuotesByLead(leadId) {
+  const { data, error } = await supabase.from("quotes").select("*").eq("lead_id", clean(leadId)).order("created_at", { ascending: false }).limit(50);
+  if (error) throw error;
+  return data || [];
+}
+
+// Listado de propuestas de la cuenta (la última versión de cada contacto va primero).
+export async function listQuotesForAccount(accountId) {
+  const { data, error } = await supabase
+    .from("quotes")
+    .select("id, lead_id, title, status, version, currency, subtotal, total, sent_at, sent_via, created_at, updated_at, acceptance, content_json, leads(name, email, phone, interest_service, conversation_id, company_name)")
+    .eq("account_id", clean(accountId))
+    .order("created_at", { ascending: false })
+    .limit(1000);
+  if (error) throw error;
+  return (data || []).map(({ content_json, acceptance, ...q }) => ({ ...q, billing_type: content_json?.billing_type || "monthly", signed_by: acceptance?.name || null }));
+}
+
+export async function markLatestQuoteResponse(leadId, action, { acceptance = null, quoteId = null } = {}) {
   const safeLeadId = clean(leadId);
   const safeAction = clean(action);
 
@@ -1228,7 +1256,9 @@ export async function markLatestQuoteResponse(leadId, action) {
     throw new Error("markLatestQuoteResponse: accion no valida");
   }
 
-  const current = await getLatestQuoteByLeadId(safeLeadId);
+  const current = quoteId
+    ? (await supabase.from("quotes").select("*").eq("id", clean(quoteId)).eq("lead_id", safeLeadId).maybeSingle()).data
+    : await getLatestQuoteByLeadId(safeLeadId);
   if (!current) {
     throw new Error("No hay presupuesto guardado para este lead");
   }
@@ -1249,6 +1279,7 @@ export async function markLatestQuoteResponse(leadId, action) {
     .update({
       status: safeAction,
       updated_at: respondedAt,
+      ...(acceptance ? { acceptance } : {}),
     })
     .eq("id", current.id)
     .select()

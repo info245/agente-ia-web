@@ -1,3 +1,5 @@
+import { acceptanceHtml } from "./quoteSignature.js";
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -708,7 +710,7 @@ export function renderQuotePreviewHtml({
         )}</p>
         ${
           quoteStatus === "accepted"
-            ? `<div class="response-banner">Esta propuesta ya fue aceptada.</div>`
+            ? `<div class="response-banner">Esta propuesta ya fue aceptada.</div>${acceptanceHtml(quote?.acceptance)}`
             : quoteStatus === "rejected"
             ? `<div class="response-banner">Esta propuesta fue marcada como no encaja ahora.</div>`
             : `<div class="cta-row">
