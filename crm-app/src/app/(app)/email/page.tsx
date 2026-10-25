@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useSession } from "@/components/app-shell";
 import { parseCsv } from "@/components/email-editor";
 import { TemplateThumb, type PickableTemplate } from "@/components/email-canvas";
 import { STARTER_TEMPLATES } from "@/lib/email-templates";
@@ -86,7 +87,11 @@ function Campaigns() {
 
 function Automations() {
   const router = useRouter();
+  const { config } = useSession();
   const { items, error } = useList<Automation>("/crm/email/automations", "automations");
+  // El primer WhatsApp a leads de formulario se configura en Canales (plantilla de Meta), pero se ve aquí con lo demás.
+  const welcome = config?.integrations?.whatsapp;
+  const welcomeOn = Boolean(welcome?.form_autocontact_enabled && welcome?.intro_template_name);
   if (error) return <p className="alert error">{error}</p>;
   return (
     <div className="card" style={{ overflowX: "auto" }}>
@@ -94,12 +99,18 @@ function Automations() {
         <b>Automatizaciones</b>
         <Link className="btn primary small" href="/email/automatizacion">+ Nueva automatización</Link>
       </div>
-      {items === null ? <p className="loading">Cargando…</p> : items.length === 0 ? (
-        <p className="empty">Por ejemplo: «cuando entre un contacto nuevo, envíale una bienvenida; a los 3 días, si no la abrió, mándale un WhatsApp».</p>
-      ) : (
+      {items === null ? <p className="loading">Cargando…</p> : (
         <table className="table">
           <thead><tr>{["Nombre", "Cuándo salta", "Por dónde escribe", "Estado", "En curso", "Terminados"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
           <tbody>
+            <tr onClick={() => router.push("/canales")} title="Se cambia en Canales → Formularios">
+              <td><b>Bienvenida a leads de formulario</b><div className="hint" style={{ margin: 0 }}>{welcome?.intro_template_name ? `Plantilla «${welcome.intro_template_name}» · se cambia en Canales` : "Elige la plantilla en Canales"}</div></td>
+              <td>Llega un lead de formulario · al momento</td>
+              <td style={{ whiteSpace: "nowrap" }}>{CHANNEL_ICON.whatsapp}</td>
+              <td><span className={`pill ${welcomeOn ? "p-good" : "p-muted"}`}>{welcomeOn ? "Activa" : "Pausada"}</span></td>
+              <td>—</td>
+              <td>—</td>
+            </tr>
             {items.map((a) => (
               <tr key={a.id} onClick={() => router.push(`/email/automatizacion?id=${a.id}`)}>
                 <td><b>{a.name || "Sin nombre"}</b></td>
