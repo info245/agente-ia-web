@@ -21,7 +21,7 @@ export async function listMarketingLeads(accountId) {
   return run(
     supabase
       .from("leads")
-      .select("id, name, email, consent, crm_status, interest_service, source_platform, company_name, tags, created_at, updated_at, conversations(channel)")
+      .select("id, name, email, consent, whatsapp_consent, marketing_consent, crm_status, interest_service, source_platform, company_name, tags, created_at, updated_at, conversations(channel)")
       .eq("account_id", accountId)
       .order("created_at", { ascending: false })
       .limit(5000)
@@ -77,7 +77,7 @@ export async function importContacts(accountId, rows = [], { consent = false, ta
       await run(
         supabase
           .from("leads")
-          .update({ tags: normalizeTags([...(current.tags || []), ...rowTags]), ...(consent && current.consent !== false ? { consent: true, consent_at: new Date().toISOString() } : {}) })
+          .update({ tags: normalizeTags([...(current.tags || []), ...rowTags]), ...(consent && current.consent !== false ? { consent: true, consent_at: new Date().toISOString(), marketing_consent: true, marketing_consent_at: new Date().toISOString() } : {}) })
           .eq("id", current.id)
       );
       updated += 1;
@@ -92,6 +92,8 @@ export async function importContacts(accountId, rows = [], { consent = false, ta
           tags: rowTags,
           consent: consent ? true : null,
           consent_at: consent ? new Date().toISOString() : null,
+          marketing_consent: consent ? true : null,
+          marketing_consent_at: consent ? new Date().toISOString() : null,
           crm_status: "nuevo",
           source_platform: "import",
           lead_score: 0,

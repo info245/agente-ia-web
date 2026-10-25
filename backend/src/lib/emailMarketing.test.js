@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  canWhatsApp,
   eligibility,
   matchesSegment,
   nextAction,
@@ -22,6 +23,16 @@ test("solo se envía con consentimiento o a clientes, nunca a bajas", () => {
   assert.equal(eligibility({ ...lead, consent: false, crm_status: "ganado" }).ok, false);
   assert.equal(eligibility(lead, new Set(["ana@ejemplo.com"])).reason, "baja");
   assert.equal(eligibility({ ...lead, email: "no-es-email" }).reason, "sin_email");
+});
+
+test("manda el permiso de novedades; sin él, el consentimiento antiguo", () => {
+  assert.equal(eligibility({ ...lead, marketing_consent: false }).ok, false, "no marcó novedades");
+  assert.equal(eligibility({ ...lead, consent: null, marketing_consent: true }).ok, true);
+  assert.equal(eligibility({ ...lead, marketing_consent: null }).ok, true, "contacto antiguo con consentimiento");
+  assert.equal(eligibility({ ...lead, marketing_consent: false, crm_status: "ganado" }).ok, false, "cliente que rechazó novedades");
+  assert.equal(canWhatsApp({ consent: true, whatsapp_consent: false }), false);
+  assert.equal(canWhatsApp({ consent: true, marketing_consent: false }), false);
+  assert.equal(canWhatsApp({ consent: true }), true);
 });
 
 test("segmentos por etapa, servicio, etiquetas y fechas", () => {

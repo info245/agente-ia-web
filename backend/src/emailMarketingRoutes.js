@@ -6,6 +6,7 @@ import { supabase } from "./lib/supabase.js";
 import { sendTransactionalEmail } from "./lib/emailService.js";
 import { enqueueAutomationJob, completeAutomationJob } from "./lib/automationJobStore.js";
 import {
+  canWhatsApp,
   eligibility,
   matchesSegment,
   nextAction,
@@ -388,7 +389,7 @@ Ver en el CRM: ${link}`, emailConfig: config?.integrations?.email || null });
         }
         if (action.kind === "whatsapp") {
           const phone = normalizeLeadPhoneForWhatsApp(lead);
-          if (phone && action.step.template_name && lead.consent !== false) {
+          if (phone && action.step.template_name && canWhatsApp(lead)) {
             const bodyParams = (action.step.params || []).map((p) => personalize(p, lead) || "-");
             await sendWhatsAppTemplate(phone, action.step.template_name, action.step.language || "es", { accountId: automation.account_id, bodyParams }).catch((error) =>
               console.log("[email-marketing] whatsapp step error", error.message)

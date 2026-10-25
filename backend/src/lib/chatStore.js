@@ -1060,6 +1060,11 @@ export async function updateLeadCrmFields(leadId, patch = {}, { accountId = null
       payload.custom_fields = cleanCustomFields(patch.custom_fields) || {};
     }
 
+    for (const key of ["whatsapp_consent", "marketing_consent"]) {
+      if (has(key)) payload[key] = typeof patch[key] === "boolean" ? patch[key] : null;
+    }
+    if (has("marketing_consent")) payload.marketing_consent_at = patch.marketing_consent === true ? new Date().toISOString() : null;
+
     // Etiquetas para segmentar campañas (sql/019): minúsculas, sin repetir.
     if (has("tags")) {
       payload.tags = normalizeTags(patch.tags);
@@ -1388,6 +1393,9 @@ export async function upsertLeadFromConversation(lead = {}) {
         ? null
         : Boolean(lead.consent),
     consent_at: lead.consent_at || null,
+    // Solo se escriben si vienen: un guardado del agente no borra los permisos del formulario.
+    ...(typeof lead.whatsapp_consent === "boolean" ? { whatsapp_consent: lead.whatsapp_consent } : {}),
+    ...(typeof lead.marketing_consent === "boolean" ? { marketing_consent: lead.marketing_consent, marketing_consent_at: lead.marketing_consent_at || null } : {}),
     business_type: clean(lead.business_type),
     main_goal: clean(lead.main_goal),
     current_situation: clean(lead.current_situation),

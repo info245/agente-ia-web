@@ -71,6 +71,8 @@ export function userRepliedAfter(messages = [], timestampValue = null) {
 export function canUseAutomationChannel({ lead = {}, channel = "", flowKey = "", allowVolunteeredContact = false } = {}) {
   const normalizedChannel = normalize(channel);
   if (!["whatsapp", "email"].includes(normalizedChannel)) return false;
+  // Rechazó expresamente WhatsApp en el formulario: los seguimientos no van por ahí.
+  if (normalizedChannel === "whatsapp" && lead?.whatsapp_consent === false) return false;
   if (flowKey === "quote_followup") return true;
   if (lead?.consent === true) return true;
   if (allowVolunteeredContact && lead?.consent !== false && (normalizedChannel === "email" ? lead?.email : lead?.phone)) return true;

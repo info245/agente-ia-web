@@ -64,13 +64,22 @@ export function matchesSegment(lead = {}, segment = {}) {
 }
 
 // LSSI art. 21: comunicaciones comerciales solo con consentimiento previo o a clientes actuales.
+// Manda el permiso de novedades (marketing_consent). Si el formulario no lo preguntó (null,
+// contactos antiguos), vale el consentimiento general como hasta ahora.
 export function eligibility(lead = {}, suppressed = new Set()) {
   const email = normalizeEmail(lead.email);
   if (!email) return { ok: false, reason: "sin_email" };
   if (suppressed.has(email)) return { ok: false, reason: "baja" };
-  if (lead.consent === false) return { ok: false, reason: "sin_consentimiento" };
-  if (lead.consent !== true && clean(lead.crm_status) !== "ganado") return { ok: false, reason: "sin_consentimiento" };
+  if (lead.marketing_consent === false || lead.consent === false) return { ok: false, reason: "sin_consentimiento" };
+  if (lead.marketing_consent === true) return { ok: true, email };
+  const legacyConsent = lead.marketing_consent == null && lead.consent === true;
+  if (!legacyConsent && clean(lead.crm_status) !== "ganado") return { ok: false, reason: "sin_consentimiento" };
   return { ok: true, email };
+}
+
+// Mensajes de WhatsApp que no son respuesta: no si rechazó WhatsApp o las comunicaciones comerciales.
+export function canWhatsApp(lead = {}) {
+  return lead.consent !== false && lead.whatsapp_consent !== false && lead.marketing_consent !== false;
 }
 
 export function sanitizeBlocks(blocks = []) {
