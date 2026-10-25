@@ -49,6 +49,7 @@ import {
 } from "./lib/configVersionStore.js";
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
 import { validatePipelineStages } from "./lib/pipelineConfig.js";
+import { toWhatsAppFormat } from "./lib/whatsappFormat.js";
 import { countTags, normalizeTags, renameTag } from "./lib/emailMarketing.js";
 import { runAgentTurn } from "./agent/engine.js";
 import { createGoogleCalendar, isCalendarConnected } from "./agent/googleCalendar.js";
@@ -6885,7 +6886,7 @@ async function processWhatsAppInboxEvent(event) {
       chat_completed: Boolean(result?.chat_completed),
       send_started_at: new Date().toISOString(),
     });
-    const sendResult = await sendWhatsAppText(from, result.reply, whatsappChannel);
+    const sendResult = await sendWhatsAppText(from, toWhatsAppFormat(result.reply), whatsappChannel);
     providerMessageId = sendResult?.messages?.[0]?.id || null;
     await updateChannelInboxEventResult(event.id, {
       agent_reply_generated: true,
