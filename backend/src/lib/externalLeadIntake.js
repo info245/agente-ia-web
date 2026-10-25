@@ -51,6 +51,8 @@ const FIELD_ALIASES = {
     "acceptance_rgpd",
   ],
   consent_at: ["consent_at", "consented_at"],
+  whatsapp_consent: ["whatsapp_consent", "consentimiento_whatsapp", "contacto_whatsapp", "acepta_whatsapp"],
+  marketing_consent: ["marketing_consent", "consentimiento_comercial", "comunicaciones_comerciales", "acepta_comunicaciones", "newsletter"],
   auto_start: ["auto_start", "auto_contact"],
   lead_score: ["lead_score"],
 };
@@ -300,6 +302,13 @@ export function normalizeExternalLeadPayload(rawPayload = {}) {
   const consentProvided = consentRaw !== null;
   const parsedConsent = parseStrictConsent(consentRaw);
   const autoStart = parseStrictBoolean(pick("auto_start")) === true;
+  // Permisos opcionales: true/false si el formulario los pregunta, null si no los trae.
+  const optionalConsent = (field) => {
+    const raw = pick(field);
+    if (raw === null) return null;
+    const parsed = parseStrictConsent(raw);
+    return parsed === null ? null : parsed === true;
+  };
 
   return {
     account_id: cleanText(pick("account_id"), 100),
@@ -329,6 +338,8 @@ export function normalizeExternalLeadPayload(rawPayload = {}) {
     consent_provided: consentProvided,
     consent_valid: !consentProvided || parsedConsent !== null,
     auto_start: autoStart && parsedConsent === true,
+    whatsapp_consent: optionalConsent("whatsapp_consent"),
+    marketing_consent: optionalConsent("marketing_consent"),
     custom_fields: normalizeCustomFields(flattened),
   };
 }
@@ -411,6 +422,7 @@ export function deriveExternalLeadIdempotencyKey({
 // Primer contacto por WhatsApp a un lead de formulario. Sin consentimiento explícito nunca se envía.
 export function decideFormLeadWhatsApp({ intake = {}, whatsappConfig = {}, phone = null } = {}) {
   if (intake.consent !== true) return { send: false, reason: "no_consent" };
+  if (intake.whatsapp_consent === false) return { send: false, reason: "no_whatsapp_consent" };
   const wantsWhatsApp =
     whatsappConfig.form_autocontact_enabled === true ||
     (intake.auto_start === true && String(intake.preferred_contact_channel || "").includes("whatsapp"));

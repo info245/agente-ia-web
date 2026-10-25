@@ -43,6 +43,8 @@ export type Lead = {
   source_platform?: string | null;
   consent?: boolean | null;
   consent_at?: string | null;
+  whatsapp_consent?: boolean | null;
+  marketing_consent?: boolean | null;
   created_at?: string;
   updated_at?: string;
   channel?: string;

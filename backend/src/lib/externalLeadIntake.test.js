@@ -190,3 +190,14 @@ test("el primer WhatsApp guardado sustituye también variables con nombre, por o
     "Hola Laura, sobre SEO. ¡Gracias Laura!"
   );
 });
+
+test("los permisos de WhatsApp y de novedades se leen aparte y respetan un «no»", () => {
+  const base = { name: "Ana", email: "ana@example.com", phone: "+34600111222", consent: true };
+  const both = parseExternalLeadIntake({ ...base, whatsapp_consent: true, marketing_consent: false }).value;
+  assert.equal(both.whatsapp_consent, true);
+  assert.equal(both.marketing_consent, false);
+  assert.equal(parseExternalLeadIntake(base).value.whatsapp_consent, null, "si el formulario no lo pregunta, null");
+  const config = { form_autocontact_enabled: true, intro_template_name: "bienvenida" };
+  assert.equal(decideFormLeadWhatsApp({ intake: { ...both, whatsapp_consent: false }, whatsappConfig: config, phone: "34600111222" }).reason, "no_whatsapp_consent");
+  assert.equal(decideFormLeadWhatsApp({ intake: both, whatsappConfig: config, phone: "34600111222" }).send, true);
+});

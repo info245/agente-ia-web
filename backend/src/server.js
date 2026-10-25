@@ -5999,6 +5999,10 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         (hasConsent
           ? new Date().toISOString()
           : null),
+      // Permisos separados (sql/021): null si el formulario no los pregunta.
+      whatsapp_consent: parsedIntake.value.whatsapp_consent,
+      marketing_consent: parsedIntake.value.marketing_consent,
+      marketing_consent_at: parsedIntake.value.marketing_consent === true ? new Date().toISOString() : null,
       business_type: norm(firstPayloadValue(payload, ["business_type", "tipo_negocio"])),
       business_activity: businessActivity,
       company_name: norm(firstPayloadValue(payload, ["company_name", "empresa", "company"])),
@@ -6033,6 +6037,22 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         text: consentText,
         source: sourceFormName,
       }).catch((error) => console.error("[privacy] consentimiento formulario", error.message));
+    }
+    // Evidencia de los permisos de WhatsApp y de comunicaciones comerciales, si el formulario los trae.
+    for (const [key, basis, label] of [
+      ["whatsapp_consent", "formulario_whatsapp", "Contacto por WhatsApp para atender la solicitud"],
+      ["marketing_consent", "formulario_comercial", "Comunicaciones comerciales por email y WhatsApp"],
+    ]) {
+      if (typeof parsedIntake.value[key] !== "boolean") continue;
+      await recordConsent({
+        conversationId: conversation.id,
+        accountId: account.id,
+        channel: sourcePlatform,
+        granted: parsedIntake.value[key],
+        basis,
+        text: `${label} — formulario "${sourceFormName || sourcePlatform}"`,
+        source: sourceFormName,
+      }).catch((error) => console.error("[privacy] consentimiento", key, error.message));
     }
     await updateLeadCrmFields(lead.id, {
       name: leadPayload.name,

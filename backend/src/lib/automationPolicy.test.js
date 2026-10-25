@@ -59,6 +59,11 @@ test("si la cuenta lo permite, se escribe a quien dejó su email en el chat salv
   assert.equal(canUseAutomationChannel({ ...base, lead: { ...chatLead, email: "" }, allowVolunteeredContact: true }), false);
 });
 
+test("quien rechazó WhatsApp no recibe seguimientos por WhatsApp", () => {
+  assert.equal(canUseAutomationChannel({ lead: { consent: true, whatsapp_consent: false }, channel: "whatsapp", flowKey: "lead_recovery" }), false);
+  assert.equal(canUseAutomationChannel({ lead: { consent: true, whatsapp_consent: false }, channel: "email", flowKey: "lead_recovery" }), true);
+});
+
 test("a reply after a quote cancels its automatic follow-up", () => {
   const messages = [{ role: "user", created_at: "2026-08-02T12:00:00Z" }];
   assert.equal(userRepliedAfter(messages, "2026-08-02T11:00:00Z"), true);

@@ -398,6 +398,16 @@ function LeadPanel({ lead, stages, open, onClose, onSaved }: { lead: Lead; stage
         </select>
       </div>
       <div className="field">
+        <span>Permisos</span>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {([["Privacidad", lead.consent], ["WhatsApp", lead.whatsapp_consent], ["Novedades", lead.marketing_consent]] as const).map(([label, value]) => (
+            <span key={label} className={`pill ${value === true ? "p-good" : value === false ? "p-warn" : "p-muted"}`} title={value == null ? "El formulario no lo preguntó" : ""}>
+              {value === true ? "✓" : value === false ? "✕" : "—"} {label}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="field">
         <span>Etapa</span>
         <select aria-label="Etapa del contacto" value={lead.crm_status || ""} onChange={(e) => save({ crm_status: e.target.value })}>
           {stages.filter((s) => s.is_active !== false).map((s) => <option key={s.key} value={s.key}>{s.label || s.key}</option>)}
