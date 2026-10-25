@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ConfigPending, useSession } from "@/components/app-shell";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { api, WIDGET_SRC } from "@/lib/api";
 import type { AppConfig, WhatsAppTemplate } from "@/lib/types";
-import { CampaignsCard } from "./campaigns";
 
 type WhatsAppChannel = { configured?: boolean; status?: string; display_phone_number?: string; verified_name?: string };
 const DAY_NAMES = ["D", "L", "M", "X", "J", "V", "S"];
@@ -64,10 +64,11 @@ export default function CanalesPage() {
     <section className="page">
       <div className="head">
         <div>
-          <h1>Canales</h1>
+          <h1>Configuración</h1>
           <p className="sub">Dónde te encuentran tus clientes y dónde reserva tu asistente</p>
         </div>
       </div>
+      <SettingsTabs />
       {oauthResult === "connected" && <p className="alert ok" role="status" style={{ marginBottom: 14 }}>Calendario conectado. Tu asistente ya puede reservar videollamadas.</p>}
       {oauthResult === "error" && <p className="alert error" role="alert" style={{ marginBottom: 14 }}>No se pudo conectar el calendario: {params.get("calendar_oauth_message")}</p>}
 
@@ -134,8 +135,6 @@ export default function CanalesPage() {
             {calendarError && <p className="alert error" role="alert" style={{ marginTop: 10 }}>{calendarError}</p>}
           </div>
         </div>
-
-        <CampaignsCard stages={config.pipeline?.stages || []} oauthResult={params.get("ads_oauth")} oauthMessage={params.get("ads_oauth_message")} />
       </div>
 
       <div className="card agency">

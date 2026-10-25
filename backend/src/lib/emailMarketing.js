@@ -24,6 +24,20 @@ export function normalizeTags(value) {
   return [...new Set(list.map((t) => clean(t, 40).toLowerCase()).filter(Boolean))].slice(0, 30);
 }
 
+// Configuración → Etiquetas: cuántos contactos llevan cada una.
+export function countTags(rows = []) {
+  const counts = new Map();
+  for (const row of rows) for (const tag of normalizeTags(row?.tags || [])) counts.set(tag, (counts.get(tag) || 0) + 1);
+  return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+
+// Renombrar (o borrar, con `to` vacío) una etiqueta; si el contacto ya tenía la nueva, no se duplica.
+export function renameTag(tags = [], from, to) {
+  const source = normalizeTags([from])[0];
+  const target = normalizeTags([to])[0] || "";
+  return normalizeTags(normalizeTags(tags).map((t) => (t === source ? target : t)));
+}
+
 // {nombre}, {empresa}, {servicio}: con alternativa si el contacto no tiene el dato.
 export function personalize(text, lead = {}) {
   const first = clean(lead.name).split(/\s+/)[0] || "";

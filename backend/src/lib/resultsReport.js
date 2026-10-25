@@ -187,3 +187,112 @@ export function sanitizeSpendEntries(input) {
     }))
     .filter((entry) => /^\d{4}-(0[1-9]|1[0-2])$/.test(entry.month) && entry.source && Number.isFinite(entry.amount) && entry.amount > 0);
 }
+
+// Periodo anterior para comparar: mismos días transcurridos justo antes (un mes en curso se compara con sus primeros días equivalentes).
+export function previousRange(from, to, now = new Date()) {
+  const end = Math.min(to.getTime(), Math.max(from.getTime() + DAY, now.getTime()));
+  return { from: new Date(from.getTime() - (end - from.getTime())), to: from };
+}
+
+// Leads y ventas por día del periodo (hasta hoy), para la gráfica.
+export function dailySeries(leads = [], stages = null, from, to, now = new Date()) {
+  const { byKey } = stageInfo(stages);
+  const end = Math.min(to.getTime(), Math.floor(now.getTime() / DAY) * DAY + DAY);
+  const days = new Map();
+  for (let t = from.getTime(); t < end; t += DAY) days.set(ymd(new Date(t)), { date: ymd(new Date(t)), leads: 0, sales: 0 });
+  for (const lead of leads) {
+    const day = days.get(clean(lead.created_at).slice(0, 10));
+    if (!day) continue;
+    day.leads += 1;
+    if (byKey.get(lead.crm_status)?.category === "won") day.sales += 1;
+  }
+  return [...days.values()];
+}
+
+// Propuestas en juego: la última versión visible (no borrador) de cada contacto, si sigue enviada.
+// `quotes` ordenadas de la más nueva a la más antigua.
+export function openPipeline(quotes = []) {
+  const seen = new Set();
+  let count = 0;
+  let value = 0;
+  for (const q of quotes) {
+    if (q.status === "draft" || seen.has(q.lead_id)) continue;
+    seen.add(q.lead_id);
+    if (q.status === "sent") {
+      count += 1;
+      value += Number(q.total) || 0;
+    }
+  }
+  return { count, value: round2(value) };
+}
+
+const WIN_WINDOW = 30 * DAY;
+// ¿Se hizo cliente después de `at` (en 30 días)? `wins`: Map lead_id → [fechas de aceptación].
+const wonAfter = (wins, leadId, at) => (wins.get(leadId) || []).some((w) => w >= at && w - at <= WIN_WINDOW);
+
+function emailStats(rows, wins) {
+  const sent = rows.filter((m) => m.status === "sent");
+  const leads = new Map();
+  for (const m of sent) if (m.lead_id && (!leads.has(m.lead_id) || Date.parse(m.sent_at) < leads.get(m.lead_id))) leads.set(m.lead_id, Date.parse(m.sent_at));
+  const opened = sent.filter((m) => m.opened_at).length;
+  const clicked = sent.filter((m) => m.clicked_at).length;
+  const unsubscribed = sent.filter((m) => m.unsubscribed_at).length;
+  const customers = [...leads].filter(([id, at]) => wonAfter(wins, id, at)).length;
+  return {
+    sent: sent.length,
+    failed: rows.filter((m) => m.status === "failed").length,
+    opened,
+    clicked,
+    unsubscribed,
+    customers,
+    rates: {
+      open: rate(opened, sent.length),
+      click: rate(clicked, sent.length),
+      click_to_open: rate(clicked, opened),
+      unsubscribe: rate(unsubscribed, sent.length),
+      customers: rate(customers, leads.size),
+    },
+  };
+}
+
+// Email marketing del periodo: totales, por campaña y por automatización. «Clientes» = recibió el email y aceptó
+// una propuesta en los 30 días siguientes (atribución simple, sin modelo multicanal).
+export function buildMarketingReport({ messages = [], campaigns = [], automations = [], runs = [], wins = [] } = {}) {
+  const winMap = new Map();
+  for (const w of wins) {
+    const at = Date.parse(w.at);
+    if (w.lead_id && Number.isFinite(at)) winMap.set(w.lead_id, [...(winMap.get(w.lead_id) || []), at]);
+  }
+  const runToAutomation = new Map(runs.map((r) => [r.id, r.automation_id]));
+  const byCampaign = new Map();
+  const byAutomation = new Map();
+  for (const m of messages) {
+    const key = m.campaign_id || runToAutomation.get(m.run_id);
+    const map = m.campaign_id ? byCampaign : byAutomation;
+    if (key) map.set(key, [...(map.get(key) || []), m]);
+  }
+  return {
+    email: emailStats(messages, winMap),
+    campaigns: campaigns
+      .filter((c) => byCampaign.has(c.id) || ["scheduled", "sending"].includes(c.status))
+      .map((c) => ({ id: c.id, name: c.name, subject: c.subject, status: c.status, sent_at: c.sent_at, scheduled_at: c.scheduled_at, ...emailStats(byCampaign.get(c.id) || [], winMap) }))
+      .sort((a, b) => clean(b.sent_at || b.scheduled_at).localeCompare(clean(a.sent_at || a.scheduled_at))),
+    automations: automations
+      .map((a) => {
+        const own = runs.filter((r) => r.automation_id === a.id);
+        const customers = own.filter((r) => wonAfter(winMap, r.lead_id, Date.parse(r.created_at))).length;
+        return {
+          id: a.id,
+          name: a.name,
+          status: a.status,
+          trigger: a.trigger?.type || "",
+          channels: [...new Set((a.steps || []).map((s) => s.type).filter((t) => ["email", "whatsapp"].includes(t)))],
+          runs: { total: own.length, active: own.filter((r) => r.status === "active").length, done: own.filter((r) => r.status === "done").length, exited: own.filter((r) => r.status === "exited").length },
+          customers,
+          customer_rate: rate(customers, own.length),
+          email: emailStats(byAutomation.get(a.id) || [], winMap),
+        };
+      })
+      .sort((a, b) => Number(b.status === "active") - Number(a.status === "active") || b.runs.total - a.runs.total),
+  };
+}

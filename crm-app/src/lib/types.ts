@@ -56,7 +56,7 @@ export type Lead = {
 
 export type Conversation = { channel?: string; ai_status?: string; inbox_status?: string; assigned_to?: string | null };
 
-export type PipelineStage = { key: string; label?: string; is_active?: boolean };
+export type PipelineStage = { key: string; label?: string; is_active?: boolean; category?: "open" | "won" | "lost"; color?: string; position?: number };
 
 export type Offer = {
   category?: string;

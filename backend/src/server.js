@@ -48,6 +48,8 @@ import {
   saveDraftConfigVersion,
 } from "./lib/configVersionStore.js";
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
+import { validatePipelineStages } from "./lib/pipelineConfig.js";
+import { countTags, normalizeTags, renameTag } from "./lib/emailMarketing.js";
 import { runAgentTurn } from "./agent/engine.js";
 import { createGoogleCalendar, isCalendarConnected } from "./agent/googleCalendar.js";
 import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParams } from "./lib/whatsappTemplates.js";
@@ -57,7 +59,7 @@ import { listQuoteTemplates, saveQuoteTemplate, deleteQuoteTemplate } from "./li
 import { addSubscription, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
 import { createEmailMarketing, EMAIL_JOB_TYPE } from "./emailMarketingRoutes.js";
 import * as emailMarketingStore from "./lib/emailMarketingStore.js";
-import { buildResultsReport, resolvePeriod, sanitizeSpendEntries } from "./lib/resultsReport.js";
+import { buildMarketingReport, buildResultsReport, dailySeries, openPipeline, previousRange, resolvePeriod, sanitizeSpendEntries } from "./lib/resultsReport.js";
 import { supabase } from "./lib/supabase.js";
 import {
   applyRetention,
@@ -4881,7 +4883,7 @@ app.post("/api/crm/integrations/conversions/google/connect-url", requireCrmAuth(
     const stateToken = createGoogleEmailOauthState({
       accountId: account.id,
       userId: req.crmUser?.id || "",
-      returnTo: CRM_APP_URL ? `${CRM_APP_URL}/canales` : "",
+      returnTo: CRM_APP_URL ? `${CRM_APP_URL}/conversiones` : "",
     });
     const authUrl = new URL(buildGoogleEmailAuthUrl({ clientId, redirectUri: buildGoogleAdsRedirectUri(req), stateToken }));
     authUrl.searchParams.set("scope", `${GOOGLE_DATA_MANAGER_SCOPE} https://www.googleapis.com/auth/userinfo.email`);
@@ -7589,13 +7591,56 @@ app.get("/api/crm/reports/results", async (req, res) => {
     } catch (error) {
       return res.status(400).json({ ok: false, error: error.message });
     }
-    const [leads, spend, config] = await Promise.all([
+    const prev = previousRange(range.from, range.to);
+    const [leads, prevLeads, spend, config] = await Promise.all([
       listLeadsCreatedBetween(account.id, range.from, range.to),
+      listLeadsCreatedBetween(account.id, prev.from, prev.to),
       getAdSpendEntries(account.id),
       getAppConfig({ accountId: account.id }).catch(() => null),
     ]);
-    const report = buildResultsReport({ leads, spend, stages: config?.pipeline?.stages, from: range.from, to: range.to });
+    const stages = config?.pipeline?.stages;
+    const report = buildResultsReport({ leads, spend, stages, from: range.from, to: range.to });
+    report.previous = buildResultsReport({ leads: prevLeads, spend, stages, from: prev.from, to: prev.to }).total;
+    report.daily = dailySeries(leads, stages, range.from, range.to);
     res.json({ ok: true, period: range.period, report });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Panel de Resultados → email marketing, campañas, automatizaciones y propuestas en juego.
+app.get("/api/crm/reports/marketing", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    let range;
+    try {
+      range = resolvePeriod(String(req.query.period || "this_month"), { from: req.query.from, to: req.query.to });
+    } catch (error) {
+      return res.status(400).json({ ok: false, error: error.message });
+    }
+    const rows = async (query) => {
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    };
+    // ponytail: topes de 10.000 filas por tabla; con más volumen, agregar en SQL.
+    const [messages, campaigns, automations, runs, quotes] = await Promise.all([
+      rows(supabase.from("email_messages").select("campaign_id, run_id, lead_id, status, sent_at, opened_at, clicked_at, unsubscribed_at").eq("account_id", account.id).gte("created_at", range.from.toISOString()).lt("created_at", range.to.toISOString()).limit(10000)),
+      emailMarketingStore.listCampaigns(account.id),
+      emailMarketingStore.listAutomations(account.id),
+      rows(supabase.from("email_automation_runs").select("id, automation_id, lead_id, status, created_at").eq("account_id", account.id).limit(10000)),
+      rows(supabase.from("quotes").select("lead_id, status, total, updated_at, acceptance").eq("account_id", account.id).order("created_at", { ascending: false }).limit(10000)),
+    ]);
+    const wins = quotes.filter((q) => q.status === "accepted").map((q) => ({ lead_id: q.lead_id, at: q.acceptance?.at || q.updated_at, total: Number(q.total) || 0 }));
+    const closed = wins.filter((w) => Date.parse(w.at) >= range.from.getTime() && Date.parse(w.at) < range.to.getTime());
+    res.json({
+      ok: true,
+      report: {
+        ...buildMarketingReport({ messages, campaigns, automations, runs, wins }),
+        pipeline: openPipeline(quotes),
+        closed: { count: closed.length, value: Math.round(closed.reduce((sum, w) => sum + w.total, 0) * 100) / 100 },
+      },
+    });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -7730,6 +7775,62 @@ app.post("/api/crm/channels/form-whatsapp", async (req, res) => {
       changeSummary: "Canales: primer WhatsApp a leads de formulario",
     });
     return res.json({ ok: true, version: version?.version, enabled, template_name: template?.name || current.integrations?.whatsapp?.intro_template_name || "" });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Configuración → Estados: las etapas del embudo. No se borran (los contactos en ella se quedarían sin etapa): se ocultan.
+app.post("/api/crm/settings/stages", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const current = await getAppConfig({ accountId: account.id });
+    const oldKeys = (current.pipeline?.stages || []).map((s) => s.key);
+    const { valid, errors, stages } = validatePipelineStages(req.body?.stages);
+    if (!valid) return res.status(400).json({ ok: false, error: errors.map((e) => e.message).join(" ") });
+    if (oldKeys.some((key) => !stages.some((s) => s.key === key))) {
+      return res.status(400).json({ ok: false, error: "No se puede borrar una etapa con historial: ocúltala." });
+    }
+    const config = await saveAppConfig(sanitizeAppConfig({ ...current, pipeline: { ...current.pipeline, stages } }), { accountId: account.id });
+    await publishConfigVersion({ accountId: account.id, config, createdBy: req.crmUser?.id || null, changeSummary: "Configuración: estados del embudo" });
+    return res.json({ ok: true, stages: config.pipeline?.stages || stages });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Configuración → Etiquetas: las que se usan, con cuántos contactos.
+app.get("/api/crm/settings/tags", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const { data, error } = await supabase.from("leads").select("tags").eq("account_id", account.id).not("tags", "is", null).limit(20000);
+    if (error) throw error;
+    return res.json({ ok: true, tags: countTags(data || []) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Renombrar o borrar (to vacío) una etiqueta en todos los contactos y en las automatizaciones que la usan.
+app.post("/api/crm/settings/tags/rename", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const from = normalizeTags([req.body?.from])[0];
+    const to = normalizeTags([req.body?.to])[0] || "";
+    if (!from) return res.status(400).json({ ok: false, error: "Falta la etiqueta." });
+    const { data, error } = await supabase.from("leads").select("id, tags").eq("account_id", account.id).contains("tags", [from]).limit(20000);
+    if (error) throw error;
+    // ponytail: una actualización por contacto; con decenas de miles, pasar a una función SQL.
+    for (const lead of data || []) {
+      const { error: updateError } = await supabase.from("leads").update({ tags: renameTag(lead.tags, from, to) }).eq("id", lead.id).eq("account_id", account.id);
+      if (updateError) throw updateError;
+    }
+    const automations = (await emailMarketingStore.listAutomations(account.id)).filter((a) => a.trigger?.type === "tag" && normalizeTags([a.trigger.tag])[0] === from);
+    for (const automation of automations) {
+      if (to) await emailMarketingStore.saveAutomation(account.id, { ...automation, trigger: { ...automation.trigger, tag: to } });
+      else await emailMarketingStore.setAutomationStatus(account.id, automation.id, "paused");
+    }
+    return res.json({ ok: true, updated: (data || []).length, automations: automations.length });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
   }

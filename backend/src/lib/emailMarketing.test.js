@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  countTags,
+  renameTag,
   canWhatsApp,
   eligibility,
   followUpReady,
@@ -132,4 +134,11 @@ test("seguimientos: empiezan tras X horas sin respuesta y solo después de activ
   assert.equal(isFollowUpTrigger("quote_sent"), true);
   assert.equal(isFollowUpTrigger("lead_created"), false);
   assert.equal(sanitizeAutomation({ trigger: { type: "no_reply", hours: 48 } }).trigger.hours, 48);
+});
+
+test("etiquetas: recuento, renombrar sin duplicar y borrar", () => {
+  assert.deepEqual(countTags([{ tags: ["SEO", "vip"] }, { tags: ["seo"] }, { tags: null }]), [{ tag: "seo", count: 2 }, { tag: "vip", count: 1 }]);
+  assert.deepEqual(renameTag(["seo", "vip"], "SEO", "Posicionamiento"), ["posicionamiento", "vip"]);
+  assert.deepEqual(renameTag(["seo", "vip"], "seo", "vip"), ["vip"]);
+  assert.deepEqual(renameTag(["seo", "vip"], "seo", ""), ["vip"]);
 });

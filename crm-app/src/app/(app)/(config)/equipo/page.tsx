@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/components/app-shell";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { api } from "@/lib/api";
 import { ROLE_OPTIONS, roleLabel } from "@/lib/format";
 import type { User } from "@/lib/types";
@@ -62,10 +63,11 @@ export default function EquipoPage() {
     <section className="page">
       <div className="head">
         <div>
-          <h1>Equipo</h1>
+          <h1>Configuración</h1>
           <p className="sub">Invita a tu equipo y decide qué puede hacer cada persona.</p>
         </div>
       </div>
+      <SettingsTabs />
 
       <div className="card" style={{ padding: "6px 16px 16px" }}>
         {!users && <p className="loading">Cargando…</p>}
