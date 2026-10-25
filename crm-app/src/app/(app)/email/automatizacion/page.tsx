@@ -216,7 +216,7 @@ export default function AutomationPage() {
     );
   };
 
-  const triggerText = `${TRIGGER_LABEL[a.trigger.type]}${isFollowUp(a.trigger.type) ? ` ${a.trigger.hours || 24} h` : ""}${a.trigger.type === "stage" ? ` «${stageLabel(a.trigger.stage)}»` : ""}${a.trigger.type === "tag" ? ` «${a.trigger.tag || "…"}»` : ""}${a.trigger.segment?.services?.[0] ? ` · solo ${a.trigger.segment.services[0]}` : ""}`;
+  const triggerText = `${TRIGGER_LABEL[a.trigger.type]}${isFollowUp(a.trigger.type) ? ` ${a.trigger.hours || 24} h` : ""}${a.trigger.type === "stage" ? ` «${stageLabel(a.trigger.stage)}»` : ""}${a.trigger.type === "tag" ? ` «${a.trigger.tag || "…"}»` : ""}${a.trigger.segment?.services?.length ? ` · solo ${a.trigger.segment.services.join(" o ")}` : ""}`;
   const emailTemplates = [...STARTER_TEMPLATES.slice(1), ...saved];
 
   return (
@@ -293,10 +293,21 @@ export default function AutomationPage() {
               )}
               {a.trigger.type === "tag" && <input className="i" style={{ marginTop: 8 }} aria-label="Etiqueta" list="tag-list" value={a.trigger.tag || ""} onChange={(e) => change({ trigger: { ...a.trigger, tag: e.target.value } })} placeholder="etiqueta" />}
               {Boolean(options?.services.length) && (
-                <select className="i" style={{ marginTop: 8 }} aria-label="Solo si le interesa" value={a.trigger.segment?.services?.[0] || ""} onChange={(e) => change({ trigger: { ...a.trigger, segment: { services: e.target.value ? [e.target.value] : [] } } })}>
-                  <option value="">Cualquier servicio</option>
-                  {options!.services.map((s) => <option key={s} value={s}>Solo si le interesa {s}</option>)}
-                </select>
+                // Varios a la vez: el mismo servicio llega escrito de formas distintas («SEO», «Posicionamiento SEO»).
+                <div style={{ marginTop: 10 }}>
+                  <div className="hint" style={{ margin: "0 0 6px" }}>Solo si le interesa (ninguno marcado = cualquier servicio)</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {[...new Set([...options!.services, ...(a.trigger.segment?.services || [])])].map((s) => {
+                      const chosen = a.trigger.segment?.services || [];
+                      const on = chosen.includes(s);
+                      return (
+                        <button key={s} type="button" className="chip" aria-pressed={on} onClick={() => change({ trigger: { ...a.trigger, segment: { ...a.trigger.segment, services: on ? chosen.filter((x) => x !== s) : [...chosen, s] } } })}>
+                          {on ? "✓ " : ""}{s}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
               <p className="hint" style={{ marginTop: 10 }}>
                 {isFollowUp(a.trigger.type)
