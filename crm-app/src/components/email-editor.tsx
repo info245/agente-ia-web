@@ -78,16 +78,17 @@ export function SegmentEditor({ segment, onChange, stages, options }: { segment:
 }
 
 export function EmailPreview({ subject, preheader, blocks }: { subject: string; preheader: string; blocks: Block[] }) {
-  const [html, setHtml] = useState("");
+  const [shown, setShown] = useState<{ html: string; subject?: string; preheader?: string }>({ html: "" });
   const debounced = useDebounced({ subject, preheader, blocks }, 600);
   useEffect(() => {
-    api<{ html: string }>("/crm/email/preview", { method: "POST", body: debounced }).then((r) => setHtml(r.html)).catch(() => setHtml(""));
+    api<{ html: string; subject?: string; preheader?: string }>("/crm/email/preview", { method: "POST", body: debounced }).then(setShown).catch(() => setShown({ html: "" }));
   }, [debounced]);
+  const html = shown.html;
   return (
     <div className="card" style={{ overflow: "hidden" }}>
       <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", fontSize: 13 }}>
-        <b>{subject || "Sin asunto"}</b>
-        <div style={{ color: "var(--muted)" }}>{preheader || "Texto de vista previa"}</div>
+        <b>{shown.subject || subject || "Sin asunto"}</b>
+        <div style={{ color: "var(--muted)" }}>{shown.preheader || preheader || "Texto de vista previa"}</div>
       </div>
       <iframe title="Vista previa del email" sandbox="" srcDoc={html} style={{ width: "100%", height: 560, border: 0, background: "#f5f4f8" }} />
     </div>
