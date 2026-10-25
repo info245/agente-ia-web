@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { api, getAccountId, setAccountId } from "@/lib/api";
 import { BillingBanner } from "@/components/billing-banner";
 import { initials, ownerOf } from "@/lib/format";
+import { SETTINGS_TABS } from "@/lib/settings-nav";
 import type { Account, AppConfig, Billing, Lead, User } from "@/lib/types";
 
 type Session = {
@@ -57,11 +58,13 @@ const NAV = [
   { href: "/email", label: "Automatizaciones", short: "Automatiz.", perm: "settings", icon: icon(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>) },
   { href: "/resultados", label: "Resultados", perm: "home", icon: icon(<path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />) },
   { href: "/asistente", label: "Mi asistente", perm: "settings", short: "Asistente", icon: icon(<><path d="M12 3v3M5 9h14a2 2 0 0 1 2 2v6a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4v-6a2 2 0 0 1 2-2z" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /></>) },
-  { href: "/canales", label: "Canales", perm: "settings", icon: icon(<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" />) },
-  { href: "/equipo", label: "Equipo", perm: "team", icon: icon(<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>) },
+  { href: "/canales", label: "Configuración", short: "Ajustes", perm: "settings", icon: icon(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></>) },
 ];
+// Pestañas de Configuración: el menú marca «Configuración» en todas.
+const CONFIG_PATHS = SETTINGS_TABS.map((t) => t.href);
 // Páginas fuera del menú que también dependen del rol.
 const EXTRA_PAGES = [
+  ...SETTINGS_TABS.slice(1).map(({ href, perm }) => ({ href, perm })),
   { href: "/propuesta", perm: "proposals" },
   { href: "/analisis", perm: "proposals" },
   { href: "/facturacion", perm: "billing" },
@@ -147,7 +150,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           {[...NAV.filter((item) => can(item.perm)), ...(user.role === "super_admin" ? [AGENCY_NAV] : [])].map((item) => (
-            <Link key={item.href} href={item.href} className="nav" aria-current={pathname.startsWith(item.href) ? "page" : undefined}>
+            <Link key={item.href} href={item.href} className="nav" aria-current={pathname.startsWith(item.href) || (item.href === "/canales" && CONFIG_PATHS.some((p) => pathname.startsWith(p))) ? "page" : undefined}>
               {item.icon}
               <span className="lbl">{item.label}</span>
               <span className="lbl-short">{(item as { short?: string }).short || item.label}</span>

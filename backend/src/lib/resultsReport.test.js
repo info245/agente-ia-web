@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildResultsReport, leadCampaign, leadSource, resolvePeriod, sanitizeSpendEntries, spendInPeriod, NO_CAMPAIGN } from "./resultsReport.js";
+import { buildMarketingReport, buildResultsReport, dailySeries, openPipeline, previousRange, leadCampaign, leadSource, resolvePeriod, sanitizeSpendEntries, spendInPeriod, NO_CAMPAIGN } from "./resultsReport.js";
 
 const from = new Date("2026-10-01T00:00:00Z");
 const to = new Date("2026-11-01T00:00:00Z");
@@ -103,4 +103,45 @@ test("sanitizeSpendEntries descarta entradas inválidas", () => {
   ]);
   assert.deepEqual(entries, [{ month: "2026-10", source: "meta", campaign: "Otoño", amount: 120.46 }]);
   assert.deepEqual(sanitizeSpendEntries("x"), []);
+});
+
+test("panel: periodo anterior, serie diaria y propuestas en juego", () => {
+  const prev = previousRange(new Date("2026-10-01T00:00:00Z"), new Date("2026-11-01T00:00:00Z"), new Date("2026-10-11T12:00:00Z"));
+  assert.equal(prev.from.toISOString(), "2026-09-20T12:00:00.000Z");
+  assert.equal(prev.to.toISOString(), "2026-10-01T00:00:00.000Z");
+  const days = dailySeries([{ created_at: "2026-10-02T10:00:00Z", crm_status: "ganado" }, { created_at: "2026-10-02T11:00:00Z", crm_status: "nuevo" }], null, new Date("2026-10-01T00:00:00Z"), new Date("2026-11-01T00:00:00Z"), new Date("2026-10-03T09:00:00Z"));
+  assert.equal(days.length, 3, "del 1 al 3, hoy incluido");
+  assert.deepEqual(days[1], { date: "2026-10-02", leads: 2, sales: 1 });
+  // v2 borrador no cuenta: el cliente ve la v1 enviada. Otro contacto ya aceptó.
+  assert.deepEqual(openPipeline([
+    { lead_id: "a", status: "draft", total: 999 },
+    { lead_id: "a", status: "sent", total: 363 },
+    { lead_id: "b", status: "accepted", total: 500 },
+    { lead_id: "b", status: "sent", total: 400 },
+  ]), { count: 1, value: 363 });
+});
+
+test("panel de email: tasas, clientes en 30 días y reparto por campaña y automatización", () => {
+  const report = buildMarketingReport({
+    messages: [
+      { campaign_id: "c1", lead_id: "l1", status: "sent", sent_at: "2026-10-02T10:00:00Z", opened_at: "x", clicked_at: "x" },
+      { campaign_id: "c1", lead_id: "l2", status: "sent", sent_at: "2026-10-02T10:00:00Z", opened_at: "x" },
+      { campaign_id: "c1", lead_id: "l3", status: "failed" },
+      { run_id: "r1", lead_id: "l4", status: "sent", sent_at: "2026-10-03T10:00:00Z", unsubscribed_at: "x" },
+    ],
+    campaigns: [{ id: "c1", name: "Octubre", status: "sent", sent_at: "2026-10-02T10:00:00Z" }, { id: "c2", name: "Vieja", status: "sent" }],
+    automations: [{ id: "a1", name: "Bienvenida", status: "active", trigger: { type: "lead_created" }, steps: [{ type: "email" }, { type: "wait" }, { type: "whatsapp" }] }],
+    runs: [{ id: "r1", automation_id: "a1", lead_id: "l4", status: "done", created_at: "2026-10-03T09:00:00Z" }],
+    wins: [{ lead_id: "l1", at: "2026-10-10T00:00:00Z" }, { lead_id: "l2", at: "2026-09-01T00:00:00Z" }, { lead_id: "l4", at: "2026-10-05T00:00:00Z" }],
+  });
+  assert.equal(report.email.sent, 3);
+  assert.equal(report.email.failed, 1);
+  assert.equal(report.email.rates.open, 66.7);
+  assert.equal(report.email.customers, 2, "l1 tras la campaña y l4 tras la automatización; l2 compró antes");
+  assert.equal(report.campaigns.length, 1);
+  assert.equal(report.campaigns[0].rates.click_to_open, 50);
+  assert.equal(report.campaigns[0].customers, 1);
+  assert.deepEqual(report.automations[0].channels, ["email", "whatsapp"]);
+  assert.equal(report.automations[0].customer_rate, 100);
+  assert.equal(report.automations[0].email.unsubscribed, 1);
 });
