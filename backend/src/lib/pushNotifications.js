@@ -35,6 +35,10 @@ async function writeSubscriptions(accountId, list) {
   if (error) throw error;
 }
 
+export async function countSubscriptions(accountId) {
+  return (await readSubscriptions(accountId)).length;
+}
+
 export function isValidSubscription(sub) {
   return Boolean(
     sub &&

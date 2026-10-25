@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ConfigPending, useSession } from "@/components/app-shell";
 import { SettingsTabs } from "@/components/settings-tabs";
+import { ChannelHealthCard } from "@/components/channel-health";
 import { api, WIDGET_SRC } from "@/lib/api";
 import type { AppConfig, WhatsAppTemplate } from "@/lib/types";
 
@@ -69,6 +70,7 @@ export default function CanalesPage() {
         </div>
       </div>
       <SettingsTabs />
+      <ChannelHealthCard />
       {oauthResult === "connected" && <p className="alert ok" role="status" style={{ marginBottom: 14 }}>Calendario conectado. Tu asistente ya puede reservar videollamadas.</p>}
       {oauthResult === "error" && <p className="alert error" role="alert" style={{ marginBottom: 14 }}>No se pudo conectar el calendario: {params.get("calendar_oauth_message")}</p>}
 

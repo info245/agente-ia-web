@@ -477,3 +477,19 @@ h3.f { font-size: 14px; margin: 18px 0 4px; }
   .kpis-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mini-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Configuración → Canales: estado de los canales */
+.health h2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.health-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.health-list li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 10px 4px; border-top: 1px solid var(--line); }
+.health-list li:first-child { border-top: 0; }
+.health-list p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.health-list .btn { align-self: center; }
+.health-dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background: var(--line); }
+.health-ok .health-dot { background: var(--good); }
+.health-warn .health-dot { background: var(--warn); }
+.health-error .health-dot { background: var(--bad); }
+.health-error p { color: var(--bad); }
+.health-banner { margin-bottom: 14px; }
+.health-banner a { color: inherit; font-weight: 600; }
+@media (max-width: 820px) { .health-list li { grid-template-columns: 12px minmax(0, 1fr); } .health-list .btn { grid-column: 2; justify-self: start; } }
