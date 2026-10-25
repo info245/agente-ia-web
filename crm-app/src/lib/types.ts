@@ -108,7 +108,7 @@ export type AppConfig = {
   privacy?: Privacy;
   integrations?: {
     calendar?: { google_connected_email?: string; google_refresh_token_configured?: boolean; connected_at?: string };
-    whatsapp?: { form_autocontact_enabled?: boolean; intro_template_name?: string; intro_template_language?: string };
+    whatsapp?: { form_autocontact_enabled?: boolean; intro_template_name?: string; intro_template_language?: string; quote_template_name?: string; quote_template_language?: string };
   };
 };
 

@@ -84,6 +84,7 @@ export default function CanalesPage() {
               <>
                 <p>{whatsapp.display_phone_number || config.contact?.public_whatsapp_number} · Tu asistente responde las 24 horas</p>
                 <span className="pill p-good"><span className="dot" />Conectado</span>
+                <QuoteWhatsApp config={config} />
               </>
             ) : (
               <>
@@ -194,6 +195,56 @@ function FormFirstWhatsApp({ config }: { config: AppConfig }) {
       </select>
       {preview && <div className="m" style={{ maxWidth: "100%", background: "var(--surface-2)", border: "1px solid var(--line)" }}>{preview.body}</div>}
       <div><button className="btn primary small" disabled={busy || (enabled && !selected)} onClick={save}>{busy ? "Guardando…" : "Guardar"}</button></div>
+      {msg && <p className={`alert ${msg.kind}`} role="status" style={{ margin: 0 }}>{msg.text}</p>}
+    </div>
+  );
+}
+
+// Propuestas por WhatsApp pasadas 24 h: WhatsApp solo deja escribir con una plantilla aprobada.
+// La plantilla lleva {{1}} = nombre y {{2}} = enlace a la propuesta (en ese orden).
+function QuoteWhatsApp({ config }: { config: AppConfig }) {
+  const { reloadConfig } = useSession();
+  const current = config.integrations?.whatsapp || {};
+  const [selected, setSelected] = useState(current.quote_template_name ? `${current.quote_template_name}|${current.quote_template_language || "es"}` : "");
+  const [templates, setTemplates] = useState<WhatsAppTemplate[] | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const key = (t: WhatsAppTemplate) => `${t.name}|${t.language}`;
+  const preview = templates?.find((t) => key(t) === selected);
+
+  useEffect(() => {
+    api<{ templates: WhatsAppTemplate[] }>("/crm/whatsapp/templates")
+      .then((d) => setTemplates(d.templates.filter((t) => t.sendable && t.params === 2)))
+      .catch(() => setTemplates([]));
+  }, []);
+
+  async function save() {
+    setBusy(true);
+    setMsg(null);
+    const [name, language] = selected.split("|");
+    try {
+      await api("/crm/channels/quote-whatsapp", { method: "POST", body: { template_name: name || "", template_language: language || "es" } });
+      await reloadConfig();
+      setMsg({ kind: "ok", text: name ? "Guardado: las propuestas podrán enviarse por WhatsApp aunque hayan pasado más de 24 h." : "Quitada: pasadas 24 h, las propuestas solo se enviarán por email." });
+    } catch (err) {
+      setMsg({ kind: "error", text: (err as Error).message });
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 8, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+      <b>Enviar propuestas por WhatsApp</b>
+      <span style={{ color: "var(--muted)", fontSize: 13 }}>
+        Si el cliente te escribió en las últimas 24 h, la propuesta sale como mensaje normal. Si no, WhatsApp exige una plantilla aprobada con dos datos: {"{{1}}"} su nombre y {"{{2}}"} el enlace a la propuesta.
+      </span>
+      <select className="i" aria-label="Plantilla de WhatsApp para propuestas" value={selected} onChange={(e) => setSelected(e.target.value)}>
+        <option value="">{templates === null ? "Cargando plantillas…" : templates.length ? "Sin plantilla (pasadas 24 h, solo por email)" : "No hay plantillas aprobadas con nombre y enlace"}</option>
+        {(templates || []).map((t) => <option key={key(t)} value={key(t)}>{t.name.replace(/_/g, " ")} · {t.language}</option>)}
+      </select>
+      {preview && <div className="m" style={{ maxWidth: "100%", background: "var(--surface-2)", border: "1px solid var(--line)" }}>{preview.body}</div>}
+      {templates && !templates.length && <span className="hint" style={{ margin: 0 }}>Crea en Meta la plantilla «propuesta_lista» (categoría Utilidad) y, cuando la aprueben, aparecerá aquí.</span>}
+      <div><button className="btn primary small" disabled={busy || selected === (current.quote_template_name ? `${current.quote_template_name}|${current.quote_template_language || "es"}` : "")} onClick={save}>{busy ? "Guardando…" : "Guardar"}</button></div>
       {msg && <p className={`alert ${msg.kind}`} role="status" style={{ margin: 0 }}>{msg.text}</p>}
     </div>
   );
