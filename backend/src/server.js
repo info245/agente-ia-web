@@ -2976,11 +2976,17 @@ app.get("/api/crm/accounts", async (req, res) => {
   }
 });
 
+// Usuarios de la cuenta más los de la agencia (super_admin, sin cuenta propia): también atienden y se asignan contactos.
+async function listTeamWithAgency(accountId) {
+  const [own, all] = await Promise.all([listCrmUsers({ accountId }), listCrmUsers()]);
+  return [...own, ...all.filter((u) => u.role === "super_admin" && u.status === "active" && !own.some((o) => o.id === u.id))];
+}
+
 // Equipo de la cuenta. El middleware de /api/crm ya exige el permiso "team" (Propietario o agencia).
 app.get("/api/crm/team", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-    const [users, settings] = await Promise.all([listCrmUsers({ accountId: account.id }), getTeamSettings(account.id)]);
+    const [users, settings] = await Promise.all([listTeamWithAgency(account.id), getTeamSettings(account.id)]);
     res.json({ ok: true, users, settings });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -2991,7 +2997,7 @@ app.get("/api/crm/team", async (req, res) => {
 app.get("/api/crm/team/members", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
-    const users = await listCrmUsers({ accountId: account.id });
+    const users = await listTeamWithAgency(account.id);
     res.json({
       ok: true,
       members: users.filter((u) => u.status === "active").map((u) => ({ id: u.id, display_name: u.display_name || u.email })),
