@@ -1368,12 +1368,37 @@ function sanitizeMeetingConfig(value = {}) {
   const days = Array.isArray(value?.days)
     ? value.days.map(Number).filter((day) => Number.isInteger(day) && day >= 0 && day <= 6)
     : [];
+  const startHour = clampNumber(value?.start_hour, 9, 0, 23);
+  const endHour = clampNumber(value?.end_hour, 18, 1, 24);
+  // Tramos «HH:MM–HH:MM» (p. ej. mañana y tarde). Sin tramos, el horario antiguo de hora en punto.
+  const hhmm = (v) => (/^([01]\d|2[0-3]):[0-5]\d$|^24:00$/.test(String(v || "")) ? String(v) : "");
+  const ranges = (Array.isArray(value?.ranges) ? value.ranges : [])
+    .map((r) => ({ start: hhmm(r?.start), end: hhmm(r?.end) }))
+    .filter((r) => r.start && r.end && r.start < r.end)
+    .sort((a, b) => a.start.localeCompare(b.start))
+    .slice(0, 4);
+  const pad = (h) => `${String(h).padStart(2, "0")}:00`;
+  const reminders = (Array.isArray(value?.reminders) ? value.reminders : [24, 2])
+    .map(Number)
+    .filter((h) => Number.isFinite(h) && h >= 1 && h <= 168);
   return {
     duration_minutes: clampNumber(value?.duration_minutes, 30, 10, 240),
     timezone: cleanString(value?.timezone) || "Europe/Madrid",
     days: days.length ? [...new Set(days)] : [1, 2, 3, 4, 5],
-    start_hour: clampNumber(value?.start_hour, 9, 0, 23),
-    end_hour: clampNumber(value?.end_hour, 18, 1, 24),
+    start_hour: startHour,
+    end_hour: endHour,
+    ranges: ranges.length ? ranges : [{ start: pad(startHour), end: pad(Math.max(endHour, startHour + 1)) }],
+    // Antelación mínima para reservar y hasta cuántos días vista se ofrecen huecos.
+    min_notice_hours: clampNumber(value?.min_notice_hours, 1, 0, 168),
+    max_days_ahead: clampNumber(value?.max_days_ahead, 14, 1, 60),
+    // Descanso entre citas y cada cuántos minutos empieza un hueco (0 = cada «duración»).
+    buffer_minutes: clampNumber(value?.buffer_minutes, 0, 0, 120),
+    slot_step_minutes: [0, 15, 30, 60].includes(Number(value?.slot_step_minutes)) ? Number(value.slot_step_minutes) : 0,
+    // Mensajes al cliente: email de confirmación y recordatorios (horas antes de la cita).
+    confirmation_email: value?.confirmation_email !== false,
+    reminders: [...new Set(reminders)].sort((a, b) => b - a).slice(0, 3),
+    reminder_template_name: cleanString(value?.reminder_template_name),
+    reminder_template_language: cleanString(value?.reminder_template_language) || "es",
   };
 }
 

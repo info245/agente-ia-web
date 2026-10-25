@@ -22,8 +22,6 @@ const TABS = [
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
-const DAYS = [[1, "L"], [2, "M"], [3, "X"], [4, "J"], [5, "V"], [6, "S"], [0, "D"]] as const;
-
 type ServiceRow = { name: string; price: string; original: string; field: "min_monthly_fee" | "min_project_fee" };
 type Draft = {
   tone: string;
@@ -97,7 +95,7 @@ function patchFrom(config: AppConfig, d: Draft) {
       faq: d.faq.filter((f) => f.question.trim() && f.answer.trim()),
       handoff_when: d.handoffWhen.trim(),
       offer_meeting_when: d.meetingWhen.trim(),
-      meeting: d.meeting,
+      // El horario de reuniones se guarda en Configuración → Agenda; aquí no se reenvía para no pisarlo.
     },
     offers,
     brand: { website_url: d.website.trim() },
@@ -433,8 +431,6 @@ function KnowsTab({ draft, update }: TabProps) {
 }
 
 function ActsTab({ draft, update }: TabProps) {
-  const m = draft.meeting;
-  const setMeeting = (part: Partial<Meeting>) => update({ meeting: { ...m, ...part } });
   return (
     <div className="card block">
       <h2>Cuándo actúa</h2>
@@ -443,32 +439,9 @@ function ActsTab({ draft, update }: TabProps) {
       <textarea className="i" id="meet-when" rows={2} value={draft.meetingWhen} onChange={(e) => update({ meetingWhen: e.target.value })} placeholder="Cuando el cliente ya ha contado su caso y pregunta por precios o quiere avanzar." />
       <label className="f" htmlFor="handoff-when">Cuándo pasarte la conversación</label>
       <textarea className="i" id="handoff-when" rows={2} value={draft.handoffWhen} onChange={(e) => update({ handoffWhen: e.target.value })} placeholder="Cuando pidan hablar con una persona, tengan una queja o pidan un presupuesto cerrado." />
-      <label className="f">Días para videollamadas</label>
-      <div className="tones">
-        {DAYS.map(([day, label]) => {
-          const on = (m.days || []).includes(day);
-          return (
-            <button key={day} className="chip" aria-pressed={on} aria-label={label} onClick={() => setMeeting({ days: on ? (m.days || []).filter((d) => d !== day) : [...(m.days || []), day] })}>{label}</button>
-          );
-        })}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
-        <label className="f">Desde las
-          <select className="i" value={m.start_hour ?? 9} onChange={(e) => setMeeting({ start_hour: Number(e.target.value) })}>
-            {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h}:00</option>)}
-          </select>
-        </label>
-        <label className="f">Hasta las
-          <select className="i" value={m.end_hour ?? 18} onChange={(e) => setMeeting({ end_hour: Number(e.target.value) })}>
-            {Array.from({ length: 24 }, (_, h) => h + 1).map((h) => <option key={h} value={h}>{h}:00</option>)}
-          </select>
-        </label>
-        <label className="f">Duración
-          <select className="i" value={m.duration_minutes ?? 30} onChange={(e) => setMeeting({ duration_minutes: Number(e.target.value) })}>
-            {[15, 20, 30, 45, 60, 90].map((n) => <option key={n} value={n}>{n} min</option>)}
-          </select>
-        </label>
-      </div>
+      <p className="hint" style={{ margin: "14px 0 0" }}>
+        Días, tramos horarios, duración, antelación y recordatorios de las videollamadas: <a href="/disponibilidad">Configuración → Agenda</a>.
+      </p>
     </div>
   );
 }

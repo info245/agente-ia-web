@@ -71,7 +71,11 @@ export type Offer = {
 
 export type Faq = { question: string; answer: string };
 
-export type Meeting = { days?: number[]; start_hour?: number; end_hour?: number; timezone?: string; duration_minutes?: number };
+export type Meeting = {
+  days?: number[]; start_hour?: number; end_hour?: number; timezone?: string; duration_minutes?: number;
+  ranges?: { start: string; end: string }[]; min_notice_hours?: number; max_days_ahead?: number; buffer_minutes?: number; slot_step_minutes?: number;
+  confirmation_email?: boolean; reminders?: number[]; reminder_template_name?: string; reminder_template_language?: string;
+};
 
 export type FlowStep = {
   active?: boolean;

@@ -227,3 +227,18 @@ test("estado del turno: todo lo que sabemos del contacto (también la web) y el 
   assert.match(whatsapp, /Formato WhatsApp/);
   assert.match(buildTurnState({ lead, appConfig, channel: "web" }), /Formato web: texto plano/);
 });
+
+test("huecos: tramos de mañana y tarde, antelación, días vista, descanso y paso", async () => {
+  const { bookingWindow } = await import("./googleCalendar.js");
+  const now = new Date("2026-10-19T06:00:00Z"); // lunes 08:00 en Madrid
+  const base = { timezone: "Europe/Madrid", duration_minutes: 60, days: [1, 2, 3, 4, 5], ranges: [{ start: "09:00", end: "11:00" }, { start: "16:00", end: "17:30" }], min_notice_hours: 0 };
+  const local = (slots) => slots.map((s) => new Date(s.start).toLocaleTimeString("es-ES", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit" }));
+  assert.deepEqual(local(computeFreeSlots({ now, meeting: base, days: 1 })), ["09:00", "10:00", "16:00"], "16:00–17:30 solo cabe una cita de 1 h");
+  assert.deepEqual(local(computeFreeSlots({ now, meeting: { ...base, slot_step_minutes: 30 }, days: 1 })), ["09:00", "09:30", "10:00", "16:00", "16:30"]);
+  assert.deepEqual(local(computeFreeSlots({ now, meeting: { ...base, min_notice_hours: 3 }, days: 1 })), ["16:00"], "antelación de 3 h: nada antes de las 11:00");
+  const busy = [{ start: "2026-10-19T07:00:00Z", end: "2026-10-19T08:00:00Z" }]; // 09:00–10:00 ocupado
+  assert.deepEqual(local(computeFreeSlots({ now, meeting: { ...base, buffer_minutes: 15 }, days: 1, busy })), ["16:00"], "con 15 min de descanso, 10:00 ya no vale");
+  assert.equal(computeFreeSlots({ now, meeting: { ...base, max_days_ahead: 1 }, days: 5 }).every((s) => Date.parse(s.start) <= bookingWindow({ max_days_ahead: 1 }, now).latest), true);
+  // Configuración antigua (start_hour/end_hour) sigue funcionando.
+  assert.deepEqual(local(computeFreeSlots({ now, meeting: { timezone: "Europe/Madrid", duration_minutes: 60, days: [1], start_hour: 9, end_hour: 11, min_notice_hours: 0 }, days: 1 })), ["09:00", "10:00"]);
+});

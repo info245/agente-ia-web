@@ -50,6 +50,7 @@ import {
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
 import { validatePipelineStages } from "./lib/pipelineConfig.js";
 import { toWhatsAppFormat } from "./lib/whatsappFormat.js";
+import { bookingMessageText, dueBookingMessages, formatBookingDate } from "./lib/bookingMessages.js";
 import { countTags, normalizeTags, renameTag } from "./lib/emailMarketing.js";
 import { runAgentTurn } from "./agent/engine.js";
 import { createGoogleCalendar, isCalendarConnected } from "./agent/googleCalendar.js";
@@ -433,6 +434,7 @@ const schedulerState = {
   conversionsRunning: false,
   emailRunning: false,
   emailMarketingRunning: false,
+  bookingMessagesRunning: false,
 };
 const CONVERSION_SWEEP_INTERVAL_MS = Math.max(60_000, Number(process.env.CONVERSION_SWEEP_INTERVAL_MS || 5 * 60_000));
 const googleEmailOauthStates = new Map();
@@ -7040,6 +7042,8 @@ async function runSchedulerJob(jobName, fn) {
         ? "conversionsRunning"
       : jobName === "email-marketing"
         ? "emailMarketingRunning"
+      : jobName === "booking-messages"
+        ? "bookingMessagesRunning"
       : jobName === "email"
         ? "emailRunning"
         : "whatsappRunning";
@@ -7131,6 +7135,64 @@ app.post("/tasks/privacy-retention", async (req, res) => {
   }
 });
 
+// Citas: email de confirmación al reservar y recordatorios N horas antes (Configuración → Agenda).
+// Recordatorio: WhatsApp si escribió en las últimas 24 h o hay plantilla elegida; si no, email.
+async function runBookingMessagesTask() {
+  const now = Date.now();
+  const { data: rows, error } = await supabase
+    .from("bookings")
+    .select("id, account_id, conversation_id, starts_at, timezone, attendee_name, attendee_email, status, created_at, confirmation_sent_at, reminders_sent, conversations(channel, external_user_id)")
+    .eq("status", "confirmed")
+    .gt("starts_at", new Date(now).toISOString())
+    .lt("starts_at", new Date(now + 8 * 864e5).toISOString())
+    .limit(500);
+  if (error) throw error;
+  let processed = 0;
+  const byAccount = new Map();
+  for (const row of rows || []) byAccount.set(row.account_id, [...(byAccount.get(row.account_id) || []), row]);
+  for (const [accountId, bookings] of byAccount) {
+    const config = await getAppConfig({ accountId }).catch(() => null);
+    const meeting = config?.agent?.meeting || {};
+    const brandName = config?.brand?.name || "";
+    for (const item of dueBookingMessages(bookings, meeting, now)) {
+      const b = item.booking;
+      const patch = item.kind === "confirmation" ? { confirmation_sent_at: new Date().toISOString() } : { reminders_sent: { ...(b.reminders_sent || {}), [item.hours]: new Date().toISOString() } };
+      let via = item.skip ? "omitido" : "";
+      if (!item.skip) {
+        const message = bookingMessageText({ ...item, booking: b, brandName, timeZone: b.timezone || meeting.timezone });
+        const phone = b.conversations?.channel === "whatsapp" ? b.conversations.external_user_id : "";
+        try {
+          if (item.kind === "reminder" && phone && (await isWhatsAppCustomerWindowOpen(b.conversation_id))) {
+            await sendWhatsAppText(phone, message.text, { accountId });
+            via = "WhatsApp";
+          } else if (item.kind === "reminder" && phone && meeting.reminder_template_name) {
+            const first = String(b.attendee_name || "").trim().split(/\s+/)[0] || "hola";
+            await sendWhatsAppTemplate(phone, meeting.reminder_template_name, meeting.reminder_template_language || "es", { accountId, bodyParams: [first, formatBookingDate(b.starts_at, b.timezone || meeting.timezone)] });
+            via = "WhatsApp (plantilla)";
+          } else if (b.attendee_email) {
+            await sendTransactionalEmail({ to: b.attendee_email, subject: message.subject, text: message.text, emailConfig: config?.integrations?.email || null, fromName: brandName });
+            via = "email";
+          } else {
+            via = "omitido";
+          }
+        } catch (sendError) {
+          // Se reintenta en la siguiente vuelta (no se marca como enviado).
+          console.log("[citas] envío fallido", b.id, item.kind, sendError.message);
+          continue;
+        }
+        if (b.conversation_id) {
+          const label = item.kind === "confirmation" ? "Confirmación de cita" : `Recordatorio de cita (${item.hours} h antes)`;
+          await saveMessage({ conversation_id: b.conversation_id, role: "tool", content: `${label} enviado por ${via}.`, account_id: accountId }).catch(() => null);
+        }
+      }
+      await supabase.from("bookings").update(patch).eq("id", b.id);
+      if (item.kind === "reminder") b.reminders_sent = patch.reminders_sent;
+      if (via !== "omitido") processed += 1;
+    }
+  }
+  return { processed_count: processed };
+}
+
 function startChannelInboxWorker() {
   // Local runs against the production database must not claim real inbox events.
   if (process.env.CHANNEL_INBOX_WORKER === "off") {
@@ -7155,6 +7217,7 @@ function startChannelInboxWorker() {
   // Email marketing: campañas programadas y pasos de las automatizaciones, cada minuto.
   setInterval(() => {
     runSchedulerJob("email-marketing", () => emailMarketing.runEmailMarketingTick());
+    runSchedulerJob("booking-messages", () => runBookingMessagesTask());
   }, 60_000);
 }
 
@@ -7516,7 +7579,8 @@ app.post("/api/crm/bookings/:bookingId/reschedule", async (req, res) => {
     if (!result.ok) return res.status(409).json({ ok: false, error: "Ese hueco ya está ocupado. Elige otro." });
     const { data: updated, error } = await supabase
       .from("bookings")
-      .update({ starts_at: result.start, ends_at: result.end })
+      // Nueva hora: los recordatorios vuelven a contar desde cero.
+      .update({ starts_at: result.start, ends_at: result.end, reminders_sent: {} })
       .eq("id", booking.id)
       .eq("account_id", account.id)
       .select("*")
@@ -7842,6 +7906,26 @@ app.get("/api/crm/channels/health", async (req, res) => {
       push: { devices },
     });
     return res.json({ ok: true, ...health, checked_at: new Date().toISOString() });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Configuración → Agenda: horarios, antelación, descansos, confirmación y recordatorios de cita.
+app.post("/api/crm/settings/meeting", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const current = await getAppConfig({ accountId: account.id });
+    const meeting = req.body?.meeting && typeof req.body.meeting === "object" ? req.body.meeting : {};
+    if (meeting.reminder_template_name) {
+      const templates = await listApprovedWhatsAppTemplates(account.id);
+      const template = templates.find((t) => t.name === meeting.reminder_template_name && t.language === (meeting.reminder_template_language || t.language));
+      if (!template?.sendable) return res.status(400).json({ ok: false, error: "Esa plantilla no está aprobada o no se puede usar." });
+      if (template.params !== 2) return res.status(400).json({ ok: false, error: "La plantilla de recordatorio debe tener dos datos: {{1}} el nombre y {{2}} la fecha y hora." });
+    }
+    const config = await saveAppConfig(sanitizeAppConfig({ ...current, agent: { ...current.agent, meeting: { ...current.agent?.meeting, ...meeting } } }), { accountId: account.id });
+    await publishConfigVersion({ accountId: account.id, config, createdBy: req.crmUser?.id || null, changeSummary: "Configuración: agenda" });
+    return res.json({ ok: true, meeting: config.agent?.meeting });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
   }
