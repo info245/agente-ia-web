@@ -66,7 +66,7 @@ export function buildChannelHealth({ whatsapp, email = {}, calendar = {}, forms 
       ? { key: "email", label: "Email", status: "off", detail: "Los emails automáticos están desactivados." }
       : email.failed_7d
         ? { key: "email", label: "Email", status: "warn", detail: `${email.failed_7d} email${email.failed_7d === 1 ? "" : "s"} no se pudieron enviar en los últimos 7 días. Envía desde ${email.from}.` }
-        : { key: "email", label: "Email", status: "ok", detail: `Envía desde ${email.from} · último envío ${timeAgo(email.last_sent_at, now)}.` },
+        : { key: "email", label: "Email", status: "ok", detail: `Envía desde ${email.from}${email.last_sent_at ? ` · última campaña o automatización ${timeAgo(email.last_sent_at, now)}` : ""}.` },
     calendar.connected
       ? { key: "calendar", label: "Calendario", status: "ok", detail: "Conectado: el asistente puede reservar videollamadas." }
       : { key: "calendar", label: "Calendario", status: "off", detail: "Sin conectar: el asistente no puede reservar citas." },
@@ -79,7 +79,7 @@ export function buildChannelHealth({ whatsapp, email = {}, calendar = {}, forms 
         ? { key: "conversions", label: "Conversiones", status: "warn", detail: `${conversions.failed_7d} envío${conversions.failed_7d === 1 ? "" : "s"} fallaron en 7 días.`, action: { label: "Ver historial", href: "/conversiones" } }
         : { key: "conversions", label: "Conversiones", status: "ok", detail: `Activadas · último envío ${timeAgo(conversions.last_sent_at, now)}.` },
     push.devices
-      ? { key: "push", label: "Avisos en el móvil", status: "ok", detail: `${push.devices} dispositivo${push.devices === 1 ? "" : "s"} reciben avisos.` }
+      ? { key: "push", label: "Avisos en el móvil", status: "ok", detail: push.devices === 1 ? "1 dispositivo recibe avisos." : `${push.devices} dispositivos reciben avisos.` }
       : { key: "push", label: "Avisos en el móvil", status: "off", detail: "Ningún móvil recibe avisos de leads nuevos." },
   ];
   return { checks, errors: checks.filter((c) => c.status === "error").length, warnings: checks.filter((c) => c.status === "warn").length };
