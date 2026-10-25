@@ -437,7 +437,7 @@ function DailyChart({ days }: { days: Day[] }) {
       <text x="2" y={y(max) - 3} className="axis">{max}</text>
       {days.map((d, i) => (
         <g key={d.date}>
-          <rect x={(i + 0.5) * step - bw / 2} y={y(d.leads)} width={bw} height={Math.max(0, H - 18 - y(d.leads))} rx="2" className="bar">
+          <rect x={(i + 0.5) * step - bw / 2} y={y(d.leads)} width={bw} height={Math.max(0, H - 18 - y(d.leads))} rx="2" className="dc-bar">
             <title>{`${new Date(d.date).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "UTC" })}: ${d.leads} leads, ${d.sales} ventas`}</title>
           </rect>
           {i % labelEvery === 0 && <text x={(i + 0.5) * step} y={H - 4} textAnchor="middle" className="axis">{Number(d.date.slice(8))}</text>}

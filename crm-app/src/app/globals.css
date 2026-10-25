@@ -447,7 +447,7 @@ h3.f { font-size: 14px; margin: 18px 0 4px; }
 .lg-leads { background: var(--accent); }
 .lg-sales { background: var(--good); }
 .daily-chart { width: 100%; height: auto; display: block; }
-.daily-chart .bar { fill: var(--accent); opacity: .85; }
+.daily-chart .dc-bar { fill: var(--accent); opacity: .85; }
 .daily-chart .sales { fill: none; stroke: var(--good); stroke-width: 2.5; }
 .daily-chart .grid { stroke: var(--line); stroke-dasharray: 3 4; }
 .daily-chart .axis { fill: var(--muted); font-size: 10px; }
