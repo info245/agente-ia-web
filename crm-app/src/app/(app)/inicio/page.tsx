@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "@/components/app-shell";
+import { ChannelHealthBanner } from "@/components/channel-health";
 import { api } from "@/lib/api";
 import { channelOf, leadName, ownerOf, relative, startOfWeek } from "@/lib/format";
 import type { Booking, Onboarding } from "@/lib/types";
@@ -15,7 +16,7 @@ function greeting() {
 }
 
 export default function InicioPage() {
-  const { user, leads } = useSession();
+  const { user, leads, can } = useSession();
   const [bookings, setBookings] = useState<Booking[] | null>(null);
   const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
 
@@ -59,6 +60,7 @@ export default function InicioPage() {
         </div>
       </div>
 
+      {can("settings") && <ChannelHealthBanner />}
       {onboarding && !onboarding.completed && <MissingSteps onboarding={onboarding} />}
 
       <div className="kpis">

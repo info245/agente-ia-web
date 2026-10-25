@@ -29,9 +29,22 @@ export function channelTokenFromRow(row = {}) {
   }
 }
 
+// Para el estado de los canales: ¿se puede leer el token guardado, o se tira del de entorno?
+function tokenReadable(row = {}) {
+  try {
+    decryptSecret(clean(row.access_token));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function normalizeChannel(row = {}) {
   const fallbackAccount = getDefaultAccount();
+  const readable = tokenReadable(row);
   return {
+    token_readable: readable,
+    using_fallback: !readable && Boolean(clean(row.phone_number_id) && clean(row.phone_number_id) === clean(process.env.WHATSAPP_PHONE_NUMBER_ID) && process.env.WHATSAPP_TOKEN),
     id: clean(row.id) || null,
     account_id: clean(row.account_id) || fallbackAccount.id,
     provider: clean(row.provider) || "meta_cloud",

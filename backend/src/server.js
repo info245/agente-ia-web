@@ -57,7 +57,8 @@ import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParam
 import { emailBodyToHtml, emailBodyToText } from "./lib/emailLinks.js";
 import { renderQuoteSignHtml, validateAcceptance } from "./lib/quoteSignature.js";
 import { listQuoteTemplates, saveQuoteTemplate, deleteQuoteTemplate } from "./lib/quoteTemplatesStore.js";
-import { addSubscription, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
+import { addSubscription, countSubscriptions, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
+import { buildChannelHealth } from "./lib/channelHealth.js";
 import { createEmailMarketing, EMAIL_JOB_TYPE } from "./emailMarketingRoutes.js";
 import * as emailMarketingStore from "./lib/emailMarketingStore.js";
 import { buildMarketingReport, buildResultsReport, dailySeries, openPipeline, previousRange, resolvePeriod, sanitizeSpendEntries } from "./lib/resultsReport.js";
@@ -7787,6 +7788,65 @@ app.post("/api/crm/channels/form-whatsapp", async (req, res) => {
   }
 });
 
+// Configuración → Canales: estado de cada canal (si WhatsApp recibe, si los emails salen…) con qué hacer.
+app.get("/api/crm/channels/health", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const since7d = new Date(Date.now() - 7 * 864e5).toISOString();
+    const first = async (query) => {
+      const { data, error } = await query.limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    };
+    const count = async (query) => {
+      const { count: n, error } = await query;
+      if (error) throw error;
+      return n || 0;
+    };
+    const [config, channel, templates, lastWebhook, lastOutbound, lastEmail, failedEmails, lastFormLead, conversionSettings, conversionJobs, devices] = await Promise.all([
+      getAppConfig({ accountId: account.id }).catch(() => null),
+      getWhatsAppChannelForAccount(account.id).catch(() => null),
+      listApprovedWhatsAppTemplates(account.id).catch(() => []),
+      first(supabase.from("channel_inbox_events").select("created_at").eq("account_id", account.id).eq("channel", "whatsapp").order("created_at", { ascending: false })),
+      first(supabase.from("messages").select("created_at, conversations!inner(channel)").eq("account_id", account.id).eq("role", "assistant").eq("conversations.channel", "whatsapp").order("created_at", { ascending: false })),
+      first(supabase.from("email_messages").select("sent_at").eq("account_id", account.id).eq("status", "sent").order("sent_at", { ascending: false })),
+      count(supabase.from("email_messages").select("id", { count: "exact", head: true }).eq("account_id", account.id).eq("status", "failed").gte("created_at", since7d)),
+      first(supabase.from("leads").select("created_at").eq("account_id", account.id).not("source_platform", "is", null).order("created_at", { ascending: false })),
+      getConversionSettings(account.id).catch(() => null),
+      listConversionJobs(account.id, { limit: 100 }).catch(() => []),
+      countSubscriptions(account.id).catch(() => 0),
+    ]);
+    const email = config?.integrations?.email || {};
+    const from = email.from_email || email.google_connected_email || process.env.LEADS_EMAIL_FROM || "";
+    const wa = config?.integrations?.whatsapp || {};
+    const sentJobs = conversionJobs.filter((j) => j.status === "completed" && !j.result?.skipped);
+    const health = buildChannelHealth({
+      whatsapp: {
+        configured: Boolean(channel?.phone_number_id && channel?.access_token),
+        app_secret: Boolean(WHATSAPP_APP_SECRET),
+        token_readable: channel?.token_readable !== false,
+        using_fallback: Boolean(channel?.using_fallback),
+        templates: (templates || []).filter((t) => t.sendable).length,
+        last_webhook_at: lastWebhook?.created_at || null,
+        last_outbound_at: lastOutbound?.created_at || null,
+        rejections: whatsappWebhookRejections.get(String(channel?.phone_number_id || "")) || null,
+      },
+      email: { connected: Boolean(from) && process.env.LEADS_CLIENT_EMAIL_ENABLED === "true", from, last_sent_at: lastEmail?.sent_at || null, failed_7d: failedEmails },
+      calendar: { connected: Boolean(config?.integrations?.calendar?.google_refresh_token) },
+      forms: { last_lead_at: lastFormLead?.created_at || null, autocontact: wa.form_autocontact_enabled === true, template: wa.intro_template_name || "" },
+      conversions: {
+        enabled: Boolean(conversionSettings?.enabled),
+        failed_7d: conversionJobs.filter((j) => j.status === "failed" && j.created_at >= since7d).length,
+        last_sent_at: sentJobs[0]?.completed_at || null,
+      },
+      push: { devices },
+    });
+    return res.json({ ok: true, ...health, checked_at: new Date().toISOString() });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 // Configuración → Estados: las etapas del embudo. No se borran (los contactos en ella se quedarían sin etapa): se ocultan.
 app.post("/api/crm/settings/stages", async (req, res) => {
   try {
@@ -7954,11 +8014,22 @@ app.get("/webhooks/whatsapp", (req, res) => {
   }
 });
 
+// Avisos de Meta que rechazamos, por número (para «Estado de los canales»).
+// ponytail: en memoria del proceso; se vacía al desplegar. Si hace falta histórico, guardarlo en app_settings.
+const whatsappWebhookRejections = new Map();
+function recordWhatsAppRejection(body, reason) {
+  // El número sale del cuerpo sin verificar: solo sirve para mostrar el aviso en su cuenta, nunca para procesar.
+  const phoneNumberId = String(body?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id || "").trim() || "desconocido";
+  const current = whatsappWebhookRejections.get(phoneNumberId);
+  whatsappWebhookRejections.set(phoneNumberId, { count: (current?.count || 0) + 1, reason, last_at: new Date().toISOString() });
+}
+
 app.post("/webhooks/whatsapp", async (req, res) => {
   try {
     const signatureValidation = validateMetaSignature(req);
     if (!signatureValidation.ok) {
       console.log("whatsapp signature validation failed", signatureValidation);
+      recordWhatsAppRejection(req.body, signatureValidation.reason);
       return res.sendStatus(401);
     }
 
@@ -7973,6 +8044,7 @@ app.post("/webhooks/whatsapp", async (req, res) => {
         const value = change?.value || {};
         const whatsappChannel = await resolveWhatsAppChannelFromWebhookValue(value);
         if (!whatsappChannel?.account_id) {
+          recordWhatsAppRejection(req.body, "unknown-phone-number");
           return res.status(422).json({
             ok: false,
             error: "El phone_number_id del webhook no esta vinculado a una cuenta activa.",
