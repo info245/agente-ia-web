@@ -30,32 +30,53 @@ export function zonedTimeToUtc(year, month, day, hour, minute, timeZone) {
   return new Date(guess - offsetMs(new Date(first), timeZone));
 }
 
+// Tramos del día en minutos desde las 00:00. Sin `ranges` (configuración antigua), de start_hour a end_hour.
+function dayRanges(meeting = {}) {
+  const toMin = (v) => {
+    const [h, m] = String(v || "").split(":").map(Number);
+    return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+  };
+  const ranges = (meeting.ranges || []).map((r) => [toMin(r.start), toMin(r.end)]).filter(([a, b]) => a !== null && b !== null && a < b);
+  return ranges.length ? ranges : [[(meeting.start_hour ?? 9) * 60, (meeting.end_hour ?? 18) * 60]];
+}
+
+// Límites de reserva: antelación mínima y días vista. También los usa bookMeeting para no aceptar huecos fuera.
+export function bookingWindow(meeting = {}, now = new Date()) {
+  const notice = Number.isFinite(Number(meeting.min_notice_hours)) ? Number(meeting.min_notice_hours) : 1;
+  const maxDays = Number(meeting.max_days_ahead) || 14;
+  return { earliest: now.getTime() + notice * 3_600_000, latest: now.getTime() + maxDays * 86_400_000 };
+}
+
 export function computeFreeSlots({ busy = [], meeting = {}, now = new Date(), fromDate = null, days = 5, limit = 12 } = {}) {
   const timeZone = meeting.timezone || "Europe/Madrid";
   const duration = (meeting.duration_minutes || 30) * 60_000;
+  const step = (meeting.slot_step_minutes || meeting.duration_minutes || 30) * 60_000;
+  const buffer = (meeting.buffer_minutes || 0) * 60_000;
   const workDays = meeting.days || [1, 2, 3, 4, 5];
-  const startHour = meeting.start_hour ?? 9;
-  const endHour = meeting.end_hour ?? 18;
-  const earliest = now.getTime() + 60 * 60_000;
-  const busyRanges = busy.map((item) => [Date.parse(item.start), Date.parse(item.end)]);
+  const { earliest, latest } = bookingWindow(meeting, now);
+  // El descanso se respeta a ambos lados de cada cita ocupada.
+  const busyRanges = busy.map((item) => [Date.parse(item.start) - buffer, Date.parse(item.end) + buffer]);
   const base = fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)
     ? fromDate.split("-").map(Number)
     : (({ year, month, day }) => [year, month, day])(zonedParts(now, timeZone));
 
   const slots = [];
-  for (let offset = 0; offset < Math.min(Math.max(days || 5, 1), 14) && slots.length < limit; offset += 1) {
+  for (let offset = 0; offset < Math.min(Math.max(days || 5, 1), 60) && slots.length < limit; offset += 1) {
     const date = new Date(Date.UTC(base[0], base[1] - 1, base[2] + offset));
     if (!workDays.includes(date.getUTCDay())) continue;
     const [y, m, d] = [date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()];
-    const dayEnd = zonedTimeToUtc(y, m, d, endHour, 0, timeZone).getTime();
-    for (let start = zonedTimeToUtc(y, m, d, startHour, 0, timeZone).getTime(); start + duration <= dayEnd; start += duration) {
-      if (start < earliest) continue;
-      if (busyRanges.some(([busyStart, busyEnd]) => start < busyEnd && start + duration > busyStart)) continue;
-      slots.push({
-        start: new Date(start).toISOString(),
-        end: new Date(start + duration).toISOString(),
-        label: new Date(start).toLocaleString("es-ES", { timeZone, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }),
-      });
+    for (const [from, to] of dayRanges(meeting)) {
+      const rangeEnd = zonedTimeToUtc(y, m, d, Math.floor(to / 60), to % 60, timeZone).getTime();
+      for (let start = zonedTimeToUtc(y, m, d, Math.floor(from / 60), from % 60, timeZone).getTime(); start + duration <= rangeEnd; start += step) {
+        if (start < earliest || start > latest) continue;
+        if (busyRanges.some(([busyStart, busyEnd]) => start < busyEnd && start + duration > busyStart)) continue;
+        slots.push({
+          start: new Date(start).toISOString(),
+          end: new Date(start + duration).toISOString(),
+          label: new Date(start).toLocaleString("es-ES", { timeZone, weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }),
+        });
+        if (slots.length >= limit) break;
+      }
       if (slots.length >= limit) break;
     }
   }
@@ -121,7 +142,7 @@ export function createGoogleCalendar(calendarConfig = {}, meeting = {}) {
   return {
     async getAvailableSlots({ from_date = null, days = 5, now = new Date() } = {}) {
       const accessToken = await getAccessToken(calendarConfig.google_refresh_token);
-      const span = Math.min(Math.max(days || 5, 1), 14);
+      const span = Math.min(Math.max(days || 5, 1), Number(meeting.max_days_ahead) || 14);
       const timeMin = from_date ? new Date(`${from_date}T00:00:00Z`) : now;
       const timeMax = new Date(timeMin.getTime() + (span + 1) * 86_400_000);
       const busy = await busyBetween(accessToken, timeMin.toISOString(), timeMax.toISOString());
@@ -132,11 +153,14 @@ export function createGoogleCalendar(calendarConfig = {}, meeting = {}) {
       const startMs = Date.parse(start);
       if (!Number.isFinite(startMs)) throw new Error("Hora de inicio no válida");
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || ""))) throw new Error("Email no válido");
+      const { earliest, latest } = bookingWindow(meeting);
+      if (startMs < earliest || startMs > latest) return { ok: false, error: "slot_out_of_window" };
       const end = new Date(startMs + (meeting.duration_minutes || 30) * 60_000).toISOString();
       const startIso = new Date(startMs).toISOString();
       const accessToken = await getAccessToken(calendarConfig.google_refresh_token);
-      // El hueco puede haberse ocupado desde que se ofreció.
-      const busy = await busyBetween(accessToken, startIso, end);
+      // El hueco puede haberse ocupado desde que se ofreció (con el descanso alrededor).
+      const buffer = (meeting.buffer_minutes || 0) * 60_000;
+      const busy = await busyBetween(accessToken, new Date(startMs - buffer).toISOString(), new Date(Date.parse(end) + buffer).toISOString());
       if (busy.length) return { ok: false, error: "slot_taken" };
       const event = await googleFetch(accessToken, `/calendars/${encodeURIComponent(calendarId)}/events?sendUpdates=all`, {
         summary: `${summary} con ${name}`,

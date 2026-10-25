@@ -92,6 +92,8 @@ function Automations() {
   // El primer WhatsApp a leads de formulario se configura en Canales (plantilla de Meta), pero se ve aquí con lo demás.
   const welcome = config?.integrations?.whatsapp;
   const welcomeOn = Boolean(welcome?.form_autocontact_enabled && welcome?.intro_template_name);
+  const meeting = config?.agent?.meeting;
+  const meetingOn = Boolean(config?.integrations?.calendar?.google_refresh_token_configured) && (meeting?.confirmation_email !== false || (meeting?.reminders ?? [24, 2]).length > 0);
   if (error) return <p className="alert error">{error}</p>;
   return (
     <div className="card" style={{ overflowX: "auto" }}>
@@ -108,6 +110,14 @@ function Automations() {
               <td>Llega un lead de formulario · al momento</td>
               <td style={{ whiteSpace: "nowrap" }}>{CHANNEL_ICON.whatsapp}</td>
               <td><span className={`pill ${welcomeOn ? "p-good" : "p-muted"}`}>{welcomeOn ? "Activa" : "Pausada"}</span></td>
+              <td>—</td>
+              <td>—</td>
+            </tr>
+            <tr onClick={() => router.push("/disponibilidad")} title="Se cambia en Configuración → Agenda">
+              <td><b>Confirmación y recordatorios de cita</b><div className="hint" style={{ margin: 0 }}>{[meeting?.confirmation_email !== false ? "confirmación" : "", ...(meeting?.reminders ?? [24, 2]).map((h) => (h >= 24 ? `${h / 24} día${h === 24 ? "" : "s"} antes` : `${h} h antes`))].filter(Boolean).join(" · ") || "Nada configurado"} · se cambia en Configuración → Agenda</div></td>
+              <td>Reserva una videollamada</td>
+              <td style={{ whiteSpace: "nowrap" }}>{CHANNEL_ICON.email} · {CHANNEL_ICON.whatsapp}</td>
+              <td><span className={`pill ${meetingOn ? "p-good" : "p-muted"}`}>{meetingOn ? "Activa" : "Pausada"}</span></td>
               <td>—</td>
               <td>—</td>
             </tr>
