@@ -72,10 +72,11 @@ export default function EquipoPage() {
       <div className="card" style={{ padding: "6px 16px 16px" }}>
         {!users && <p className="loading">Cargando…</p>}
         {users?.map((u) => {
-          const self = u.id === me.id;
+          // La agencia aparece (para asignarle contactos) pero no se gestiona desde aquí.
+          const self = u.id === me.id || u.role === "super_admin";
           return (
             <div className="todo" key={u.id} style={{ flexWrap: "wrap" }}>
-              <div className="who"><b>{u.display_name || u.email}{self && " (tú)"}</b><span>{u.email}</span></div>
+              <div className="who"><b>{u.display_name || u.email}{u.id === me.id && " (tú)"}</b><span>{u.email}</span></div>
               <span className={`pill ${u.status === "active" ? "p-good" : u.status === "invited" ? "p-new" : "p-muted"}`}>{u.status === "active" ? "Activo" : u.status === "invited" ? "Invitado" : "Desactivado"}</span>
               {self ? (
                 <span className="pill p-muted">{roleLabel(u.role)}</span>
