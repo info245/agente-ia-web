@@ -143,15 +143,24 @@
 
   // Formularios de la web: rellena los campos ocultos que se llamen gclid, fbclid, utm_source...
   // (o lleven data-attribution="gclid") si están vacíos. Llegan al CRM como campos del lead.
+  // WPForms y similares no dejan elegir el name del campo: vale también la clase CSS
+  // «attribution-gclid» en el campo o en su contenedor (WPForms → campo oculto → Clases CSS).
+  function attributionKeyOf(input) {
+    const explicit = input.getAttribute("data-attribution");
+    if (explicit) return explicit.toLowerCase();
+    const holder = input.closest('[class*="attribution-"]');
+    const byClass = holder && String(holder.className).match(/attribution-([a-z_]+)/i);
+    if (byClass) return byClass[1].toLowerCase();
+    return String(input.name || "").toLowerCase().replace(/^.*[[\-]/, "").replace(/]$/, "");
+  }
+
   function fillAttributionFields(root) {
     if (!Object.keys(attribution).length) return;
     const fields = (root || document).querySelectorAll("input[name], input[data-attribution]");
     fields.forEach((input) => {
-      const name = String(input.getAttribute("data-attribution") || input.name || "")
-        .toLowerCase()
-        .replace(/^.*[[\-]/, "")
-        .replace(/]$/, "");
-      if (attribution[name] && !input.value && (input.type === "hidden" || input.hasAttribute("data-attribution"))) {
+      const name = attributionKeyOf(input);
+      const tagged = input.hasAttribute("data-attribution") || Boolean(input.closest('[class*="attribution-"]'));
+      if (attribution[name] && !input.value && (input.type === "hidden" || tagged)) {
         input.value = attribution[name];
       }
     });

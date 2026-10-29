@@ -1,5 +1,4 @@
 ;(async () => {
-  // ====== LEE CONFIG DESDE EL <script ... data-*> ======
   const currentScript = document.currentScript;
 
   const backendFromAttr = currentScript?.getAttribute("data-backend");
@@ -19,24 +18,42 @@
   const defaultAccountSlug = inferDefaultAccountSlug();
 
   const CONFIG = {
-    backendBaseUrl:
-      backendFromAttr || "https://tmedia-global-ai.onrender.com",
-    channel: "web",
-    brandName: brandFromAttr || "Agente IA",
-    position: posFromAttr === "left" ? "left" : "right",
-    primaryColor: colorFromAttr || "#111827",
+      backendBaseUrl: backendFromAttr || "https://tmedia-global-ai.onrender.com",
+      channel: "web",
+      brandName: brandFromAttr || "Agente IA",
+      position: posFromAttr === "left" ? "left" : "right",
+      primaryColor: colorFromAttr || "#1f2937",
+      accentColor: colorFromAttr || "#1f2937",
+    logoUrl: "",
     accountId: accountIdFromAttr || "",
     accountSlug: accountSlugFromAttr || defaultAccountSlug,
     externalUserIdStorageKey: "agente_ia_external_user_id",
     conversationIdStorageKey: "agente_ia_conversation_id",
+    chatStartedStorageKey: "agente_ia_chat_started",
     chatHistoryStorageKey: "agente_ia_chat_history",
+    completedSignatureStorageKey: "agente_ia_last_completed_signature",
     requestTimeoutMs: 25000,
   };
+
+  // Las claves de almacenamiento se aislan por cuenta: si el mismo origen
+  // sirve el widget para varias cuentas (por ejemplo, la vista previa del
+  // CRM en el dominio del backend), evita reutilizar conversation_id /
+  // external_user_id de otra cuenta y mezclar leads entre clientes.
+  function accountStorageSuffix() {
+    const raw = String(CONFIG.accountId || CONFIG.accountSlug || "default").trim();
+    return raw.toLowerCase().replace(/[^a-z0-9_-]+/g, "_");
+  }
+
+  function storageKey(baseKey) {
+    return `${baseKey}__${accountStorageSuffix()}`;
+  }
 
   CONFIG.supportEmail = "";
   CONFIG.publicWhatsappNumber = "";
   CONFIG.availableChannels = [];
   CONFIG.initialMessage = "";
+  CONFIG.privacyNotice = "";
+  CONFIG.privacyPolicyUrl = "";
   CONFIG.integrationReady = Boolean(CONFIG.accountId || CONFIG.accountSlug);
 
   async function loadRemoteWidgetConfig() {
@@ -51,7 +68,11 @@
 
       const remote = data.config || {};
       CONFIG.brandName = brandFromAttr || remote?.brand?.name || CONFIG.brandName;
-      CONFIG.primaryColor = colorFromAttr || remote?.brand?.primary_color || CONFIG.primaryColor;
+      CONFIG.primaryColor =
+        colorFromAttr || remote?.brand?.primary_color || CONFIG.primaryColor;
+      CONFIG.accentColor =
+        remote?.brand?.accent_color || remote?.brand?.primary_color || CONFIG.accentColor;
+      CONFIG.logoUrl = remote?.brand?.logo_url || CONFIG.logoUrl;
       CONFIG.accountId = CONFIG.accountId || remote?.account?.id || "";
       CONFIG.accountSlug = CONFIG.accountSlug || remote?.account?.slug || "";
       CONFIG.integrationReady = Boolean(CONFIG.accountId || CONFIG.accountSlug);
@@ -63,24 +84,97 @@
         ? remote.contact.available_channels
         : [];
       CONFIG.initialMessage = String(remote?.agent?.initial_message || "").trim();
+      CONFIG.privacyNotice = String(remote?.privacy?.notice_text || "").trim();
+      CONFIG.privacyPolicyUrl = /^https?:\/\//i.test(String(remote?.privacy?.policy_url || ""))
+        ? String(remote.privacy.policy_url)
+        : "";
     } catch (_error) {
-      // fallback silencioso
+      // fallback silencioso: el widget sigue funcionando con la config local
     }
+  }
+
+  // Atribución de campañas: gclid/fbclid/utm de la URL y las cookies _gcl_aw/_fbc/_fbp que ya
+  // pone la web (con su propio consentimiento). Se guarda solo durante la visita (sessionStorage)
+  // y viaja con el chat y en los campos ocultos de los formularios de la página, para que el CRM
+  // pueda avisar a Google Ads y Meta cuando ese lead se convierta en cliente.
+  // data-attribution="off" en el <script> lo desactiva.
+  const ATTRIBUTION_KEYS = ["gclid", "gbraid", "wbraid", "fbclid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+  const attributionEnabled = currentScript?.getAttribute("data-attribution") !== "off";
+
+  function readCookie(name) {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
+  function captureAttribution() {
+    if (!attributionEnabled) return {};
+    const key = storageKey("agente_ia_attribution");
+    let stored = {};
+    try {
+      stored = JSON.parse(sessionStorage.getItem(key) || "{}") || {};
+    } catch {}
+    const params = new URLSearchParams(window.location.search);
+    const fresh = {};
+    for (const name of ATTRIBUTION_KEYS) {
+      const value = params.get(name);
+      if (value) fresh[name] = value.slice(0, 200);
+    }
+    if (fresh.fbclid) fresh.fbclid_at = String(Date.now());
+    const gclAw = readCookie("_gcl_aw").split(".");
+    if (!fresh.gclid && !stored.gclid && gclAw.length >= 3) fresh.gclid = gclAw.slice(2).join(".");
+    const fbc = readCookie("_fbc");
+    const fbp = readCookie("_fbp");
+    if (fbc) fresh.fbc = fbc;
+    if (fbp) fresh.fbp = fbp;
+    if (Object.keys(fresh).length && !stored.landing_page) {
+      fresh.landing_page = `${window.location.origin}${window.location.pathname}`;
+      try {
+        if (document.referrer) fresh.referrer = new URL(document.referrer).origin;
+      } catch {}
+    }
+    const merged = { ...stored, ...fresh };
+    try {
+      if (Object.keys(merged).length) sessionStorage.setItem(key, JSON.stringify(merged));
+    } catch {}
+    return merged;
+  }
+
+  const attribution = captureAttribution();
+
+  // Formularios de la web: rellena los campos ocultos que se llamen gclid, fbclid, utm_source...
+  // (o lleven data-attribution="gclid") si están vacíos. Llegan al CRM como campos del lead.
+  // WPForms y similares no dejan elegir el name del campo: vale también la clase CSS
+  // «attribution-gclid» en el campo o en su contenedor (WPForms → campo oculto → Clases CSS).
+  function attributionKeyOf(input) {
+    const explicit = input.getAttribute("data-attribution");
+    if (explicit) return explicit.toLowerCase();
+    const holder = input.closest('[class*="attribution-"]');
+    const byClass = holder && String(holder.className).match(/attribution-([a-z_]+)/i);
+    if (byClass) return byClass[1].toLowerCase();
+    return String(input.name || "").toLowerCase().replace(/^.*[[\-]/, "").replace(/]$/, "");
+  }
+
+  function fillAttributionFields(root) {
+    if (!Object.keys(attribution).length) return;
+    const fields = (root || document).querySelectorAll("input[name], input[data-attribution]");
+    fields.forEach((input) => {
+      const name = attributionKeyOf(input);
+      const tagged = input.hasAttribute("data-attribution") || Boolean(input.closest('[class*="attribution-"]'));
+      if (attribution[name] && !input.value && (input.type === "hidden" || tagged)) {
+        input.value = attribution[name];
+      }
+    });
+  }
+
+  if (attributionEnabled) {
+    fillAttributionFields();
+    document.addEventListener("focusin", (event) => fillAttributionFields(event.target?.form || undefined), true);
+    document.addEventListener("submit", (event) => fillAttributionFields(event.target), true);
   }
 
   await loadRemoteWidgetConfig();
 
-  // ====== HELPERS ======
   const uid = () => Math.random().toString(36).slice(2, 10);
-
-  function accountStorageSuffix() {
-    const raw = String(CONFIG.accountId || CONFIG.accountSlug || "default").trim();
-    return raw.toLowerCase().replace(/[^a-z0-9_-]+/g, "_");
-  }
-
-  function storageKey(baseKey) {
-    return `${baseKey}__${accountStorageSuffix()}`;
-  }
 
   function getOrCreateExternalUserId() {
     const key = storageKey(CONFIG.externalUserIdStorageKey);
@@ -104,15 +198,24 @@
   function clearConversationId() {
     localStorage.removeItem(storageKey(CONFIG.conversationIdStorageKey));
     localStorage.removeItem(storageKey(CONFIG.chatHistoryStorageKey));
-    sessionStorage.removeItem("agente_ia_last_lead_signature");
-    sessionStorage.removeItem("agente_ia_last_completed_signature");
+    sessionStorage.removeItem(storageKey(CONFIG.completedSignatureStorageKey));
+  }
+
+  function hasChatStarted() {
+    return localStorage.getItem(storageKey(CONFIG.chatStartedStorageKey)) === "true";
+  }
+
+  function setChatStarted(value) {
+    const key = storageKey(CONFIG.chatStartedStorageKey);
+    if (value) localStorage.setItem(key, "true");
+    else localStorage.removeItem(key);
   }
 
   function getCachedMessages() {
     try {
       const raw = localStorage.getItem(storageKey(CONFIG.chatHistoryStorageKey));
-      const items = JSON.parse(raw || "[]");
-      return Array.isArray(items) ? items : [];
+      const messages = JSON.parse(raw || "[]");
+      return Array.isArray(messages) ? messages : [];
     } catch (_error) {
       return [];
     }
@@ -126,130 +229,39 @@
       }))
       .filter((item) => item.role && item.text)
       .slice(-80);
-    localStorage.setItem(storageKey(CONFIG.chatHistoryStorageKey), JSON.stringify(cleanItems));
+    localStorage.setItem(
+      storageKey(CONFIG.chatHistoryStorageKey),
+      JSON.stringify(cleanItems)
+    );
   }
 
   function cacheMessage(role, text) {
     setCachedMessages([...getCachedMessages(), { role, text }]);
   }
 
-  function buildLeadSignature(lead) {
-    if (!lead) return null;
+  function getAvailableChannels() {
+    if (Array.isArray(CONFIG.availableChannels) && CONFIG.availableChannels.length) {
+      return CONFIG.availableChannels;
+    }
 
-    return JSON.stringify({
-      conversation_id: lead?.conversation_id || "",
-      name: lead?.name || "",
-      email: lead?.email || "",
-      phone: lead?.phone || "",
-      service: lead?.interest_service || "",
-      budget: lead?.budget_range || "",
-      urgency: lead?.urgency || "",
-    });
+    const channels = [];
+    if (CONFIG.publicWhatsappNumber) channels.push("whatsapp");
+    if (CONFIG.supportEmail) channels.push("email");
+    return channels;
   }
 
-  function buildCompletedSignature(lead) {
-    if (!lead) return null;
-
-    return JSON.stringify({
-      conversation_id: lead?.conversation_id || "",
-      email: lead?.email || "",
-      phone: lead?.phone || "",
-      service: lead?.interest_service || "",
-      completed: true,
-    });
-  }
-
-  function pushLeadToDataLayer(lead) {
-    if (!lead) return;
-
-    const hasUsefulLeadData =
-      !!lead?.name ||
-      !!lead?.email ||
-      !!lead?.phone ||
-      !!lead?.interest_service ||
-      !!lead?.budget_range ||
-      !!lead?.urgency;
-
-    if (!hasUsefulLeadData) {
-      console.log("chatbot_lead no enviado: lead sin datos útiles", lead);
-      return;
+  function getFooterMessage() {
+    const channels = getAvailableChannels();
+    if (channels.includes("whatsapp") && channels.includes("email")) {
+      return "Si hace falta, podemos continuar por WhatsApp o por email.";
     }
-
-    const signature = buildLeadSignature(lead);
-    const lastSignature = sessionStorage.getItem("agente_ia_last_lead_signature");
-
-    if (signature && signature === lastSignature) {
-      console.log("chatbot_lead no enviado: firma duplicada", signature);
-      return;
+    if (channels.includes("whatsapp")) {
+      return "Si hace falta, podemos continuar por WhatsApp.";
     }
-
-    if (signature) {
-      sessionStorage.setItem("agente_ia_last_lead_signature", signature);
+    if (channels.includes("email")) {
+      return "Si hace falta, podemos continuar por email.";
     }
-
-    window.dataLayer = window.dataLayer || [];
-
-    const payload = {
-      event: "chatbot_lead",
-      conversation_id: lead?.conversation_id || getConversationId() || "",
-      lead_name: lead?.name || "",
-      lead_email: lead?.email || "",
-      lead_phone: lead?.phone || "",
-      lead_service: lead?.interest_service || "",
-      lead_budget: lead?.budget_range || "",
-      lead_urgency: lead?.urgency || "",
-      lead_score: lead?.lead_score || 0,
-      preferred_contact_channel: lead?.preferred_contact_channel || "",
-      interest_service: lead?.interest_service || "",
-      budget_range: lead?.budget_range || "",
-    };
-
-    window.dataLayer.push(payload);
-    console.log("dataLayer chatbot_lead enviado:", payload);
-  }
-
-  function pushChatCompletedToDataLayer(lead) {
-    if (!lead) {
-      console.log("chatbot_completed no enviado: lead nulo");
-      return;
-    }
-
-    const signature = buildCompletedSignature(lead);
-    const lastCompletedSignature = sessionStorage.getItem("agente_ia_last_completed_signature");
-
-    if (signature && signature === lastCompletedSignature) {
-      console.log("chatbot_completed no enviado: firma duplicada", signature);
-      return;
-    }
-
-    if (signature) {
-      sessionStorage.setItem("agente_ia_last_completed_signature", signature);
-    }
-
-    window.dataLayer = window.dataLayer || [];
-
-    const payload = {
-      event: "chatbot_completed",
-      conversation_id: lead?.conversation_id || getConversationId() || "",
-      lead_name: lead?.name || "",
-      lead_email: lead?.email || "",
-      lead_phone: lead?.phone || "",
-      lead_service: lead?.interest_service || "",
-      lead_budget: lead?.budget_range || "",
-      lead_urgency: lead?.urgency || "",
-      lead_score: lead?.lead_score || 0,
-      preferred_contact_channel: lead?.preferred_contact_channel || "",
-      interest_service: lead?.interest_service || "",
-      budget_range: lead?.budget_range || "",
-      chat_completed: true,
-    };
-
-    window.dataLayer.push(payload);
-    console.log("dataLayer chatbot_completed enviado:", payload);
-  }
-
-  function isChatCompleted(value) {
-    return value === true || value === "true" || value === 1 || value === "1";
+    return "Estamos listos para ayudarte desde este chat.";
   }
 
   function getInitialGreeting() {
@@ -259,7 +271,63 @@
     );
   }
 
-  // ====== FETCH ROBUSTO ======
+  function pushDataLayer(eventName, payload = {}) {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: eventName,
+      chat_brand: CONFIG.brandName,
+      chat_channel: CONFIG.channel,
+      conversation_id: getConversationId() || null,
+      external_user_id: getOrCreateExternalUserId(),
+      ...payload,
+    });
+  }
+
+  function buildCompletedSignature(payload) {
+    if (!payload) return null;
+
+    return JSON.stringify({
+      conversation_id: payload.conversation_id || "",
+      service: payload.interest_service || "",
+      budget: payload.budget_range || "",
+      phase: payload.phase || "",
+      mode: payload.mode || "",
+      completed: true,
+    });
+  }
+
+  function pushChatCompleted(payload = {}) {
+    const signature = buildCompletedSignature(payload);
+    const signatureKey = storageKey(CONFIG.completedSignatureStorageKey);
+    const lastSignature = sessionStorage.getItem(signatureKey);
+
+    if (signature && signature === lastSignature) return;
+    if (signature) {
+      sessionStorage.setItem(signatureKey, signature);
+    }
+
+    pushDataLayer("chatbot_completed", {
+      chat_completed: true,
+      interest_service: payload.interest_service ?? null,
+      budget_range: payload.budget_range ?? null,
+      preferred_contact_channel: payload.preferred_contact_channel ?? null,
+      conversation_mode: payload.mode ?? null,
+      conversation_phase: payload.phase ?? null,
+      lead_score: payload.lead_score ?? null,
+    });
+  }
+
+  function detectContactType(text) {
+    const str = String(text || "");
+    const hasEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(str);
+    const hasPhone = /(\+?\d{1,3}\s*)?(\d[\d\s().-]{7,}\d)/.test(str);
+
+    if (hasEmail && hasPhone) return "email_phone";
+    if (hasEmail) return "email";
+    if (hasPhone) return "phone";
+    return null;
+  }
+
   async function postMessage({ text, conversationId, externalUserId }) {
     if (!CONFIG.accountId && !CONFIG.accountSlug) {
       throw new Error(
@@ -274,6 +342,11 @@
     };
 
     if (conversationId) payload.conversation_id = conversationId;
+    // Primer mensaje: queda registrado qué aviso de privacidad vio la persona.
+    else if (CONFIG.privacyNotice) {
+      payload.privacy_notice = { text: CONFIG.privacyNotice, policy_url: CONFIG.privacyPolicyUrl };
+    }
+    if (Object.keys(attribution).length) payload.attribution = attribution;
     if (CONFIG.accountId) payload.account_id = CONFIG.accountId;
     else if (CONFIG.accountSlug) payload.account_slug = CONFIG.accountSlug;
 
@@ -294,7 +367,7 @@
       try {
         data = JSON.parse(rawText);
       } catch {
-        // no json
+        data = null;
       }
 
       if (!res.ok) {
@@ -304,15 +377,12 @@
         throw new Error(`${msg}${details}${extra}`);
       }
 
-      if (!data) {
-        throw new Error("Respuesta no JSON del backend.");
-      }
-
+      if (!data) throw new Error("Respuesta no JSON del backend.");
       return data;
     } catch (err) {
       if (err.name === "AbortError") {
         throw new Error(
-          "Timeout: el servidor tardó demasiado. Si usas Render Free, puede estar 'dormido'. Prueba de nuevo."
+          "Timeout: el servidor tardó demasiado. Si usas Render Free, puede estar dormido. Prueba de nuevo."
         );
       }
       throw err;
@@ -321,7 +391,6 @@
     }
   }
 
-  // ====== UI (Shadow DOM) ======
   const host = document.createElement("div");
   host.id = "agente-ia-widget-host";
   document.body.appendChild(host);
@@ -338,6 +407,12 @@
       box-shadow:0 10px 30px rgba(0,0,0,.18);
       display:inline-flex;gap:10px;align-items:center;
     }
+    .btn-logo,.brand-logo{
+      width:22px;height:22px;border-radius:999px;object-fit:cover;display:block;
+      background:rgba(255,255,255,.16);
+      flex:0 0 auto;
+    }
+    .brand-logo{width:30px;height:30px;}
     .bubble{position:fixed;bottom:18px;${side}:18px;z-index:999999;}
     .panel{
       position:fixed;bottom:78px;${side}:18px;width:360px;
@@ -350,7 +425,12 @@
       color:#111827;
     }
     .panel.open{display:flex;flex-direction:column;}
-    .header{padding:12px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:10px;background:${CONFIG.primaryColor};color:#fff;}
+    .header{
+      padding:12px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:10px;
+      background:${CONFIG.primaryColor};
+      color:#fff;
+    }
+    .brand-lockup{display:flex;align-items:center;gap:10px;}
     .title{display:flex;flex-direction:column;gap:2px;}
     .title strong{font-size:14px;}
     .title span{font-size:12px;color:rgba(255,255,255,.78);}
@@ -364,7 +444,7 @@
     .row.system{justify-content:center;}
     .bubble-msg{max-width:86%;padding:10px 12px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word;border:1px solid transparent;}
     .assistant .bubble-msg{background:#eef2ff;border-color:#dfe5ff;color:#111827;}
-    .user .bubble-msg{background:#111827;border-color:#0f172a;color:#fff;}
+    .user .bubble-msg{background:${CONFIG.primaryColor};border-color:${CONFIG.primaryColor};color:#fff;}
     .system .bubble-msg{background:#fff7ed;border-color:#fed7aa;color:#9a3412;text-align:center;max-width:92%;}
     .handoff-card{
       width:min(100%, 290px); background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46;
@@ -375,70 +455,94 @@
     .handoff-card span{font-size:12px; color:#065f46;}
     .handoff-link{
       display:inline-flex; align-items:center; justify-content:center; text-decoration:none;
-      border-radius:999px; padding:10px 12px; background:#10b981; color:#fff; font-weight:600;
+      border-radius:999px; padding:10px 12px; background:${CONFIG.accentColor}; color:#fff; font-weight:600;
     }
     .footer{border-top:1px solid #e5e7eb;padding:10px;background:#fff;display:grid;gap:8px;}
     .input{width:100%;resize:none;min-height:44px;max-height:110px;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;font:inherit;outline:none;}
-    .input:focus{border-color:#c7d2fe;box-shadow:0 0 0 4px rgba(99,102,241,.10);}
+    .input:focus{border-color:${CONFIG.accentColor};box-shadow:0 0 0 4px rgba(99,102,241,.10);}
     .actions{display:flex;justify-content:space-between;align-items:center;gap:10px;}
     .status{font-size:12px;color:#6b7280;}
     .send{border:1px solid transparent;border-radius:12px;padding:10px 12px;cursor:pointer;background:${CONFIG.primaryColor};color:#fff;font:inherit;}
     .send:disabled{opacity:.6;cursor:not-allowed;}
     .mini{font-size:12px;color:#6b7280;}
+    .privacy{padding:8px 12px;font-size:11px;line-height:1.4;color:#4b5563;background:#f9fafb;border-bottom:1px solid #e5e7eb;}
+    .privacy a{color:inherit;text-decoration:underline;}
     @media (max-width:420px){.panel{width:calc(100vw - 36px);height:72vh;}}
   `;
   shadow.appendChild(style);
+
+  const logoMarkup = CONFIG.logoUrl
+    ? `<img class="brand-logo" src="${CONFIG.logoUrl}" alt="${CONFIG.brandName}" />`
+    : "";
+  const buttonLogoMarkup = CONFIG.logoUrl
+    ? `<img class="btn-logo" src="${CONFIG.logoUrl}" alt="${CONFIG.brandName}" />`
+    : "";
 
   const container = document.createElement("div");
   container.innerHTML = `
     <div class="bubble">
       <button class="btn" id="openBtn" type="button" aria-label="Abrir chat">
-        <span>💬</span>
+        ${buttonLogoMarkup}
         <span>${CONFIG.brandName}</span>
       </button>
     </div>
 
     <div class="panel" id="panel" role="dialog" aria-label="Chat">
       <div class="header">
-        <div class="title">
-          <strong>${CONFIG.brandName}</strong>
-          <span>Asistente virtual</span>
+        <div class="brand-lockup">
+          ${logoMarkup}
+          <div class="title">
+            <strong>${CONFIG.brandName}</strong>
+            <span>Asistente virtual</span>
+          </div>
         </div>
         <div class="header-actions">
           <button class="icon-btn" id="newBtn" type="button" title="Nueva conversación">↻</button>
           <button class="icon-btn" id="closeBtn" type="button" title="Cerrar">✕</button>
         </div>
       </div>
-
-      <div class="messages" id="messages" aria-live="polite"></div>
-
+      <div class="privacy" id="privacy" hidden></div>
+      <div class="messages" id="messages"></div>
       <div class="footer">
-        <textarea class="input" id="input" rows="2" placeholder="Escribe tu mensaje..."></textarea>
+        <textarea id="input" class="input" placeholder="Escribe tu mensaje..." aria-label="Mensaje"></textarea>
         <div class="actions">
           <div class="status" id="status">Listo</div>
           <button class="send" id="sendBtn" type="button">Enviar</button>
         </div>
-        <div class="mini" id="mini"></div>
+        <div class="mini">Esta conversación puede continuar por WhatsApp si hace falta.</div>
       </div>
     </div>
   `;
   shadow.appendChild(container);
 
-  const el = {
-    openBtn: shadow.getElementById("openBtn"),
-    panel: shadow.getElementById("panel"),
-    closeBtn: shadow.getElementById("closeBtn"),
-    newBtn: shadow.getElementById("newBtn"),
-    messages: shadow.getElementById("messages"),
-    input: shadow.getElementById("input"),
-    sendBtn: shadow.getElementById("sendBtn"),
-    status: shadow.getElementById("status"),
-    mini: shadow.getElementById("mini"),
-  };
+  const $ = (id) => shadow.getElementById(id);
+  const openBtn = $("openBtn");
+  const panel = $("panel");
+  const closeBtn = $("closeBtn");
+  const newBtn = $("newBtn");
+  const messages = $("messages");
+  const input = $("input");
+  const status = $("status");
+  const sendBtn = $("sendBtn");
+  const mini = shadow.querySelector(".mini");
 
-  function setStatus(text, isError = false) {
-    el.status.textContent = text;
-    el.status.style.color = isError ? "#b91c1c" : "";
+  // Aviso de privacidad, visible antes de escribir el primer mensaje.
+  const privacy = $("privacy");
+  if (CONFIG.privacyNotice) {
+    privacy.textContent = CONFIG.privacyNotice + " ";
+    if (CONFIG.privacyPolicyUrl) {
+      const link = document.createElement("a");
+      link.href = CONFIG.privacyPolicyUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Política de privacidad";
+      privacy.appendChild(link);
+    }
+    privacy.hidden = false;
+  }
+
+  function setStatus(text) {
+    status.textContent = text || "Listo";
   }
 
   function fixMojibake(text) {
@@ -455,76 +559,32 @@
       .replace(/âœ•/g, "✕");
   }
 
-  function append(role, text, options = {}) {
+  function appendMessage(role, text, options = {}) {
     const row = document.createElement("div");
     row.className = `row ${role}`;
-
     const bubble = document.createElement("div");
     bubble.className = "bubble-msg";
     bubble.textContent = fixMojibake(text);
-
     row.appendChild(bubble);
-    el.messages.appendChild(row);
-    el.messages.scrollTop = el.messages.scrollHeight;
+    messages.appendChild(row);
+    messages.scrollTop = messages.scrollHeight;
     if (options.persist !== false) {
       cacheMessage(role, text);
     }
   }
 
-  function pushChatCompletedEvent(payload = {}) {
-    const signature = JSON.stringify({
-      conversation_id: payload.conversation_id || "",
-      service: payload.interest_service || "",
-      budget: payload.budget_range || "",
-      phase: payload.phase || "",
-      mode: payload.mode || "",
-      completed: true,
-    });
-
-    const lastCompletedSignature = sessionStorage.getItem(
-      "agente_ia_last_completed_signature"
-    );
-
-    if (signature && signature === lastCompletedSignature) {
-      return;
-    }
-
-    sessionStorage.setItem("agente_ia_last_completed_signature", signature);
-
-    window.dataLayer = window.dataLayer || [];
-    const completedPayload = {
-      event: "chatbot_completed",
-      conversation_id: payload.conversation_id || getConversationId() || "",
-      interest_service: payload.interest_service || "",
-      budget_range: payload.budget_range || "",
-      preferred_contact_channel: payload.preferred_contact_channel || "",
-      conversation_mode: payload.mode || "",
-      conversation_phase: payload.phase || "",
-      lead_score: payload.lead_score || 0,
-      chat_completed: true,
-    };
-
-    window.dataLayer.push(completedPayload);
-    console.log("dataLayer chatbot_completed enviado:", completedPayload);
-  }
-
-  function appendHandoffCard(handoff) {
-    if (!handoff?.whatsapp_url) return;
-
+  function appendHandoffCard(url, label = "Continuar por WhatsApp") {
     const row = document.createElement("div");
     row.className = "row assistant";
-
-    const card = document.createElement("div");
-    card.className = "handoff-card";
-    card.innerHTML = `
-      <strong>Seguir por WhatsApp</strong>
-      <span>Si te va bien, abre WhatsApp y seguimos por ahí con el contexto de este análisis.</span>
-      <a class="handoff-link" href="${handoff.whatsapp_url}" target="_blank" rel="noopener noreferrer">Continuar en WhatsApp</a>
+    row.innerHTML = `
+      <div class="handoff-card">
+        <strong>Seguimos por WhatsApp</strong>
+        <span>Si prefieres, continuamos por un canal más directo.</span>
+        <a class="handoff-link" href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>
+      </div>
     `;
-
-    row.appendChild(card);
-    el.messages.appendChild(row);
-    el.messages.scrollTop = el.messages.scrollHeight;
+    messages.appendChild(row);
+    messages.scrollTop = messages.scrollHeight;
   }
 
   function appendHandoffOptions(options = []) {
@@ -532,166 +592,144 @@
       .filter((option) => option?.url && option?.label)
       .slice(0, 2);
     if (!cleanOptions.length) return false;
-
-    for (const option of cleanOptions) {
-      const row = document.createElement("div");
-      row.className = "row assistant";
-      const card = document.createElement("div");
-      card.className = "handoff-card";
-      card.innerHTML = `
-        <strong>${option.title || "Seguir por otro canal"}</strong>
-        <span>${option.description || "Continuamos con el contexto de esta conversacion."}</span>
-        <a class="handoff-link" href="${option.url}" target="_blank" rel="noopener noreferrer">${option.label}</a>
-      `;
-      row.appendChild(card);
-      el.messages.appendChild(row);
-    }
-    el.messages.scrollTop = el.messages.scrollHeight;
+    cleanOptions.forEach((option) => appendHandoffCard(option.url, option.label));
     return true;
   }
 
-  function setLoading(isLoading) {
-    el.sendBtn.disabled = isLoading;
-    el.input.disabled = isLoading;
-    setStatus(isLoading ? "Enviando..." : "Listo");
-  }
-
-  function updateMini() {
-    const conv = getConversationId();
-    const ext = getOrCreateExternalUserId();
-    el.mini.textContent = `conversation_id: ${conv || "—"} | external_user_id: ${ext}`;
-  }
-
   function openPanel() {
-    el.panel.classList.add("open");
-    updateMini();
-
-    if (el.messages.childElementCount === 0) {
-      const cachedMessages = getCachedMessages();
-      if (cachedMessages.length) {
-        cachedMessages.forEach((item) => append(item.role, item.text, { persist: false }));
-        setTimeout(() => el.input.focus(), 50);
-        return;
-      }
-      append("assistant", getInitialGreeting());
-      setTimeout(() => el.input.focus(), 50);
-      return;
-      append("assistant", "Hola, soy el asistente de TMedia Global. ¿Cómo te puedo ayudar?");
-    }
-
-    setTimeout(() => el.input.focus(), 50);
+    panel.classList.add("open");
+    input.focus();
   }
 
   function closePanel() {
-    el.panel.classList.remove("open");
+    panel.classList.remove("open");
   }
 
-  async function send() {
-    const text = (el.input.value || "").trim();
+  async function ensureGreeting() {
+    if (mini) mini.textContent = getFooterMessage();
+    if (hasChatStarted() && messages.childElementCount === 0) {
+      const cachedMessages = getCachedMessages();
+      if (cachedMessages.length) {
+        messages.innerHTML = "";
+        cachedMessages.forEach((item) => {
+          appendMessage(item.role, item.text, { persist: false });
+        });
+        setStatus("Listo");
+        sendBtn.disabled = false;
+        return;
+      }
+    }
+    if (!hasChatStarted() || messages.childElementCount === 0) {
+      messages.innerHTML = "";
+      appendMessage("assistant", getInitialGreeting());
+      setChatStarted(true);
+      pushDataLayer("chat_started");
+    }
+    setStatus("Listo");
+    sendBtn.disabled = false;
+  }
+
+  async function handleSend() {
+    const text = String(input.value || "").trim();
     if (!text) return;
 
-    const externalUserId = getOrCreateExternalUserId();
-    const conversationId = getConversationId();
+    appendMessage("user", text);
+    input.value = "";
+    setStatus("Pensando...");
+    sendBtn.disabled = true;
 
-    append("user", text);
-    el.input.value = "";
-    setLoading(true);
-    updateMini();
+    const contactType = detectContactType(text);
+    if (contactType) {
+      pushDataLayer("contact_shared", { contact_type: contactType });
+    }
 
     try {
-      const data = await postMessage({ text, conversationId, externalUserId });
+      const data = await postMessage({
+        text,
+        conversationId: getConversationId(),
+        externalUserId: getOrCreateExternalUserId(),
+      });
 
-      console.log("Respuesta backend /messages:", data);
+      if (data?.conversation_id) setConversationId(data.conversation_id);
+      if (data?.reply) appendMessage("assistant", data.reply);
 
-      if (data?.conversation_id) {
-        setConversationId(data.conversation_id);
-      }
-
-      let normalizedLead = null;
-
-      if (data?.lead) {
-        normalizedLead = {
-          ...data.lead,
-          conversation_id: data.conversation_id || data.lead.conversation_id || "",
-        };
-
-        pushLeadToDataLayer(normalizedLead);
-      } else {
-        console.log("No viene data.lead en esta respuesta");
-      }
-
-      if (isChatCompleted(data?.chat_completed)) {
-        const completedPayload =
-          normalizedLead || {
-            conversation_id: data?.conversation_id || getConversationId() || "",
-            name: "",
-            email: "",
-            phone: "",
-            interest_service: "",
-            budget_range: "",
-            urgency: "",
-            lead_score: 0,
-          };
-
-        pushChatCompletedToDataLayer(completedPayload);
-        pushChatCompletedEvent({
-          conversation_id: data?.conversation_id || getConversationId() || "",
-          interest_service:
-            data?.lead?.interest_service ?? data?.interest_service ?? "",
-          budget_range:
-            data?.lead?.budget_range ?? data?.budget_range ?? "",
-          preferred_contact_channel:
-            data?.lead?.preferred_contact_channel ?? "",
-          lead_score: data?.lead?.lead_score ?? data?.lead_score ?? 0,
-          mode: data?.mode ?? "",
-          phase: data?.phase ?? "",
+      if (data?.lead_generated) {
+        pushDataLayer("lead_generated", {
+          interest_service: data?.interest_service ?? null,
+          budget_range: data?.budget_range ?? null,
+          inferred: data?.inferred ?? null,
         });
-      } else {
-        console.log("chat_completed no detectado como true:", data?.chat_completed);
       }
 
-      append("assistant", data?.reply || "Sin respuesta del backend.");
-      if (!appendHandoffOptions(data?.handoff_options || data?.handoff?.options || []) && data?.handoff?.whatsapp_url) {
-        appendHandoffCard(data.handoff);
+      if (data?.chat_completed) {
+        pushChatCompleted({
+          conversation_id: data?.conversation_id,
+          interest_service: data?.interest_service,
+          budget_range: data?.budget_range,
+          preferred_contact_channel: data?.preferred_contact_channel,
+          mode: data?.mode,
+          phase: data?.phase,
+          lead_score: data?.lead_score,
+        });
       }
-      updateMini();
-      setStatus("OK");
-    } catch (err) {
-      append("system", `Error: ${err.message}`);
-      setStatus("Error", true);
+
+      if (!appendHandoffOptions(data?.handoff_options || data?.handoff?.options || []) && data?.handoff_url) {
+        appendHandoffCard(
+          data.handoff_url,
+          data?.handoff_label || "Continuar por WhatsApp"
+        );
+      }
+    } catch (error) {
+      appendMessage("system", error.message || "No se pudo enviar el mensaje.");
     } finally {
-      setLoading(false);
+      setStatus("Listo");
+      sendBtn.disabled = false;
+      input.focus();
     }
   }
 
-  // EVENTS
-  el.openBtn.addEventListener("click", () => {
-    if (el.panel.classList.contains("open")) closePanel();
-    else openPanel();
+  // Respuestas que el equipo escribe desde el CRM: se recogen mientras la pestaña está visible.
+  const teamSeenKey = storageKey("agente_ia_team_seen_at");
+  async function pollTeamReplies() {
+    const conversationId = getConversationId();
+    if (!conversationId || document.hidden) return;
+    let after = "";
+    try { after = localStorage.getItem(teamSeenKey) || ""; } catch {}
+    const params = new URLSearchParams({
+      conversation_id: conversationId,
+      external_user_id: getOrCreateExternalUserId(),
+      after: after || new Date(Date.now() - 60_000).toISOString(),
+    });
+    try {
+      const res = await fetch(`${CONFIG.backendBaseUrl}/messages/updates?${params}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      for (const item of data?.messages || []) {
+        appendMessage("assistant", item.text);
+        try { localStorage.setItem(teamSeenKey, item.created_at); } catch {}
+      }
+    } catch {}
+  }
+  setInterval(pollTeamReplies, 8000);
+
+  openBtn.addEventListener("click", async () => {
+    openPanel();
+    if (mini) mini.textContent = getFooterMessage();
+    await ensureGreeting();
   });
-
-  el.closeBtn.addEventListener("click", closePanel);
-
-  el.newBtn.addEventListener("click", () => {
+  closeBtn.addEventListener("click", closePanel);
+  newBtn.addEventListener("click", async () => {
     clearConversationId();
-    el.messages.innerHTML = "";
-    append("system", "Nueva conversación iniciada.");
-    updateMini();
+    setChatStarted(false);
+    messages.innerHTML = "";
+    pushDataLayer("chat_reset");
+    await ensureGreeting();
   });
-
-  el.sendBtn.addEventListener("click", send);
-
-  el.input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send();
+  sendBtn.addEventListener("click", handleSend);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      handleSend();
     }
   });
-
-  el.input.addEventListener("input", () => {
-    el.input.style.height = "auto";
-    el.input.style.height = `${Math.min(el.input.scrollHeight, 110)}px`;
-  });
-
-  updateMini();
 })();
