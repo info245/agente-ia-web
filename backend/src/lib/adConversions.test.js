@@ -181,6 +181,7 @@ test("payload de Google: gclid, email/teléfono hasheados con consentimiento, va
   const [event] = body.events;
   assert.equal(event.transactionId, "sale-L1");
   assert.equal(event.eventTimestamp, "2026-10-20T10:00:00.000Z");
+  assert.equal(event.eventSource, "WEB");
   assert.deepEqual(event.adIdentifiers, { gclid: "Cj0KCQ-abc" });
   assert.deepEqual(event.userData.userIdentifiers, [
     { emailAddress: sha256Hex("anaperez@gmail.com") },

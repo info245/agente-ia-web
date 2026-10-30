@@ -441,6 +441,9 @@ export function buildGoogleIngestBody({ settings = {}, lead = {}, payload = {}, 
   const event = {
     transactionId: transactionIdFor(payload),
     eventTimestamp: new Date(payload.event_time || Date.now()).toISOString(),
+    // Obligatorio en Data Manager. WEB, como en el ejemplo oficial de conversiones offline:
+    // el clic y el lead nacen en la web aunque la cualificación o la venta pasen en el CRM.
+    eventSource: "WEB",
   };
   if (Object.keys(adIdentifiers).length) event.adIdentifiers = adIdentifiers;
   if (userIdentifiers.length) event.userData = { userIdentifiers };
