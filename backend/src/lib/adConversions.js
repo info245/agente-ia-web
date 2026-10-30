@@ -553,6 +553,19 @@ export async function getGoogleAccessToken({ refreshToken, clientId, clientSecre
   return data.access_token;
 }
 
+// El mensaje general de Google suele ser genérico («There was a problem with the request»);
+// el motivo real viene en details (ErrorInfo.reason y BadRequest.fieldViolations).
+function googleErrorReasons(error = {}) {
+  const reasons = [];
+  for (const detail of Array.isArray(error?.details) ? error.details : []) {
+    if (detail?.reason) reasons.push(clean(detail.reason, 120));
+    for (const violation of Array.isArray(detail?.fieldViolations) ? detail.fieldViolations : []) {
+      reasons.push(clean([violation.field, violation.reason, violation.description].filter(Boolean).join(": "), 300));
+    }
+  }
+  return [...new Set(reasons.filter(Boolean))].slice(0, 5);
+}
+
 export async function sendGoogleConversion({ body, accessToken, fetchImpl = fetch }) {
   let response;
   try {
@@ -566,7 +579,7 @@ export async function sendGoogleConversion({ body, accessToken, fetchImpl = fetc
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detail = data?.error?.message || `HTTP ${response.status}`;
+    const detail = [data?.error?.message || `HTTP ${response.status}`, ...googleErrorReasons(data?.error)].join(" · ");
     throw new ConversionSendError(`Google Ads rechazó la conversión: ${detail}`.slice(0, 1500), {
       retryable: isRetryableStatus(response.status),
       status: response.status,

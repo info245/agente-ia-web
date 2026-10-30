@@ -248,6 +248,19 @@ test("errores de envío: 5xx se reintenta, 400 no", async () => {
     sendGoogleConversion({ body: {}, accessToken: "t", fetchImpl: reply(400, { error: { message: "bad gclid" } }) }),
     (error) => error.retryable === false && /bad gclid/.test(error.message)
   );
+  const detailed = {
+    error: {
+      message: "There was a problem with the request.",
+      details: [
+        { "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "INVALID_ARGUMENT" },
+        { "@type": "type.googleapis.com/google.rpc.BadRequest", fieldViolations: [{ field: "events[0].consent", reason: "DMA_CONSENT_REQUIRED" }] },
+      ],
+    },
+  };
+  await assert.rejects(
+    sendGoogleConversion({ body: {}, accessToken: "t", fetchImpl: reply(400, detailed) }),
+    (error) => /INVALID_ARGUMENT/.test(error.message) && /events\[0\]\.consent: DMA_CONSENT_REQUIRED/.test(error.message)
+  );
   const ok = await sendGoogleConversion({ body: {}, accessToken: "t", fetchImpl: reply(200, { requestId: "r1" }) });
   assert.equal(ok.request_id, "r1");
 
