@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ConfigPending, useSession } from "@/components/app-shell";
 import { SettingsTabs } from "@/components/settings-tabs";
-import { api } from "@/lib/api";
+import { api, WIDGET_SRC } from "@/lib/api";
 import type { AppConfig } from "@/lib/types";
 
 type Brand = NonNullable<AppConfig["brand"]>;
@@ -95,10 +95,10 @@ export default function MarcaPage() {
             <input className="i" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" disabled={busy} onChange={(e) => uploadLogo(e.target.files?.[0])} />
           </label>
           <label className="f">Color principal
-            <input className="i" type="color" value={b.primary_color} onChange={(e) => set({ primary_color: e.target.value })} />
+            <input className="i" type="color" style={{ height: 40, padding: 4, cursor: "pointer" }} value={b.primary_color} onChange={(e) => set({ primary_color: e.target.value })} />
           </label>
           <label className="f">Color secundario
-            <input className="i" type="color" value={b.accent_color} onChange={(e) => set({ accent_color: e.target.value })} />
+            <input className="i" type="color" style={{ height: 40, padding: 4, cursor: "pointer" }} value={b.accent_color} onChange={(e) => set({ accent_color: e.target.value })} />
           </label>
           <label className="f">Tipografía
             <select className="i" value={b.font} onChange={(e) => set({ font: e.target.value })}>
@@ -110,7 +110,7 @@ export default function MarcaPage() {
         <label className="f" style={{ marginTop: 14 }}>Vista previa</label>
         <div style={{ borderRadius: 16, overflow: "hidden", border: "1px solid var(--line)", maxWidth: 560 }}>
           <div style={{ background: b.primary_color, color: "#fff", padding: "22px 24px", fontFamily }}>
-            {b.logo_url && <img src={b.logo_url} alt="" style={{ maxHeight: 44, maxWidth: 180, display: "block", marginBottom: 12 }} />}
+            {b.logo_url && <img src={b.logo_url.startsWith("/") ? new URL(b.logo_url, WIDGET_SRC).href : b.logo_url} alt="" style={{ maxHeight: 44, maxWidth: 180, display: "block", marginBottom: 12 }} />}
             <div style={{ fontSize: 12, opacity: 0.85, textTransform: "uppercase", letterSpacing: 1 }}>{b.name || "Tu negocio"}</div>
             <div style={{ fontSize: 24, fontWeight: 700 }}>Propuesta comercial</div>
           </div>
