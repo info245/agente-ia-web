@@ -142,3 +142,24 @@ test("etiquetas: recuento, renombrar sin duplicar y borrar", () => {
   assert.deepEqual(renameTag(["seo", "vip"], "seo", "vip"), ["vip"]);
   assert.deepEqual(renameTag(["seo", "vip"], "seo", ""), ["vip"]);
 });
+
+test("renderEmail aplica la marca y pinta tabla, columnas, cita y recuadro", () => {
+  const html = renderEmail({
+    blocks: [
+      { type: "table", columns: ["Plan", "Precio"], rows: [["Pro", "490 €"]] },
+      { type: "columns", items: [{ title: "SEO", text: "Más visitas" }, { title: "Ads", text: "Más leads" }] },
+      { type: "quote", text: "Duplicamos ventas", author: "Clínica Mar" },
+      { type: "callout", text: "Solo hasta el viernes" },
+      { type: "columns", items: [] },
+    ],
+    brand: { name: "Sancho", color: "#0f766e", logo: "https://x.com/l.png", legal_name: "Sancho SL", tax_id: "B1", font: "classic" },
+  });
+  assert.match(html, /background:#0f766e;padding:18px 28px/);
+  assert.match(html, /<img src="https:\/\/x.com\/l.png"/);
+  assert.match(html, /<th align="left" style="background:#0f766e/);
+  assert.match(html, /class="em-col" width="50%"/);
+  assert.match(html, /Duplicamos ventas/);
+  assert.match(html, /Solo hasta el viernes/);
+  assert.match(html, /Sancho SL · CIF B1/);
+  assert.match(html, /Georgia/);
+});

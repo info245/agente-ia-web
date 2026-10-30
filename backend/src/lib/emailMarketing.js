@@ -3,7 +3,7 @@
 import crypto from "node:crypto";
 import { emailBodyToHtml, emailBodyToText } from "./emailLinks.js";
 
-export const BLOCK_TYPES = ["heading", "text", "button", "image", "divider"];
+export const BLOCK_TYPES = ["heading", "text", "button", "image", "divider", "table", "columns", "quote", "callout"];
 export const STEP_TYPES = ["wait", "email", "whatsapp", "notify_team", "condition", "add_tag", "set_stage"];
 export const TRIGGER_TYPES = ["lead_created", "stage", "tag", "no_reply", "quote_sent"];
 // Seguimientos de una solicitud (no son publicidad): usan el permiso de contacto, no el de novedades.
@@ -108,18 +108,76 @@ export function sanitizeBlocks(blocks = []) {
       if (type === "divider") return { type };
       if (type === "button") return { type, text: clean(b.text, 80), url: isHttpUrl(b.url) ? clean(b.url) : "" };
       if (type === "image") return { type, url: isHttpUrl(b.url) ? clean(b.url) : "", alt: clean(b.alt, 200), link: isHttpUrl(b.link) ? clean(b.link) : "" };
+      if (type === "table") {
+        const columns = (Array.isArray(b.columns) ? b.columns : []).slice(0, 4).map((c) => clean(c, 60));
+        const rows = (Array.isArray(b.rows) ? b.rows : []).slice(0, 20).map((r) => columns.map((_, i) => clean(Array.isArray(r) ? r[i] : "", 300)));
+        return columns.length ? { type, columns, rows } : null;
+      }
+      if (type === "columns") {
+        const items = (Array.isArray(b.items) ? b.items : []).slice(0, 3).map((it) => ({
+          title: clean(it?.title, 120),
+          text: clean(it?.text, 1000),
+          image: isHttpUrl(it?.image) ? clean(it.image) : "",
+        }));
+        return items.length ? { type, items } : null;
+      }
+      if (type === "quote") return { type, text: clean(b.text, 1000), author: clean(b.author, 120) };
       return { type, text: clean(b.text, type === "heading" ? 200 : 10000) };
     })
     .filter(Boolean);
 }
 
+// Tipografías de Configuración → Marca con las que aguantan todos los gestores de correo.
+const EMAIL_FONTS = {
+  modern: { body: "Arial,Helvetica,sans-serif", heading: "Arial,Helvetica,sans-serif" },
+  classic: { body: "Georgia,'Times New Roman',serif", heading: "Georgia,'Times New Roman',serif" },
+  elegant: { body: "Arial,Helvetica,sans-serif", heading: "Georgia,'Times New Roman',serif" },
+};
+const hex = (v, fallback) => (/^#[0-9a-f]{6}$/i.test(v || "") ? v : fallback);
+// Mezcla un color con blanco (fondos suaves): sin color-mix, que muchos correos no entienden.
+function tint(color, amount) {
+  const n = parseInt(color.slice(1), 16);
+  const mix = (c) => Math.round(c + (255 - c) * (1 - amount)).toString(16).padStart(2, "0");
+  return `#${mix(n >> 16)}${mix((n >> 8) & 255)}${mix(n & 255)}`;
+}
+
 // HTML del email. mapUrl permite cambiar cada enlace por su versión con seguimiento de clics.
 export function renderEmail({ blocks = [], subject = "", preheader = "", lead = {}, brand = {}, unsubscribeUrl = "", pixelUrl = "", mapUrl = (u) => u } = {}) {
-  const color = /^#[0-9a-f]{6}$/i.test(brand.color || "") ? brand.color : "#6d41f3";
+  const color = hex(brand.color, "#6d41f3");
+  const accent = hex(brand.accent, color);
+  const fonts = EMAIL_FONTS[brand.font] || EMAIL_FONTS.modern;
+  const p = (text) => escape(personalize(text, lead));
   const body = sanitizeBlocks(blocks)
     .map((b) => {
-      if (b.type === "heading") return `<h1 style="font-size:24px;line-height:1.25;margin:0 0 16px;color:#1d1b26;">${escape(personalize(b.text, lead))}</h1>`;
+      if (b.type === "heading") return `<h1 style="font-family:${fonts.heading};font-size:24px;line-height:1.25;margin:0 0 16px;color:#1d1b26;">${p(b.text)}</h1>`;
       if (b.type === "text") return `<div style="font-size:16px;line-height:1.6;margin:0 0 16px;color:#33313d;">${emailBodyToHtml(personalize(b.text, lead), { mapUrl })}</div>`;
+      if (b.type === "table") {
+        const head = b.columns.map((c) => `<th align="left" style="background:${color};color:#ffffff;font-size:14px;padding:10px 12px;">${p(c)}</th>`).join("");
+        const rows = b.rows
+          .map((r, ri) => `<tr>${r.map((c, ci) => `<td style="font-size:14px;line-height:1.5;padding:10px 12px;border-top:1px solid #ebe9f1;background:${ri % 2 ? tint(color, 0.05) : "#ffffff"};${ci ? "" : `font-weight:700;color:${color};`}">${p(c)}</td>`).join("")}</tr>`)
+          .join("");
+        return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border:1px solid #ebe9f1;border-radius:10px;overflow:hidden;margin:0 0 20px;"><tr>${head}</tr>${rows}</table>`;
+      }
+      if (b.type === "columns") {
+        const width = Math.floor(100 / b.items.length);
+        const cells = b.items
+          .map(
+            (it) => `<td class="em-col" width="${width}%" valign="top" style="padding:0 8px 16px;">
+${it.image ? `<img src="${escape(it.image)}" alt="" width="100%" style="width:100%;height:auto;border:0;display:block;border-radius:8px;margin:0 0 10px;" />` : ""}
+${it.title ? `<div style="font-family:${fonts.heading};font-size:17px;font-weight:700;color:#1d1b26;margin:0 0 6px;">${p(it.title)}</div>` : ""}
+<div style="font-size:15px;line-height:1.55;color:#55525f;">${emailBodyToHtml(personalize(it.text, lead), { mapUrl })}</div></td>`
+          )
+          .join("");
+        return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px;"><tr>${cells}</tr></table>`;
+      }
+      if (b.type === "quote") {
+        return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr><td style="border-left:4px solid ${accent};background:${tint(accent, 0.08)};padding:16px 20px;border-radius:0 10px 10px 0;">
+<div style="font-family:${fonts.heading};font-size:17px;line-height:1.5;color:#1d1b26;font-style:italic;">“${p(b.text)}”</div>
+${b.author ? `<div style="font-size:14px;font-weight:700;color:${accent};margin-top:8px;">${p(b.author)}</div>` : ""}</td></tr></table>`;
+      }
+      if (b.type === "callout") {
+        return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr><td style="background:${tint(color, 0.08)};border:1px solid ${tint(color, 0.3)};border-radius:12px;padding:18px 20px;font-size:16px;line-height:1.6;color:#1d1b26;">${emailBodyToHtml(personalize(b.text, lead), { mapUrl })}</td></tr></table>`;
+      }
       if (b.type === "button")
         return b.url
           ? `<p style="margin:8px 0 24px;"><a href="${escape(mapUrl(b.url))}" style="display:inline-block;background:${color};color:#ffffff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px;">${escape(personalize(b.text || "Ver más", lead))}</a></p>`
@@ -133,15 +191,19 @@ export function renderEmail({ blocks = [], subject = "", preheader = "", lead = 
     })
     .join("\n");
   const footer = [
-    brand.name ? escape(brand.name) : "",
+    escape(brand.legal_name || brand.name || ""),
+    brand.tax_id ? `CIF ${escape(brand.tax_id)}` : "",
     brand.address ? escape(brand.address) : "",
     unsubscribeUrl ? `<a href="${escape(unsubscribeUrl)}" style="color:#6b6878;">Darme de baja</a>` : "",
   ].filter(Boolean).join(" · ");
-  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(subject)}</title></head>
-<body style="margin:0;padding:0;background:#f5f4f8;font-family:Arial,Helvetica,sans-serif;">
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(subject)}</title>
+<style>@media (max-width:560px){.em-col{display:block!important;width:100%!important;}}</style></head>
+<body style="margin:0;padding:0;background:#f5f4f8;font-family:${fonts.body};">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escape(personalize(preheader, lead))}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f4f8;"><tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;"><tr><td style="padding:32px 28px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;">
+<tr><td style="background:${color};padding:${brand.logo ? "18px 28px" : "3px"};">${brand.logo ? `<img src="${escape(brand.logo)}" alt="${escape(brand.name || "")}" height="36" style="height:36px;width:auto;max-width:200px;border:0;display:block;" />` : ""}</td></tr>
+<tr><td style="padding:28px 28px 32px;">
 ${body}
 </td></tr></table>
 <p style="font-size:12px;color:#6b6878;margin:16px 0 0;">${footer}</p>
@@ -155,6 +217,9 @@ export function renderEmailText({ blocks = [], lead = {}, unsubscribeUrl = "" } 
     if (b.type === "divider") return "—";
     if (b.type === "button") return b.url ? `${personalize(b.text || "Ver más", lead)}: ${b.url}` : "";
     if (b.type === "image") return b.link ? b.link : "";
+    if (b.type === "table") return [b.columns, ...b.rows].map((r) => r.map((c) => personalize(c, lead)).join(" | ")).join("\n");
+    if (b.type === "columns") return b.items.map((it) => [personalize(it.title, lead), emailBodyToText(personalize(it.text, lead))].filter(Boolean).join("\n")).join("\n\n");
+    if (b.type === "quote") return `“${personalize(b.text, lead)}”${b.author ? ` — ${personalize(b.author, lead)}` : ""}`;
     return emailBodyToText(personalize(b.text, lead));
   });
   if (unsubscribeUrl) parts.push(`Darme de baja: ${unsubscribeUrl}`);

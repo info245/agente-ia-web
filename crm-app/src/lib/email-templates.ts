@@ -23,7 +23,14 @@ export const STARTER_TEMPLATES: EmailTemplate[] = [
     blocks: [
       { type: "heading", text: "¡Hola {nombre|}! Encantados de conocerte" },
       { type: "text", text: "Gracias por interesarte en {servicio|nuestros servicios}. Somos un equipo pequeño y cercano: aquí tienes cómo trabajamos y qué puedes esperar de nosotros." },
-      { type: "text", text: "1. Analizamos tu caso sin compromiso.\n2. Te proponemos un plan claro, con precio cerrado.\n3. Te acompañamos y medimos resultados cada mes." },
+      {
+        type: "columns",
+        items: [
+          { title: "1. Analizamos", text: "Estudiamos tu caso sin compromiso." },
+          { title: "2. Proponemos", text: "Un plan claro, con precio cerrado." },
+          { title: "3. Medimos", text: "Te acompañamos y medimos cada mes." },
+        ],
+      },
       { type: "button", text: "Reservar una llamada", url: "https://" },
       { type: "text", text: "Si tienes cualquier duda, responde a este email y te contestamos personalmente." },
     ],
@@ -58,8 +65,8 @@ export const STARTER_TEMPLATES: EmailTemplate[] = [
       { type: "image", url: "", alt: "Oferta" },
       { type: "heading", text: "Una oferta pensada para ti" },
       { type: "text", text: "Durante esta semana, {servicio|nuestro servicio} con condiciones especiales para clientes como tú." },
+      { type: "callout", text: "-20 % el primer mes si te apuntas antes del viernes. Plazas limitadas." },
       { type: "button", text: "Quiero aprovecharla", url: "https://" },
-      { type: "text", text: "Válido hasta el viernes. Plazas limitadas." },
     ],
   },
   {
@@ -72,8 +79,23 @@ export const STARTER_TEMPLATES: EmailTemplate[] = [
     blocks: [
       { type: "heading", text: "Te invitamos" },
       { type: "text", text: "Hola {nombre|}, organizamos una sesión gratuita para contarte cómo mejorar tus resultados." },
-      { type: "text", text: "Fecha: día, mes\nHora: 10:00 (hora de Madrid)\nDuración: 45 minutos, online" },
+      { type: "table", columns: ["", "Detalle"], rows: [["Fecha", "Día, mes"], ["Hora", "10:00 (hora de Madrid)"], ["Duración", "45 minutos, online"]] },
       { type: "button", text: "Apuntarme", url: "https://" },
+    ],
+  },
+  {
+    id: "builtin-case",
+    builtin: true,
+    name: "Caso de éxito",
+    description: "Resultados de un cliente",
+    subject: "Cómo {servicio|lo conseguimos} para un cliente como tú",
+    preheader: "Resultados reales en pocos meses",
+    blocks: [
+      { type: "heading", text: "De 0 a 40 clientes al mes" },
+      { type: "text", text: "Hola {nombre|}, te contamos cómo ayudamos a un negocio parecido al tuyo." },
+      { type: "table", columns: ["", "Antes", "Después"], rows: [["Visitas al mes", "800", "4.200"], ["Contactos", "3", "40"], ["Coste por cliente", "120 €", "35 €"]] },
+      { type: "quote", text: "En tres meses recuperamos la inversión y ya no dependemos del boca a boca.", author: "Nombre, empresa" },
+      { type: "button", text: "Quiero algo así", url: "https://" },
     ],
   },
   {
