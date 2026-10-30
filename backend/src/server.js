@@ -58,6 +58,7 @@ import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParam
 import { emailBodyToHtml, emailBodyToText } from "./lib/emailLinks.js";
 import { renderQuoteSignHtml, validateAcceptance } from "./lib/quoteSignature.js";
 import { listQuoteTemplates, saveQuoteTemplate, deleteQuoteTemplate } from "./lib/quoteTemplatesStore.js";
+import { googleLeadFormKey, isValidGoogleLeadFormKey, mapGoogleLeadFormPayload } from "./lib/googleLeadForm.js";
 import { addSubscription, countSubscriptions, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
 import { buildChannelHealth } from "./lib/channelHealth.js";
 import { createEmailMarketing, EMAIL_JOB_TYPE } from "./emailMarketingRoutes.js";
@@ -5947,7 +5948,7 @@ async function summarizeFormLeadRequest(intake = {}) {
   }
 }
 
-app.post("/api/integrations/external-lead", async (req, res) => {
+async function handleExternalLead(req, res) {
   let intakeEvent = null;
   try {
     const parsedIntake = parseExternalLeadIntake(req.body || {});
@@ -5966,7 +5967,7 @@ app.post("/api/integrations/external-lead", async (req, res) => {
         ...(parsedIntake.value.custom_fields || {}),
       },
     };
-    if (!isAuthorizedIntegrationRequest(req)) {
+    if (!req.integrationTrusted && !isAuthorizedIntegrationRequest(req)) {
       return res.status(401).json({ ok: false, error: "Unauthorized integration request" });
     }
     const { account, accountConfig } = await resolveExternalLeadAccount(req, payload, {
@@ -6400,6 +6401,42 @@ app.post("/api/integrations/external-lead", async (req, res) => {
       ok: false,
       error: "No se pudo registrar la solicitud. Revisaremos la configuracion de la integracion.",
     });
+  }
+}
+
+app.post("/api/integrations/external-lead", handleExternalLead);
+
+// Webhook nativo de los formularios de cliente potencial de Google Ads (recurso de formulario → Webhook).
+app.post("/webhooks/google-ads-lead/:account", async (req, res) => {
+  try {
+    const accounts = await listAccounts();
+    const ref = String(req.params.account || "").trim().toLowerCase();
+    const account = accounts.find((item) => item.id === ref || String(item.slug || "").toLowerCase() === ref);
+    if (!account || !isValidGoogleLeadFormKey(INTEGRATIONS_SECRET, account.id, req.body?.google_key)) {
+      return res.status(401).json({ ok: false, error: "Clave del webhook no válida." });
+    }
+    req.body = { ...mapGoogleLeadFormPayload(req.body || {}), account_id: account.id };
+    req.integrationTrusted = true;
+    return handleExternalLead(req, res);
+  } catch (error) {
+    console.log("google lead form webhook error", error?.message || error);
+    return res.status(500).json({ ok: false, error: "No se pudo registrar el lead." });
+  }
+});
+
+app.get("/api/crm/integrations/google-lead-form", requireCrmAuth("super_admin"), async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const key = googleLeadFormKey(INTEGRATIONS_SECRET, account.id);
+    if (!key) return res.json({ ok: true, available: false });
+    return res.json({
+      ok: true,
+      available: true,
+      webhook_url: `${buildPublicBaseUrl(req)}/webhooks/google-ads-lead/${account.slug || account.id}`,
+      key,
+    });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
   }
 });
 
