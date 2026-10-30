@@ -91,7 +91,17 @@ export type MessageTemplate = { channel?: string; label?: string; subject?: stri
 
 export type AppConfig = {
   agent_engine?: "legacy" | "v2";
-  brand?: { name?: string; website_url?: string; primary_color?: string };
+  brand?: {
+    name?: string;
+    website_url?: string;
+    logo_url?: string;
+    primary_color?: string;
+    accent_color?: string;
+    font?: string;
+    legal_name?: string;
+    tax_id?: string;
+    address?: string;
+  };
   agent?: {
     tone?: string;
     initial_message?: string;
