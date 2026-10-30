@@ -1,8 +1,9 @@
 // Plantillas de propuesta por servicio (sql/022): partidas, IVA, cobro y textos ya preparados.
 import { supabase } from "./supabase.js";
+import { sanitizeQuoteBlocks } from "./quoteBlocks.js";
 
 const clean = (v, max = 4000) => String(v ?? "").trim().slice(0, max);
-const FIELDS = "id, name, service, title, billing_type, tax_rate, items, summary, scope, body, assumptions, updated_at";
+const FIELDS = "id, name, service, title, billing_type, tax_rate, items, summary, scope, body, assumptions, blocks, updated_at";
 
 function sanitizeItems(items = []) {
   return (Array.isArray(items) ? items : [])
@@ -14,7 +15,7 @@ function sanitizeItems(items = []) {
 async function run(query) {
   const { data, error } = await query;
   if (error) {
-    if (/quote_templates|does not exist|schema cache/i.test(String(error.message))) throw new Error("Falta aplicar la migración sql/022 en Supabase.");
+    if (/quote_templates|blocks|does not exist|schema cache/i.test(String(error.message))) throw new Error("Falta aplicar las migraciones sql/022 y sql/025 en Supabase.");
     throw error;
   }
   return data;
@@ -36,6 +37,7 @@ export async function saveQuoteTemplate(accountId, input = {}) {
     scope: clean(input.scope),
     body: clean(input.body),
     assumptions: clean(input.assumptions),
+    blocks: sanitizeQuoteBlocks(input.blocks),
     updated_at: new Date().toISOString(),
   };
   if (input.id) return run(supabase.from("quote_templates").update(row).eq("account_id", accountId).eq("id", input.id).select(FIELDS).single());

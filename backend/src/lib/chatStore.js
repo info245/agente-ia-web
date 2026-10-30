@@ -1,4 +1,5 @@
 import { supabase } from "./supabase.js";
+import { sanitizeQuoteBlocks } from "./quoteBlocks.js";
 import { normalizeTags } from "./emailMarketing.js";
 import { eraseLead } from "./privacy.js";
 
@@ -1163,6 +1164,7 @@ export async function upsertLatestQuoteForLead(lead = {}, quote = {}) {
       billing_label: clean(quote.billing_label),
       tax_rate: Number.isFinite(Number(quote.tax_rate)) ? Number(quote.tax_rate) : 0,
       items: cleanQuoteItems(quote.items),
+      blocks: sanitizeQuoteBlocks(quote.blocks),
     },
     html_snapshot: clean(quote.html_snapshot),
     sent_via: clean(quote.sent_via),

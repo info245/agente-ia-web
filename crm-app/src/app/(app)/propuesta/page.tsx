@@ -6,7 +6,8 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "@/components/app-shell";
 import { api } from "@/lib/api";
 import { leadName } from "@/lib/format";
-import type { Offer, QuoteTemplate } from "@/lib/types";
+import type { Offer, QuoteBlock, QuoteTemplate } from "@/lib/types";
+import { QuoteBlocksEditor } from "@/components/quote-blocks-editor";
 
 type Item = { concept: string; quantity: number; unit_price: number };
 type Acceptance = { name: string; nif?: string | null; signature?: string; at?: string; ip?: string; version?: number };
@@ -22,12 +23,12 @@ type Quote = {
   acceptance?: Acceptance | null;
   content_json?: {
     body?: string; summary?: string; scope?: string; assumptions?: string;
-    billing_type?: string; billing_label?: string; tax_rate?: number; items?: Item[];
+    billing_type?: string; billing_label?: string; tax_rate?: number; items?: Item[]; blocks?: QuoteBlock[];
   };
 };
 type Draft = {
   title: string; billing_type: string; billing_label: string; tax_rate: number;
-  summary: string; scope: string; body: string; assumptions: string; items: Item[];
+  summary: string; scope: string; body: string; assumptions: string; items: Item[]; blocks: QuoteBlock[];
 };
 
 const STATUS: Record<string, [string, string]> = { draft: ["Borrador", "p-muted"], sent: ["Enviada", "p-warn"], accepted: ["Aceptada", "p-good"], rejected: ["Rechazada", "p-muted"] };
@@ -53,12 +54,18 @@ function planCatalog(services: Record<string, Offer> = {}): Plan[] {
   });
 }
 
+// Rellena {nombre}, {empresa} y {servicio} también dentro de los bloques de la plantilla.
+function fillBlock(b: QuoteBlock, fill: (text: string) => string): QuoteBlock {
+  return JSON.parse(JSON.stringify(b), (_k, v) => (typeof v === "string" ? fill(v) : v));
+}
+
 function fromQuote(q: Quote | null): Draft {
   const c = q?.content_json || {};
   return {
     title: q?.title || "", billing_type: c.billing_type || "monthly", billing_label: c.billing_label || "",
     tax_rate: c.tax_rate ?? 21, summary: c.summary || "", scope: c.scope || "", body: c.body || "",
     assumptions: c.assumptions || "", items: (c.items || []).map((i) => ({ concept: i.concept || "", quantity: Number(i.quantity) || 1, unit_price: Number(i.unit_price) || 0 })),
+    blocks: c.blocks || [],
   };
 }
 
@@ -156,7 +163,7 @@ export default function PropuestaPage() {
     if (d.items.length && !window.confirm(`¿Sustituir el contenido por la plantilla «${t.name}»?`)) return;
     const first = String(lead?.name || "").split(/\s+/)[0];
     const fill = (text: string) => text.replace(/\{nombre\}/g, first).replace(/\{empresa\}/g, lead?.company_name || "tu negocio").replace(/\{servicio\}/g, lead?.interest_service || t.service);
-    set({ title: fill(t.title), billing_type: t.billing_type, tax_rate: Number(t.tax_rate), items: t.items.map((i) => ({ ...i })), summary: fill(t.summary), scope: fill(t.scope), body: fill(t.body), assumptions: fill(t.assumptions) });
+    set({ title: fill(t.title), billing_type: t.billing_type, tax_rate: Number(t.tax_rate), items: t.items.map((i) => ({ ...i })), summary: fill(t.summary), scope: fill(t.scope), body: fill(t.body), assumptions: fill(t.assumptions), blocks: (t.blocks || []).map((b) => fillBlock(b, fill)) });
   };
 
   async function saveTemplate() {
@@ -313,6 +320,12 @@ export default function PropuestaPage() {
         <p style={{ textAlign: "right", margin: "12px 0 0" }}>
           Subtotal {money(subtotal)} · IVA {money(tax)} · <b>Total {money(subtotal + tax)}{d.billing_type === "monthly" ? " / mes" : ""}</b>
         </p>
+      </div>
+
+      <div className="card block">
+        <h2>Bloques</h2>
+        <p className="hint">Tablas, comparativa de packs, fases, imágenes, texto o testimonios. Salen en la propuesta entre «Qué incluye» y las partidas.</p>
+        <QuoteBlocksEditor blocks={d.blocks} onChange={(blocks) => set({ blocks })} />
       </div>
 
       <div className="card block">

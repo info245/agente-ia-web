@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { QuoteBlocksEditor } from "@/components/quote-blocks-editor";
 import type { QuoteTemplate } from "@/lib/types";
 
 type Row = {
@@ -115,6 +116,8 @@ function Templates() {
   const [items, setItems] = useState<QuoteTemplate[] | null>(null);
   const [editing, setEditing] = useState<QuoteTemplate | null>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [importText, setImportText] = useState("");
+  const [importing, setImporting] = useState(false);
   const load = useCallback(() => {
     api<{ templates: QuoteTemplate[] }>("/crm/quote-templates").then((r) => setItems(r.templates)).catch((e) => setMsg({ kind: "error", text: (e as Error).message }));
   }, []);
@@ -130,6 +133,32 @@ function Templates() {
     } catch (err) {
       setMsg({ kind: "error", text: (err as Error).message });
     }
+  };
+  // Documento de Claude/ChatGPT (PDF, texto, Markdown o HTML) → borrador de plantilla para revisar antes de guardar.
+  const importDoc = async (file?: File) => {
+    if (!importText.trim() && !file) return;
+    setImporting(true);
+    setMsg(null);
+    try {
+      const body: Record<string, string> = { text: importText };
+      if (file) {
+        if (file.size > 3.5 * 1024 * 1024) throw new Error("El archivo no puede pasar de 3,5 MB.");
+        body.file_name = file.name;
+        body.data_url = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result));
+          r.onerror = reject;
+          r.readAsDataURL(file);
+        });
+      }
+      const r = await api<{ template: QuoteTemplate }>("/crm/quote-templates/import", { method: "POST", body });
+      setImportText("");
+      setEditing(r.template);
+      setMsg({ kind: "ok", text: "Plantilla importada. Revísala y pulsa «Guardar plantilla»." });
+    } catch (err) {
+      setMsg({ kind: "error", text: (err as Error).message });
+    }
+    setImporting(false);
   };
   const remove = async (t: QuoteTemplate) => {
     if (!window.confirm(`¿Borrar la plantilla «${t.name}»? Las propuestas hechas con ella no cambian.`)) return;
@@ -166,6 +195,8 @@ function Templates() {
         ))}
         <button className="btn small" onClick={() => set({ items: [...e.items, { concept: "", quantity: 1, unit_price: 0 }] })}>+ Añadir partida</button>
         <p style={{ textAlign: "right", margin: "10px 0 0" }}>Subtotal {money(subtotal)} · <b>Total {money(subtotal * (1 + (Number(e.tax_rate) || 0) / 100))}{e.billing_type === "monthly" ? " / mes" : ""}</b></p>
+        <label className="f">Bloques (tablas, packs, fases, imágenes…)</label>
+        <QuoteBlocksEditor blocks={e.blocks || []} onChange={(blocks) => set({ blocks })} />
         <label className="f" htmlFor="t-body">Mensaje para el cliente</label>
         <textarea id="t-body" className="i" rows={3} value={e.body} onChange={(x) => set({ body: x.target.value })} />
         <label className="f" htmlFor="t-scope">Qué incluye</label>
@@ -189,6 +220,20 @@ function Templates() {
         <button className="btn primary small" onClick={() => setEditing({ ...BLANK, items: BLANK.items.map((i) => ({ ...i })) })}>+ Nueva plantilla</button>
       </div>
       <p className="hint">Partidas, precios, IVA y textos ya preparados. En cada propuesta eliges una y se rellena sola con los datos del contacto.</p>
+      <details style={{ margin: "10px 0" }}>
+        <summary><b>Importar desde Claude, ChatGPT o un documento</b></summary>
+        <p className="hint" style={{ marginTop: 8 }}>
+          Pídele a Claude o ChatGPT tu propuesta tipo (con packs, fases, tablas…) y pega aquí el texto, o sube el PDF, Markdown o HTML que te genere. La IA la convierte en una plantilla con bloques y tu marca; la revisas antes de guardarla.
+        </p>
+        <textarea className="i" rows={5} aria-label="Texto de la propuesta" placeholder="Pega aquí el texto de la propuesta…" value={importText} onChange={(x) => setImportText(x.target.value)} disabled={importing} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <button className="btn primary small" disabled={importing || !importText.trim()} onClick={() => importDoc()}>{importing ? "Convirtiendo…" : "Convertir texto"}</button>
+          <label className="btn small" style={{ cursor: importing ? "wait" : "pointer" }}>
+            Subir PDF, MD o HTML
+            <input type="file" hidden accept=".pdf,.txt,.md,.markdown,.html,.htm" disabled={importing} onChange={(x) => { importDoc(x.target.files?.[0]); x.target.value = ""; }} />
+          </label>
+        </div>
+      </details>
       {msg && <p className={`alert ${msg.kind}`}>{msg.text}</p>}
       {items === null ? <p className="loading">Cargando…</p> : items.length === 0 ? <p className="empty">Aún no tienes plantillas. Crea una por cada servicio que vendas (por ejemplo, «Google Ads mensual» o «Auditoría SEO»).</p> : (
         <table className="table">
