@@ -317,7 +317,7 @@ ${QUOTE_BLOCKS_CSS}
       vertical-align: top;
     }
     th {
-      background: linear-gradient(180deg, #f3e7ff, #ead8ff);
+      background: var(--accent-soft);
     }
     .num {
       text-align: right;

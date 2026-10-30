@@ -82,10 +82,12 @@ export function renderQuoteBlocksHtml(blocks) {
 
 // Usa las variables de color de la propuesta (--accent, --accent-soft, --line…).
 export const QUOTE_BLOCKS_CSS = `
-    .qb-scroll { overflow-x: auto; }
+    .qb-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; }
     .qb-table { display: table !important; width: 100%; border-collapse: collapse; }
-    .qb-table th { background: var(--accent-soft); color: var(--accent-ink); text-align: left; }
-    .qb-table th, .qb-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    .qb .qb-table th { background: var(--accent); color: #fff; font-weight: 700; font-size: 0.9rem; letter-spacing: 0.02em; border: 0; padding: 12px 16px; }
+    .qb .qb-table td { padding: 12px 16px; border: 0; border-top: 1px solid var(--line); }
+    .qb .qb-table td:first-child { font-weight: 700; color: var(--accent-ink); white-space: nowrap; }
+    .qb .qb-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--accent) 4%, #fff); }
     .qb-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
     .qb-pack { position: relative; border: 1px solid var(--line); border-radius: 18px; padding: 20px; background: #fff; }
     .qb-pack.is-top { border: 2px solid var(--accent); box-shadow: 0 10px 30px color-mix(in srgb, var(--accent) 18%, transparent); }
@@ -94,10 +96,11 @@ export const QUOTE_BLOCKS_CSS = `
     .qb-pack ul { margin: 0; padding-left: 18px; color: var(--muted); }
     .qb-pack li { margin: 4px 0; }
     .qb-badge { position: absolute; top: -11px; left: 20px; background: var(--accent); color: #fff; font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
-    .qb-steps { list-style: none; counter-reset: qb; margin: 0; padding: 0; display: grid; gap: 10px; }
-    .qb-steps li { counter-increment: qb; display: grid; grid-template-columns: 34px 1fr; column-gap: 12px; align-items: start; }
-    .qb-steps li::before { content: counter(qb); grid-row: span 2; width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; }
-    .qb-steps span { color: var(--muted); }
+    .qb-steps { list-style: none; counter-reset: qb; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+    .qb-steps li { counter-increment: qb; position: relative; display: flex; flex-direction: column; gap: 6px; padding: 18px 18px 20px; border-radius: 18px; background: var(--accent-soft); border: 1px solid var(--accent-line); }
+    .qb-steps li::before { content: counter(qb, decimal-leading-zero); font-size: 1.7rem; font-weight: 800; line-height: 1; color: var(--accent); margin-bottom: 4px; }
+    .qb-steps b { font-size: 1.02rem; }
+    .qb-steps span { color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
     .qb-figure { margin: 0; }
     .qb-figure img { max-width: 100%; border-radius: 14px; display: block; }
     .qb-figure figcaption { color: var(--muted); font-size: 0.9rem; margin-top: 6px; }
