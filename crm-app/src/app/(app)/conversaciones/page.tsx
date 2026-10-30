@@ -191,6 +191,15 @@ function ThreadView({ conversationId, onBack, onChanged }: { conversationId: str
         <div className="msgs" ref={msgsRef}>
           {messages.length === 0 && <p className="empty">Todavía no hay mensajes.</p>}
           {messages.map((m, i) => {
+            // role "tool" = nota interna del CRM (email enviado, lead importado…): no la ha recibido el cliente.
+            if (m.role === "tool") {
+              return (
+                <div key={m.id || i} className="sys note">
+                  {/^email/i.test(m.content || "") ? "📧 " : "📝 "}{m.content}
+                  <small>Nota interna · {shortTime(m.created_at)}</small>
+                </div>
+              );
+            }
             const human = isHumanMessage(m);
             const css = m.role === "user" ? "in" : human ? "me" : "ai";
             const who = m.role === "user" ? "" : human ? `${m.metadata?.author?.split("@")[0] || "Tú"} · ` : "Asistente · ";
