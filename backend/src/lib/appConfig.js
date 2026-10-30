@@ -1,5 +1,8 @@
 import { DEFAULT_PIPELINE_STAGES, sanitizePipelineStages } from "./pipelineConfig.js";
 
+// Tipografías de propuestas y análisis (Configuración → Marca).
+export const BRAND_FONTS = ["modern", "classic", "elegant"];
+
 export const DEFAULT_APP_CONFIG = {
   product: {
     mode: "full_crm",
@@ -1476,6 +1479,10 @@ export function sanitizeAppConfig(input = {}, options = {}) {
       logo_url: resolveString(input?.brand?.logo_url, defaults.brand.logo_url),
       primary_color: resolveString(input?.brand?.primary_color, defaults.brand.primary_color),
       accent_color: resolveString(input?.brand?.accent_color, defaults.brand.accent_color),
+      font: BRAND_FONTS.includes(input?.brand?.font) ? input.brand.font : defaults.brand.font || "modern",
+      legal_name: resolveString(input?.brand?.legal_name, defaults.brand.legal_name),
+      tax_id: resolveString(input?.brand?.tax_id, defaults.brand.tax_id),
+      address: resolveString(input?.brand?.address, defaults.brand.address),
     },
     business_profile,
     contact: {

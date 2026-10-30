@@ -1,5 +1,12 @@
 import { acceptanceHtml } from "./quoteSignature.js";
 
+// Configuración → Marca: tipografía de títulos y texto (Google Fonts, con respaldo del sistema).
+const BRAND_FONT_STACKS = {
+  modern: { google: "Inter:wght@400;600;700", body: '"Inter", "Helvetica Neue", Arial, sans-serif', heading: '"Inter", "Helvetica Neue", Arial, sans-serif' },
+  classic: { google: "Lora:wght@400;600;700", body: '"Lora", Georgia, serif', heading: '"Lora", Georgia, serif' },
+  elegant: { google: "Playfair+Display:wght@600;700&family=Inter:wght@400;600", body: '"Inter", "Helvetica Neue", Arial, sans-serif', heading: '"Playfair Display", Georgia, serif' },
+};
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -80,6 +87,8 @@ export function renderQuotePreviewHtml({
   humanButtonLabel = "Hablar con una persona",
   primaryColor = "#ff5d6d",
   accentColor = "#7f54ff",
+  font = "modern",
+  company = {},
 } = {}) {
   const content = quote?.content_json || {};
   const items = Array.isArray(content.items) ? content.items : [];
@@ -104,6 +113,11 @@ export function renderQuotePreviewHtml({
   const quoteStatus = String(quote?.status || "draft").trim().toLowerCase();
   const safePrimary = resolveColor(primaryColor, "#ff5d6d");
   const safeAccent = resolveColor(accentColor, "#7f54ff");
+  const fonts = BRAND_FONT_STACKS[font] || BRAND_FONT_STACKS.modern;
+  const companyLine = [company.legal_name, company.tax_id && `CIF ${company.tax_id}`, company.address, company.website_url]
+    .map((v) => String(v || "").trim())
+    .filter(Boolean)
+    .join(" · ");
 
   const itemsRows = items.length
     ? items
@@ -164,32 +178,33 @@ export function renderQuotePreviewHtml({
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${escapeHtml(quote?.title || "Propuesta comercial")}</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${fonts.google}&display=swap" />
   <style>
     @page {
       size: A4;
       margin: 0;
     }
     :root {
-      --bg: #f7f1e4;
-      --paper: #fffdfa;
-      --line: #d9cfbf;
-      --text: #221d18;
-      --muted: #756b61;
+      --bg: #f5f5f7;
+      --paper: #ffffff;
+      --line: #e3e3e8;
+      --text: #1d1d22;
+      --muted: #6b6b76;
       --accent: ${safePrimary};
       --accent-2: ${safePrimary};
       --accent-3: ${safeAccent};
-      --accent-soft: #f5edff;
+      --accent-soft: color-mix(in srgb, ${safeAccent} 10%, #fff);
+      --accent-line: color-mix(in srgb, ${safeAccent} 30%, #fff);
+      --accent-ink: color-mix(in srgb, ${safeAccent} 70%, #000);
       --ink-soft: rgba(255,255,255,0.85);
     }
     * { box-sizing: border-box; }
+    h1, h2, h3 { font-family: ${fonts.heading}; }
     body {
       margin: 0;
-      font-family: Georgia, "Times New Roman", serif;
+      font-family: ${fonts.body};
       color: var(--text);
-      background:
-        radial-gradient(circle at top left, rgba(255,93,109,0.14), transparent 24%),
-        radial-gradient(circle at top right, rgba(127,84,255,0.16), transparent 26%),
-        linear-gradient(135deg, #f7efe1, #f2e8d7);
+      background: linear-gradient(135deg, color-mix(in srgb, ${safePrimary} 6%, #f5f5f7), color-mix(in srgb, ${safeAccent} 8%, #f5f5f7));
       padding: 32px;
     }
     .sheet {
@@ -362,9 +377,9 @@ export function renderQuotePreviewHtml({
       gap: 8px;
       padding: 8px 14px;
       border-radius: 999px;
-      background: linear-gradient(180deg, #f3e7ff, #ecdfff);
-      border: 1px solid #d8c0ff;
-      color: #5a2aa8;
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-line);
+      color: var(--accent-ink);
       font-weight: 700;
       font-size: 0.95rem;
     }
@@ -437,8 +452,8 @@ export function renderQuotePreviewHtml({
     }
     .cta-button.secondary {
       background: #fff;
-      color: #482c89;
-      border: 1px solid #d6c4ff;
+      color: var(--accent-ink);
+      border: 1px solid var(--accent-line);
       box-shadow: none;
     }
     .cta-button.reject {
@@ -451,9 +466,9 @@ export function renderQuotePreviewHtml({
       margin-top: 18px;
       padding: 14px 16px;
       border-radius: 16px;
-      border: 1px solid #d7c7ff;
-      background: linear-gradient(180deg, #f7f1ff, #f0e7ff);
-      color: #492b89;
+      border: 1px solid var(--accent-line);
+      background: var(--accent-soft);
+      color: var(--accent-ink);
       font-weight: 700;
     }
     @media print {
@@ -747,7 +762,7 @@ export function renderQuotePreviewHtml({
     </section>` : ""}
 
     <section class="section footer">
-      Esta propuesta ha sido generada desde el CRM interno de ${escapeHtml(brandName)} y puede editarse antes de su envio definitivo por email o WhatsApp.
+      ${escapeHtml(companyLine || brandName)}
     </section>
   </article>
   ${autoPrint ? `

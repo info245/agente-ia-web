@@ -777,16 +777,23 @@ async function resolveExternalLeadAccount(req, payload = {}, { allowDefault = fa
   );
 }
 
-function getLogoDataUrl() {
-  try {
-    const logoPath = path.join(crmPublicDir, "assets", "tmedia-global-logo.png");
-    const ext = path.extname(logoPath).toLowerCase();
-    const mime = ext === ".png" ? "image/png" : "image/jpeg";
-    const base64 = fs.readFileSync(logoPath).toString("base64");
-    return `data:${mime};base64,${base64}`;
-  } catch (_error) {
-    return "";
-  }
+// Marca de la cuenta (Configuración → Marca) para propuestas y análisis.
+function brandRenderOptions(appConfig = {}, baseUrl = "") {
+  const brand = appConfig?.brand || {};
+  const logo = String(brand.logo_url || "").trim();
+  return {
+    logoUrl: logo && !logo.startsWith("http") ? `${baseUrl}${logo.startsWith("/") ? "" : "/"}${logo}` : logo,
+    brandName: brand.name || "TMedia Global",
+    primaryColor: brand.primary_color || "#6d41f3",
+    accentColor: brand.accent_color || "#8d58ff",
+    font: brand.font || "modern",
+    company: {
+      legal_name: brand.legal_name || "",
+      tax_id: brand.tax_id || "",
+      address: brand.address || "",
+      website_url: brand.website_url || "",
+    },
+  };
 }
 
 function normalizeText(value) {
@@ -4585,6 +4592,34 @@ app.post("/api/crm/assets/logo", async (req, res) => {
   }
 });
 
+// Configuración → Marca: logo, colores, tipografía y datos de empresa de propuestas y análisis.
+app.post("/api/crm/brand", async (req, res) => {
+  try {
+    const account = await resolveRequestAccount(req);
+    const current = await getAppConfig({ accountId: account.id });
+    const input = req.body?.brand || {};
+    const brand = { ...current.brand };
+    for (const key of ["name", "logo_url", "legal_name", "tax_id", "address"]) {
+      if (key in input) brand[key] = String(input[key] ?? "").trim().slice(0, key === "address" ? 300 : 200);
+    }
+    for (const key of ["primary_color", "accent_color"]) {
+      if (key in input && !/^#[0-9a-f]{6}$/i.test(String(input[key]))) {
+        return res.status(400).json({ ok: false, error: "Los colores deben ser hexadecimales (#RRGGBB)." });
+      }
+      if (key in input) brand[key] = input[key];
+    }
+    if ("font" in input) brand.font = input.font;
+    if (brand.logo_url && !/^(https:\/\/|\/)/.test(brand.logo_url)) {
+      return res.status(400).json({ ok: false, error: "El logo debe ser una URL https." });
+    }
+    const config = await saveAppConfig(sanitizeAppConfig({ ...current, brand }), { accountId: account.id });
+    await publishConfigVersion({ accountId: account.id, config, createdBy: req.crmUser?.id || null, changeSummary: "Marca" });
+    return res.json({ ok: true, config: redactAppConfigForClient(config) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 app.post("/api/crm/config/bootstrap-site", async (req, res) => {
   try {
     const account = await resolveRequestAccount(req);
@@ -5199,19 +5234,10 @@ app.get("/crm/quotes/:leadId/preview", async (req, res) => {
           accountSlug: account.slug,
         })
       : buildHumanAgentWhatsAppUrl(lead?.interest_service || "", appConfig);
-    const configuredLogoUrl = String(appConfig?.brand?.logo_url || "").trim();
-    const resolvedLogoUrl = configuredLogoUrl
-      ? configuredLogoUrl.startsWith("http")
-        ? configuredLogoUrl
-        : `${baseUrl}${configuredLogoUrl.startsWith("/") ? "" : "/"}${configuredLogoUrl}`
-      : "";
     const html = renderQuotePreviewHtml({
       lead,
       quote,
-      logoUrl: resolvedLogoUrl,
-      brandName: appConfig?.brand?.name || "TMedia Global",
-      primaryColor: appConfig?.brand?.primary_color || "#ff5d6d",
-      accentColor: appConfig?.brand?.accent_color || "#7f54ff",
+      ...brandRenderOptions(appConfig, baseUrl),
       autoPrint: req.query.print === "1",
       acceptUrl,
       rejectUrl,
@@ -5258,20 +5284,11 @@ app.get("/crm/analysis/:leadId/preview", async (req, res) => {
     }
 
     const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const configuredLogoUrl = String(appConfig?.brand?.logo_url || "").trim();
-    const resolvedLogoUrl = configuredLogoUrl
-      ? configuredLogoUrl.startsWith("http")
-        ? configuredLogoUrl
-        : `${baseUrl}${configuredLogoUrl.startsWith("/") ? "" : "/"}${configuredLogoUrl}`
-      : "";
 
     const html = renderAnalysisPreviewHtml({
       lead,
       analysis,
-      logoUrl: resolvedLogoUrl,
-      brandName: appConfig?.brand?.name || "TMedia Global",
-      primaryColor: appConfig?.brand?.primary_color || "#6d41f3",
-      accentColor: appConfig?.brand?.accent_color || "#8f68ff",
+      ...brandRenderOptions(appConfig, baseUrl),
     });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     return res.status(200).send(html);
@@ -5449,10 +5466,11 @@ app.get("/crm/quotes/:leadId/pdf", async (req, res) => {
 
     // El cliente ve la última versión enviada; desde el CRM, con ?borrador=1, el borrador en curso.
     const quote = req.query.borrador ? await getLatestQuoteByLeadId(req.params.leadId) : (await getClientQuoteByLeadId(req.params.leadId)) || (await getLatestQuoteByLeadId(req.params.leadId));
+    const appConfig = await getAppConfig({ accountId: account.id });
     const html = renderQuotePreviewHtml({
       lead,
       quote,
-      logoUrl: getLogoDataUrl(),
+      ...brandRenderOptions(appConfig, `${req.protocol}://${req.get("host")}`),
     });
     const pdfBuffer = await renderHtmlToPdfBuffer(html);
     const fileName = buildQuoteFileName(lead, quote);
