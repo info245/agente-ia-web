@@ -109,13 +109,14 @@ export default function CanalesPage() {
           <div className="ico" style={{ background: "var(--warn-soft)", color: "var(--warn)" }}>F</div>
           <div className="body">
             <h2>Formularios</h2>
-            <p>Los leads de los formularios de tu web y de Meta llegan a Conversaciones con todos sus datos.</p>
+            <p>Los leads de los formularios de tu web, de Meta y de Google Ads llegan a Conversaciones con todos sus datos.</p>
             {formLeads.length ? (
               <span className="pill p-good"><span className="dot" />{formLeadsMonth} leads de formulario en los últimos 30 días</span>
             ) : (
               <span className="pill p-muted">Todavía no ha llegado ninguno · tu agencia los conecta</span>
             )}
             {whatsapp?.configured && <FormFirstWhatsApp config={config} />}
+            <GoogleLeadForm />
           </div>
         </div>
 
@@ -149,6 +150,38 @@ export default function CanalesPage() {
 }
 
 // Primer WhatsApp a cada lead de formulario: como nunca te ha escrito, WhatsApp exige una plantilla aprobada.
+// Datos que pide Google Ads en el formulario de cliente potencial → «Integración de webhook».
+function GoogleLeadForm() {
+  const [data, setData] = useState<{ available?: boolean; webhook_url?: string; key?: string } | null>(null);
+  const [copied, setCopied] = useState("");
+
+  useEffect(() => {
+    api<{ available?: boolean; webhook_url?: string; key?: string }>("/crm/integrations/google-lead-form")
+      .then(setData)
+      .catch(() => setData(null));
+  }, []);
+
+  if (!data?.available) return null;
+
+  async function copy(label: string, value = "") {
+    await navigator.clipboard.writeText(value).catch(() => {});
+    setCopied(label);
+    setTimeout(() => setCopied(""), 2000);
+  }
+
+  return (
+    <details style={{ marginTop: 12 }}>
+      <summary>Conectar formularios de Google Ads</summary>
+      <p className="sub" style={{ marginTop: 8 }}>
+        En Google Ads, abre el recurso de formulario de cliente potencial → Exportar clientes potenciales → Integración de webhook, y pega estos dos datos.
+      </p>
+      <div className="code">{data.webhook_url}</div>
+      <button className="btn small" onClick={() => copy("url", data.webhook_url)}>{copied === "url" ? "¡Copiada!" : "Copiar URL"}</button>{" "}
+      <button className="btn small" onClick={() => copy("key", data.key)}>{copied === "key" ? "¡Copiada!" : "Copiar clave"}</button>
+    </details>
+  );
+}
+
 function FormFirstWhatsApp({ config }: { config: AppConfig }) {
   const { reloadConfig } = useSession();
   const current = config.integrations?.whatsapp || {};
