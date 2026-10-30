@@ -284,13 +284,13 @@ export default function ConversionesPage() {
         <div className="conv-steps">
           <Step n={1} title="Copia el Pixel ID (conjunto de datos)" done={Boolean(s.meta.pixel_id)}>
             <p>En el <b>Administrador de eventos</b>, elige el píxel del negocio. Su número aparece debajo del nombre. <Ext href={LINKS.metaEvents}>Abrir Administrador de eventos</Ext></p>
-            <div className="conv-fields"><Field label="Pixel ID"><input className="i" disabled={!edit} inputMode="numeric" value={form.meta.pixel_id} placeholder="Ej. 1234567890123456" onChange={(e) => setMeta({ pixel_id: e.target.value })} /></Field></div>
+            <div className="conv-fields"><Field label="Pixel ID"><input className="i" disabled={!edit} inputMode="numeric" autoComplete="off" value={form.meta.pixel_id} placeholder="Ej. 1234567890123456" onChange={(e) => setMeta({ pixel_id: e.target.value })} /></Field></div>
           </Step>
           <Step n={2} title="Genera el token de la API de conversiones" done={s.meta.access_token_configured}>
             <p>En ese píxel: <b>Configuración → API de conversiones → «Generar token de acceso»</b>. Cópialo y pégalo aquí: Meta no lo vuelve a enseñar. <Ext href={LINKS.metaCapiHelp}>Guía de Meta</Ext></p>
             <div className="conv-fields">
               <Field label="Token">
-                <input className="i" disabled={!edit} type="password" autoComplete="off" value={metaToken} placeholder={s.meta.access_token_configured ? "Guardado · pega otro para cambiarlo" : "Pega aquí el token"} onChange={(e) => setMetaToken(e.target.value)} />
+                <input className="i" disabled={!edit} type="password" autoComplete="new-password" value={metaToken} placeholder={s.meta.access_token_configured ? "Guardado · pega otro para cambiarlo" : "Pega aquí el token"} onChange={(e) => setMetaToken(e.target.value)} />
               </Field>
             </div>
             {edit && s.meta.access_token_configured && <button className="btn ghost small" disabled={!!busy} onClick={() => save({ meta: { clear_access_token: true } })}>Borrar token</button>}
