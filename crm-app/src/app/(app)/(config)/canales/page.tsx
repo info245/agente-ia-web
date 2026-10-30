@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ConfigPending, useSession } from "@/components/app-shell";
 import { SettingsTabs } from "@/components/settings-tabs";
@@ -84,6 +85,7 @@ export default function CanalesPage() {
               <>
                 <p>{whatsapp.display_phone_number || config.contact?.public_whatsapp_number} · Tu asistente responde las 24 horas</p>
                 <span className="pill p-good"><span className="dot" />Conectado</span>
+                <TemplateUses config={config} />
                 <QuoteWhatsApp config={config} />
               </>
             ) : (
@@ -105,7 +107,7 @@ export default function CanalesPage() {
           </div>
         </div>
 
-        <div className="card chan">
+        <div className="card chan" id="formularios">
           <div className="ico" style={{ background: "var(--warn-soft)", color: "var(--warn)" }}>F</div>
           <div className="body">
             <h2>Formularios</h2>
@@ -233,6 +235,34 @@ function FormFirstWhatsApp({ config }: { config: AppConfig }) {
   );
 }
 
+// Cada plantilla de WhatsApp se elige donde se usa; este resumen dice cuál va en cada sitio.
+function TemplateUses({ config }: { config: AppConfig }) {
+  const wa = config.integrations?.whatsapp || {};
+  const label = (name?: string) => (name ? name.replace(/_/g, " ") : "");
+  const uses: [string, string, string, string][] = [
+    ["Propuestas", "Al enviar una propuesta pasadas 24 h", label(wa.quote_template_name), "#propuesta-whatsapp"],
+    ["Leads de formulario", "Primer mensaje a quien rellena un formulario", wa.form_autocontact_enabled ? label(wa.intro_template_name) : "", "#formularios"],
+    ["Recordatorios de cita", "Antes de una videollamada reservada", label(config.agent?.meeting?.reminder_template_name), "/disponibilidad"],
+    ["Seguimientos", "Pasos de WhatsApp en tus automatizaciones", "Se elige en cada paso", "/email"],
+  ];
+  return (
+    <div style={{ marginTop: 14 }}>
+      <b>Qué plantilla se usa para qué</b>
+      <table className="table" style={{ marginTop: 6 }}>
+        <tbody>
+          {uses.map(([what, when, name, href]) => (
+            <tr key={what} style={{ cursor: "default" }}>
+              <td><b>{what}</b><div style={{ color: "var(--muted)", fontSize: 12 }}>{when}</div></td>
+              <td>{name ? <span className="pill p-good">{name}</span> : <span className="pill p-muted">Sin plantilla · solo email</span>}</td>
+              <td style={{ textAlign: "right" }}>{href.startsWith("#") ? <a className="btn ghost small" href={href}>Cambiar</a> : <Link className="btn ghost small" href={href}>Cambiar</Link>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // Propuestas por WhatsApp pasadas 24 h: WhatsApp solo deja escribir con una plantilla aprobada.
 // La plantilla lleva {{1}} = nombre y {{2}} = enlace a la propuesta (en ese orden).
 function QuoteWhatsApp({ config }: { config: AppConfig }) {
@@ -266,7 +296,7 @@ function QuoteWhatsApp({ config }: { config: AppConfig }) {
   }
 
   return (
-    <div style={{ display: "grid", gap: 8, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+    <div id="propuesta-whatsapp" style={{ display: "grid", gap: 8, marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
       <b>Enviar propuestas por WhatsApp</b>
       <span style={{ color: "var(--muted)", fontSize: 13 }}>
         Si el cliente te escribió en las últimas 24 h, la propuesta sale como mensaje normal. Si no, WhatsApp exige una plantilla aprobada con dos datos: {"{{1}}"} su nombre y {"{{2}}"} el enlace a la propuesta.
