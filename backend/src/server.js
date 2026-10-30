@@ -5569,7 +5569,9 @@ app.post("/api/crm/quote-templates/import", async (req, res) => {
       model: AGENT_MODEL,
       instructions: IMPORT_INSTRUCTIONS,
       text: { format: { type: "json_object" } },
-      input: [{ role: "user", content: file ? [file, { type: "input_text", text: "Convierte este documento en JSON." }] : [{ type: "input_text", text }] }],
+      input: [{ role: "user", content: file ? [file, { type: "input_text", text: "Convierte este documento en JSON." }] : [{ type: "input_text", text: `Convierte este documento en JSON:
+
+${text}` }] }],
     });
     let parsed = {};
     try {
