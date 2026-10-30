@@ -178,7 +178,7 @@ export default function ContactosPage() {
                   <input type="checkbox" aria-label="Seleccionar todos" checked={rows.length > 0 && rows.every((l) => selected.has(l.id))}
                     onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((l) => l.id)) : new Set())} />
                 </th>
-                {["Nombre", "Email", "Teléfono", "Servicio", "Presupuesto", "Entrada", "Último contacto", "Asignado a", "Etiquetas", "Notas internas", "Estado", ""].map((h) => <th key={h}>{h}</th>)}
+                {["Contacto", "Estado", "Servicio", "Último contacto", "Asignado a", "Etiquetas", "Notas internas", ""].map((h) => <th key={h}>{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -188,26 +188,33 @@ export default function ContactosPage() {
                     <td onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" aria-label={`Seleccionar a ${leadName(lead)}`} checked={selected.has(lead.id)} onChange={() => toggle(lead.id)} />
                     </td>
-                    <td><b>{leadName(lead)}</b></td>
-                    <td>{lead.email || "—"}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>{lead.phone || "—"}</td>
-                    <td>{lead.interest_service || "—"}{lead.interest_plan && <div style={{ color: "var(--muted)", fontSize: 12 }}>{lead.interest_plan}</div>}</td>
-                    <td>{lead.budget_range || "—"}</td>
-                    <td style={{ whiteSpace: "nowrap", color: "var(--muted)" }}>{day(lead.created_at)}</td>
-                    <td style={{ whiteSpace: "nowrap", color: "var(--muted)" }}>{day(lastContact(lead))}</td>
+                    {/* Nombre con email y teléfono debajo: deja sitio al estado sin scroll lateral. */}
+                    <td style={{ minWidth: 200 }}>
+                      <b>{leadName(lead)}</b>
+                      <div style={{ color: "var(--muted)", fontSize: 12.5, wordBreak: "break-all" }}>{lead.email || "Sin email"}</div>
+                      <div style={{ color: "var(--muted)", fontSize: 12.5, whiteSpace: "nowrap" }}>{lead.phone || "Sin teléfono"}</div>
+                    </td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      <select className="search" aria-label={`Asignado a: ${leadName(lead)}`} disabled={!can("write")} value={lead.assigned_to || ""} onChange={(e) => assign(lead.id, e.target.value)}>
+                      <select className="search" style={{ minWidth: 150 }} disabled={!can("write")} aria-label={`Estado de ${leadName(lead)}`} value={stageOf(lead) || ""} onChange={(e) => move(lead.id, e.target.value)}>
+                        {stages.map((s) => <option key={s.key} value={s.key}>{s.label || s.key}</option>)}
+                      </select>
+                    </td>
+                    <td>
+                      {lead.interest_service || "—"}
+                      {(lead.interest_plan || lead.budget_range) && <div style={{ color: "var(--muted)", fontSize: 12 }}>{[lead.interest_plan, lead.budget_range].filter(Boolean).join(" · ")}</div>}
+                    </td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      {day(lastContact(lead))}
+                      <div style={{ color: "var(--muted)", fontSize: 12 }}>Entró {day(lead.created_at)}</div>
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <select className="search" style={{ minWidth: 130 }} aria-label={`Asignado a: ${leadName(lead)}`} disabled={!can("write")} value={lead.assigned_to || ""} onChange={(e) => assign(lead.id, e.target.value)}>
                         <option value="">Sin asignar</option>
                         {members.map((m) => <option key={m.id} value={m.id}>{m.display_name}</option>)}
                       </select>
                     </td>
                     <td onClick={(e) => e.stopPropagation()}><TagCell lead={lead} readOnly={!can("write")} /></td>
                     <td onClick={(e) => e.stopPropagation()}><NoteCell lead={lead} readOnly={!can("write")} /></td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <select className="search" disabled={!can("write")} aria-label={`Estado de ${leadName(lead)}`} value={stageOf(lead) || ""} onChange={(e) => move(lead.id, e.target.value)}>
-                        {stages.map((s) => <option key={s.key} value={s.key}>{s.label || s.key}</option>)}
-                      </select>
-                    </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       {can("delete") && <button className="btn ghost small" aria-label={`Eliminar a ${leadName(lead)}`} onClick={() => remove(lead)}>Eliminar</button>}
                     </td>
