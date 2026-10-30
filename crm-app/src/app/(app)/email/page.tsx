@@ -214,6 +214,34 @@ function Audience() {
 
 function Templates() {
   const { items, error, load } = useList<PickableTemplate>("/crm/email/templates", "templates");
+  const [importText, setImportText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  // Email hecho con Claude o ChatGPT (texto, Markdown, HTML o PDF) → plantilla por bloques con tu marca.
+  const importDoc = async (file?: File) => {
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const body: Record<string, string> = { text: importText };
+      if (file) {
+        if (file.size > 3.5 * 1024 * 1024) throw new Error("El archivo no puede pasar de 3,5 MB.");
+        body.file_name = file.name;
+        body.data_url = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result));
+          r.onerror = reject;
+          r.readAsDataURL(file);
+        });
+      }
+      const r = await api<{ template: PickableTemplate }>("/crm/email/templates/import", { method: "POST", body });
+      setImportText("");
+      setImportMsg({ kind: "ok", text: `Plantilla «${r.template.name}» creada. Elígela al crear una campaña o un email de automatización y retócala sobre el propio email.` });
+      load();
+    } catch (err) {
+      setImportMsg({ kind: "error", text: (err as Error).message });
+    }
+    setImporting(false);
+  };
   const remove = async (t: PickableTemplate) => {
     if (!window.confirm(`¿Borrar la plantilla «${t.name}»? Las campañas que ya la usaron no cambian.`)) return;
     await api(`/crm/email/templates/${t.id}`, { method: "DELETE" });
@@ -221,6 +249,19 @@ function Templates() {
   };
   return (
     <>
+      <div className="card block">
+        <h2>Importar desde Claude, ChatGPT o un documento</h2>
+        <p className="hint">Pide a Claude o ChatGPT el email que quieras (newsletter, oferta, bienvenida…) y pega aquí el texto o el HTML, o sube el PDF, MD o HTML. Se convierte en una plantilla editable con tu logo, colores y tipografía de Configuración → Marca.</p>
+        <textarea className="i" rows={5} aria-label="Texto o HTML del email" placeholder="Pega aquí el texto o el HTML del email…" value={importText} onChange={(e) => setImportText(e.target.value)} disabled={importing} />
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <button className="btn primary small" disabled={importing || importText.trim().length < 30} onClick={() => importDoc()}>{importing ? "Convirtiendo…" : "Convertir en plantilla"}</button>
+          <label className="btn small" style={{ cursor: importing ? "wait" : "pointer" }}>
+            Subir PDF, MD o HTML
+            <input type="file" hidden accept=".pdf,.txt,.md,.markdown,.html,.htm" disabled={importing} onChange={(e) => { importDoc(e.target.files?.[0]); e.target.value = ""; }} />
+          </label>
+        </div>
+        {importMsg && <p className={`alert ${importMsg.kind}`} role="status" style={{ marginTop: 10 }}>{importMsg.text}</p>}
+      </div>
       <div className="card block">
         <h2>Tus plantillas</h2>
         <p className="hint">Guárdalas desde cualquier campaña con «Guardar como plantilla». Sirven para campañas y para los emails de las automatizaciones.</p>

@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
-export type Block = { type: "heading" | "text" | "button" | "image" | "divider"; text?: string; url?: string; alt?: string; link?: string };
+export type Block = {
+  type: "heading" | "text" | "button" | "image" | "divider" | "table" | "columns" | "quote" | "callout";
+  text?: string; url?: string; alt?: string; link?: string;
+  columns?: string[]; rows?: string[][]; items?: { title: string; text: string; image?: string }[]; author?: string;
+};
 export type Segment = { stages?: string[]; services?: string[]; sources?: string[]; tags?: string[]; exclude_tags?: string[]; created_from?: string; created_to?: string };
 export type EmailOptions = { tags: string[]; services: string[]; sources: string[] };
 
