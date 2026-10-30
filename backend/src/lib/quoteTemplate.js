@@ -1,4 +1,5 @@
 import { acceptanceHtml } from "./quoteSignature.js";
+import { QUOTE_BLOCKS_CSS, renderQuoteBlocksHtml } from "./quoteBlocks.js";
 
 // Configuración → Marca: tipografía de títulos y texto (Google Fonts, con respaldo del sistema).
 const BRAND_FONT_STACKS = {
@@ -200,6 +201,7 @@ export function renderQuotePreviewHtml({
     }
     * { box-sizing: border-box; }
     h1, h2, h3 { font-family: ${fonts.heading}; }
+${QUOTE_BLOCKS_CSS}
     body {
       margin: 0;
       font-family: ${fonts.body};
@@ -674,6 +676,8 @@ export function renderQuotePreviewHtml({
       <h2>Alcance</h2>
       <div class="copy">${escapeCleanHtml(content.scope || quote?.title || "")}</div>
     </section>
+
+    ${renderQuoteBlocksHtml(content.blocks)}
 
     <section class="section">
       <h2>Partidas</h2>

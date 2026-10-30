@@ -58,6 +58,7 @@ import { bodyParameters, describeTemplate, renderTemplate, validateTemplateParam
 import { emailBodyToHtml, emailBodyToText } from "./lib/emailLinks.js";
 import { renderQuoteSignHtml, validateAcceptance } from "./lib/quoteSignature.js";
 import { listQuoteTemplates, saveQuoteTemplate, deleteQuoteTemplate } from "./lib/quoteTemplatesStore.js";
+import { IMPORT_INSTRUCTIONS, htmlToText, normalizeImportedTemplate } from "./lib/quoteTemplateImport.js";
 import { googleLeadFormKey, isValidGoogleLeadFormKey, mapGoogleLeadFormPayload } from "./lib/googleLeadForm.js";
 import { addSubscription, countSubscriptions, isValidSubscription, notifyAccount, pushPublicKey, removeSubscription } from "./lib/pushNotifications.js";
 import { buildChannelHealth } from "./lib/channelHealth.js";
@@ -5542,6 +5543,43 @@ app.post("/api/crm/quote-templates", async (req, res) => {
     res.json({ ok: true, template: await saveQuoteTemplate(account.id, req.body || {}) });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
+  }
+});
+// Importar plantilla: PDF (lo lee la IA directamente) o texto/Markdown/HTML de Claude o ChatGPT. No guarda: devuelve el borrador.
+app.post("/api/crm/quote-templates/import", async (req, res) => {
+  try {
+    const fileName = String(req.body?.file_name || "").toLowerCase();
+    const dataUrl = String(req.body?.data_url || "");
+    let text = String(req.body?.text || "");
+    let file = null;
+    if (dataUrl) {
+      if (fileName.endsWith(".pdf")) {
+        file = { type: "input_file", filename: "plantilla.pdf", file_data: dataUrl };
+      } else if (/\.(txt|md|markdown|html?)$/.test(fileName)) {
+        text = Buffer.from(dataUrl.split(",").pop(), "base64").toString("utf8");
+      } else {
+        return res.status(400).json({ ok: false, error: "Sube un PDF, TXT, MD o HTML. Si es un Word, guárdalo como PDF o pega el texto." });
+      }
+    }
+    if (/<\/?[a-z][\s\S]*>/i.test(text)) text = htmlToText(text);
+    text = text.trim().slice(0, 60000);
+    if (!file && text.length < 40) return res.status(400).json({ ok: false, error: "El documento está vacío o es demasiado corto." });
+
+    const result = await openai.responses.create({
+      model: AGENT_MODEL,
+      instructions: IMPORT_INSTRUCTIONS,
+      text: { format: { type: "json_object" } },
+      input: [{ role: "user", content: file ? [file, { type: "input_text", text: "Convierte este documento en JSON." }] : [{ type: "input_text", text }] }],
+    });
+    let parsed = {};
+    try {
+      parsed = JSON.parse(result?.output_text || "{}");
+    } catch {
+      return res.status(502).json({ ok: false, error: "La IA no devolvió una plantilla válida. Prueba otra vez." });
+    }
+    return res.json({ ok: true, template: normalizeImportedTemplate(parsed) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: error.message });
   }
 });
 app.delete("/api/crm/quote-templates/:id", async (req, res) => {

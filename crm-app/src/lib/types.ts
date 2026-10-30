@@ -161,7 +161,16 @@ export type ConsentRecord = { id: string; channel?: string | null; created_at: s
 export type AccessLogEntry = { action: "view" | "export" | "delete" | "anonymize"; actor_email?: string | null; created_at: string; details?: Record<string, unknown> };
 
 // Plantilla de propuesta por servicio (Propuestas → Plantillas).
+export type QuoteBlock =
+  | { type: "text"; title: string; text: string }
+  | { type: "table"; title: string; columns: string[]; rows: string[][] }
+  | { type: "packs"; title: string; packs: { name: string; price: string; features: string; highlight?: boolean }[] }
+  | { type: "steps"; title: string; steps: { name: string; text: string }[] }
+  | { type: "image"; title: string; url: string; caption: string }
+  | { type: "testimonial"; title: string; text: string; author: string };
+
 export type QuoteTemplate = {
   id?: string; name: string; service: string; title: string; billing_type: string; tax_rate: number;
   items: { concept: string; quantity: number; unit_price: number }[]; summary: string; scope: string; body: string; assumptions: string;
+  blocks?: QuoteBlock[];
 };
