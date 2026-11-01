@@ -110,7 +110,7 @@ function detectBudget(text) {
     /\b(beta|gratis|gratuito|gratuita|free|trial|prueba gratuita|version gratuita)\b/i.test(normalized) ||
     /\b(sin presupuesto|sin inversion|presupuesto cero)\b/i.test(normalized)
   ) {
-    return "beta gratuita / 0 EUR";
+    return "sin presupuesto / 0 EUR";
   }
 
   const m1 = t.match(/(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(€|eur)\b/i);
