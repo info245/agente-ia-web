@@ -28,7 +28,7 @@ test("lead recovery only runs while the last turn is awaiting the user", () => {
   );
   assert.equal(canRecoverLead({ lead: { crm_status: "ganado" }, messages: assistantLast }), false);
   assert.equal(canRecoverLead({ lead: { crm_status: "qualified" }, messages: assistantLast }), false);
-  assert.equal(canRecoverLead({ lead: { current_step: "completed" }, messages: assistantLast }), false);
+  assert.equal(canRecoverLead({ lead: { current_step: "completed" }, messages: assistantLast }), true);
 });
 
 test("recovery contact requires consent or an inbound conversation on that channel", () => {

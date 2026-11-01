@@ -25,7 +25,6 @@ export function getLastUserMessageTime(messages = []) {
 
 function isLeadRecoveryStateEligible(lead = {}) {
   const status = normalize(lead?.crm_status);
-  const step = normalize(lead?.current_step);
   if ([
     "cualificado",
     "qualified",
@@ -42,7 +41,7 @@ function isLeadRecoveryStateEligible(lead = {}) {
   ].includes(status)) {
     return false;
   }
-  if (["complete", "completed", "closed"].includes(step)) return false;
+  // current_step "completed" solo dice que el asistente ya tiene los datos: justo a esos conviene hacerles seguimiento.
   return true;
 }
 
