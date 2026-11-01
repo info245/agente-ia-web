@@ -538,8 +538,8 @@ Ver en el CRM: ${link}`, emailConfig: config?.integrations?.email || null });
                 await sendWhatsAppText(phone, sentText, { accountId: automation.account_id });
               } else if (action.step.template_name) {
                 const bodyParams = (action.step.params || []).map((p) => personalize(p, lead) || "-");
-                await sendWhatsAppTemplate(phone, action.step.template_name, action.step.language || "es", { accountId: automation.account_id, bodyParams });
-                sentText = `[Plantilla WhatsApp: ${action.step.template_name}] ${bodyParams.join(" | ")}`.trim();
+                const sent = await sendWhatsAppTemplate(phone, action.step.template_name, action.step.language || "es", { accountId: automation.account_id, bodyParams });
+                sentText = sent?.rendered_text || `[Plantilla WhatsApp: ${action.step.template_name}] ${bodyParams.join(" | ")}`.trim();
               }
               if (sentText && lead.conversation_id) {
                 await saveMessage({ conversation_id: lead.conversation_id, role: "assistant", content: sentText, metadata: { automation_id: automation.id, step_id: nodeId }, account_id: automation.account_id });

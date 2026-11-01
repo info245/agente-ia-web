@@ -1792,12 +1792,11 @@ async function sendWhatsAppTemplate(to, templateName, languageCode = "es", optio
   if (!String(templateName || "").trim()) throw new Error("Falta una plantilla aprobada de WhatsApp.");
   // Si solo llegan valores (flujos automáticos) y la plantilla usa variables con nombre, se mapean por orden.
   let parameters = options?.parameters || null;
-  if (!parameters?.length && options?.bodyParams?.length) {
-    const definition = await listApprovedWhatsAppTemplates(options?.accountId || options?.account_id || channel?.account_id)
-      .then((list) => list.find((t) => t.name === String(templateName).trim() && t.language === (String(languageCode || "es").trim() || "es")))
-      .catch(() => null);
-    if (definition?.named) parameters = bodyParameters(definition, options.bodyParams);
-  }
+  // La definición también da el texto real, para guardar en el chat lo que leyó el cliente.
+  const definition = await listApprovedWhatsAppTemplates(options?.accountId || options?.account_id || channel?.account_id)
+    .then((list) => list.find((t) => t.name === String(templateName).trim() && t.language === (String(languageCode || "es").trim() || "es")))
+    .catch(() => null);
+  if (!parameters?.length && options?.bodyParams?.length && definition?.named) parameters = bodyParameters(definition, options.bodyParams);
 
   const response = await fetchWithTimeout(
     `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
@@ -1836,7 +1835,8 @@ async function sendWhatsAppTemplate(to, templateName, languageCode = "es", optio
   if (!response.ok) {
     throw new Error(data?.error?.message || "Error enviando plantilla por WhatsApp");
   }
-  return data;
+  const values = parameters?.length ? parameters.map((p) => p.text) : options?.bodyParams || [];
+  return { ...data, rendered_text: definition ? renderTemplate(definition, values) : "" };
 }
 
 // Plantillas aprobadas en Meta para el número de la cuenta (las que el CRM puede enviar fuera de las 24 h).
@@ -2067,7 +2067,7 @@ async function sendAutomationStep({
     await saveMessage({
       conversation_id: conversationId,
       role: "assistant",
-      content: body,
+      content: customerWindowOpen ? body : sendResult?.rendered_text || body,
       account_id: accountId,
     });
 
@@ -5754,10 +5754,11 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
         });
       }
       if (plan.type === "template") {
-        await sendWhatsAppTemplate(phone, plan.name, plan.language, {
+        const sent = await sendWhatsAppTemplate(phone, plan.name, plan.language, {
           accountId: account.id,
           bodyParams: plan.params,
         });
+        plan.rendered_text = sent?.rendered_text || "";
       } else {
         await sendWhatsAppText(phone, plan.body, { accountId: account.id });
       }
@@ -5765,7 +5766,7 @@ app.post("/api/crm/leads/:leadId/quote/send", async (req, res) => {
         await saveMessage({
           conversation_id: lead.conversation_id,
           role: "assistant",
-          content: plan.type === "template" ? `[Plantilla WhatsApp: ${plan.name}] ${previewUrl}` : plan.body,
+          content: plan.type === "template" ? plan.rendered_text || `[Plantilla WhatsApp: ${plan.name}] ${previewUrl}` : plan.body,
           account_id: account.id,
         }).catch(() => null);
       }
@@ -6344,7 +6345,7 @@ async function handleExternalLead(req, res) {
         count: variableCount,
       });
       try {
-        await sendWhatsAppTemplate(
+        const sent = await sendWhatsAppTemplate(
           whatsappPhone,
           introTemplateName,
           whatsappConfig.intro_template_language || "es",
@@ -6354,9 +6355,11 @@ async function handleExternalLead(req, res) {
         await saveMessage({
           conversation_id: conversation.id,
           role: "assistant",
-          content: whatsappConfig.intro_template_body
-            ? renderWhatsAppTemplateBody(whatsappConfig.intro_template_body, bodyParams)
-            : [`[Plantilla WhatsApp: ${introTemplateName}]`, ...bodyParams].join(" | "),
+          content:
+            sent?.rendered_text ||
+            (whatsappConfig.intro_template_body
+              ? renderWhatsAppTemplateBody(whatsappConfig.intro_template_body, bodyParams)
+              : [`[Plantilla WhatsApp: ${introTemplateName}]`, ...bodyParams].join(" | ")),
           metadata: { whatsapp_template: introTemplateName, template_params: bodyParams },
           account_id: account.id,
         });
