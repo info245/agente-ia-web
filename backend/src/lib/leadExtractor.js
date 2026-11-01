@@ -658,7 +658,7 @@ function extractBudget(text = "") {
     ) ||
     /\b(sin presupuesto|sin inversion|sin inversi[oó]n|presupuesto cero)\b/i.test(normalized)
   ) {
-    return "beta gratuita / 0 EUR";
+    return "sin presupuesto / 0 EUR";
   }
 
   if (/\b(clientes?|cuentas?)\s+con\s+presupuestos?\b/i.test(normalized)) {

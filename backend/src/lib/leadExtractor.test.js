@@ -12,7 +12,7 @@ test("interprets beta/free/zero budget replies as the free beta", () => {
   for (const message of ["Me gustaria empezar con la beta", "0", "sin inversion"]) {
     const extracted = extractLeadDataFromText(message);
 
-    assert.equal(extracted.budget_range, "beta gratuita / 0 EUR");
+    assert.equal(extracted.budget_range, "sin presupuesto / 0 EUR");
   }
 });
 
