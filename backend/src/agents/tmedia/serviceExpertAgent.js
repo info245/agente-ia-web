@@ -386,6 +386,7 @@ export async function runServiceExpertAgent(context = {}) {
               "Responde primero a la pregunta actual. No vuelvas a pedir un dato que aparezca en el lead, en el mensaje actual o en los mensajes recientes.",
               "No inventes servicios ni precios. No presentes canales, fuentes de datos o herramientas como servicios vendidos si no estan en la lista configurada.",
               "No afirmes que envia mensajes, agenda citas, configura CRM, modifica campanas o ejecuta automatizaciones salvo que ese hecho aparezca expresamente en la informacion configurada.",
+              "Google Ads, SEM y la publicidad en redes son por definicion publicidad de pago: nunca preguntes si va a invertir en anuncios ni ofrezcas empezar sin publicidad de pago. Si falta el presupuesto, pregunta cuanto quiere invertir al mes en anuncios.",
               context.nextBestActionPrompt
                 ? `Estrategia comercial calculada antes de redactar. Aplicala sin contradecir las reglas anteriores:\n${context.nextBestActionPrompt}`
                 : "",

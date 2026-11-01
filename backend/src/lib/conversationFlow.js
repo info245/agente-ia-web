@@ -277,7 +277,7 @@ export function getQuestionForStep(step, lead) {
     case "ask_goal":
       return "Entendido. ¿Cuál sería tu objetivo principal ahora mismo?";
     case "ask_budget":
-      return "Quieres empezar con la beta gratuita o tienes alguna inversion prevista mas adelante?";
+      return "Con que presupuesto mensual te gustaria trabajar?";
     case "ask_urgency":
       return "Perfecto. ¿Qué prioridad tiene para ti? ¿Te gustaría empezar cuanto antes o lo estás valorando a medio plazo?";
     case "ask_contact":

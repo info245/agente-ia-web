@@ -352,7 +352,7 @@ function getNextQuestionState(
     return { step: "ask_urgency", question: "Te corre prisa ponerlo en marcha o es algo para mas adelante?" };
   }
   if (shouldCapture(appConfig, "budget_range") && !merged.budget_range) {
-    return { step: "ask_budget", question: "Quieres empezar con la beta gratuita o tienes alguna inversion prevista mas adelante?" };
+    return { step: "ask_budget", question: "Con que presupuesto mensual te gustaria trabajar?" };
   }
   if (shouldCapture(appConfig, "company_name") && !merged.company_name) {
     return { step: "ask_company_name", question: "Como se llama tu empresa o proyecto?" };

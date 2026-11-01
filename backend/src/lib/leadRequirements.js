@@ -110,7 +110,7 @@ export function getLeadRequirementPrompt(field = "", appConfig = null) {
     company_name: "¿Cómo se llama tu empresa o proyecto?",
     business_type: "¿A qué se dedica tu negocio o proyecto?",
     business_activity: "¿A qué se dedica exactamente tu negocio o proyecto?",
-    budget_range: "¿Quieres empezar con la beta gratuita o tienes una inversión prevista?",
+    budget_range: "¿Con qué presupuesto mensual te gustaría trabajar?",
     urgency: "¿Te corre prisa ponerlo en marcha o es para más adelante?",
     preferred_contact_channel: "¿Prefieres continuar por WhatsApp o por email?",
     name: "¿A nombre de quién dejamos la solicitud?",
