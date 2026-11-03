@@ -10,3 +10,14 @@ export function toWhatsAppFormat(text = "") {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+// Recordatorio al cliente. lead.summary es una nota interna del CRM: nunca debe salir en un mensaje.
+export function buildWhatsAppReminder({ name = "", service = "" } = {}) {
+  const firstName = String(name || "").trim().split(/\s+/)[0];
+  const topic = String(service || "").trim();
+  const about = topic && topic !== "unknown" ? topic : "tu caso";
+  return [
+    `Hola${firstName ? ` ${firstName}` : ""}, te escribo por si quieres retomar lo que dejamos pendiente sobre ${about}.`,
+    "Si te va bien, dime y te doy una recomendación concreta.",
+  ].join("\n\n");
+}

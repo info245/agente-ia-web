@@ -49,7 +49,7 @@ import {
 } from "./lib/configVersionStore.js";
 import { getBlankAppConfig, mergeAppConfig, sanitizeAppConfig } from "./lib/appConfig.js";
 import { validatePipelineStages } from "./lib/pipelineConfig.js";
-import { toWhatsAppFormat } from "./lib/whatsappFormat.js";
+import { buildWhatsAppReminder, toWhatsAppFormat } from "./lib/whatsappFormat.js";
 import { bookingMessageText, dueBookingMessages, formatBookingDate } from "./lib/bookingMessages.js";
 import { countTags, normalizeTags, renameTag } from "./lib/emailMarketing.js";
 import { runAgentTurn } from "./agent/engine.js";
@@ -1075,26 +1075,6 @@ function hasAnalysisSnapshot(snapshot) {
   );
 }
 
-function buildWhatsAppReminderHook(lead = {}) {
-  const safeName = getSafeLeadName(lead);
-  const service = norm(lead?.interest_service) || "tu caso";
-  const summary = norm(lead?.summary);
-
-  const intro = safeName
-    ? `Hola ${safeName}, te escribo por aquí por si quieres retomar lo que dejamos pendiente.`
-    : "Hola, te escribo por aquí por si quieres retomar lo que dejamos pendiente.";
-
-  const contextLine = summary
-    ? `Por lo que vimos, tu interés principal va orientado a ${summary}.`
-    : `Teníamos pendiente avanzar con ${service}.`;
-
-  return [
-    intro,
-    contextLine,
-    `Si te va bien, te doy una recomendación concreta para avanzar con ${service} o ajustamos el siguiente paso según tu presupuesto.`,
-  ].join("\n\n");
-}
-
 function isAuthorizedTaskRequest(req) {
   if (!TASK_SECRET) return false;
   const headerSecret =
@@ -1937,7 +1917,7 @@ function buildAutomationTemplateVars({ lead, appConfig, previewUrl, analysisUrl 
     telefono: lead?.phone || "",
     link_presupuesto: previewUrl || "",
     link_analisis: analysisUrl || "",
-    resumen_analisis: lead?.summary || "",
+    resumen_analisis: "",
     whatsapp_humano: buildHumanAgentWhatsAppUrl(
       lead?.interest_service || "",
       appConfig
@@ -5832,7 +5812,6 @@ app.post("/api/crm/leads/:leadId/analysis/send", async (req, res) => {
       ...buildAutomationTemplateVars({ lead, appConfig, analysisUrl: previewUrl }),
       resumen_analisis:
         analysis?.content_json?.summary ||
-        lead?.summary ||
         "Hemos preparado una lectura inicial del caso.",
     };
     const subject = renderTemplateString(
@@ -6828,7 +6807,7 @@ async function runWhatsAppFollowupsTask() {
     const phone = normalizeLeadPhoneForWhatsApp(lead);
     if (!phone) continue;
 
-    const reminderText = buildWhatsAppReminderHook(lead);
+    const reminderText = buildWhatsAppReminder({ name: getSafeLeadName(lead), service: lead?.interest_service });
     await sendWhatsAppText(phone, reminderText, { accountId: lead?.account_id || null });
 
     await trackConversationEvent({
